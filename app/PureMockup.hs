@@ -1,4 +1,4 @@
-module PureAgentic where
+module PureMockup where
 
 import           Autodocodec          (Autodocodec (Autodocodec),
                                        HasCodec (codec), object, requiredField,
