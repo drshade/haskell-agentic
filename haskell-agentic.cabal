@@ -50,8 +50,9 @@ executable haskell-agentic
   -- Modules included in this executable, other than Main.
   other-modules:
     Agentic
+    Jokes
     LLM
-    PureAgentic
+    PureMockup
 
   -- LANGUAGE extensions used by modules in this package.
   default-extensions:
@@ -60,6 +61,7 @@ executable haskell-agentic
     DeriveAnyClass
     DeriveGeneric
     DerivingVia
+    MultilineStrings
     OverloadedLists
     OverloadedStrings
     TypeApplications
