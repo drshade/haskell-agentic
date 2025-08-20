@@ -25,14 +25,14 @@ data BetterJoke
     deriving (Generic, Show, FromDhall, ToDhall)
 ```
 
-We can convince the LLM to reply to use conforming to this type:
+We can convince the LLM to reply to us conforming to this type:
 
 ```haskell
 ghci> runKleisli (prompt >>> roundtripAsDhall @BetterJoke) "a joke please"
 OneLiner {line = "I'm reading a book about anti-gravity; it's impossible to put down."}
 ```
 
-Or whatever we want! How about a list of them?
+How about a list of them?
 
 ```haskell
 ghci> runKleisli (prompt >>> roundtripAsDhall @[BetterJoke]) "a few quick jokes"
@@ -42,7 +42,7 @@ ghci> runKleisli (prompt >>> roundtripAsDhall @[BetterJoke]) "a few quick jokes"
  Story {paragraphs = ["I tried to catch some fog yesterday.", "I mist."]}]
 ```
 
-Or just a plain old string? No problemo:
+Or just a plain old string?
 
 ```haskell
 ghci> runKleisli (prompt >>> roundtripAsDhall @Text) "a joke please"
@@ -56,7 +56,7 @@ ghci> runKleisli (prompt >>> roundtripAsDhall @Int) "a joke please"
 42
 ```
 
-42 of course!
+Typesafe prompt responses FTW!
 
 The system teaches the LLM Dhall syntax through examples and constrains outputs to match the expected schema, eliminating fragile string parsing and runtime type errors common in JSON-based approaches.
 
