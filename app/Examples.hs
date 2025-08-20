@@ -1,35 +1,15 @@
 module Examples where
 
-import           Agentic
-import           Autodocodec            (Autodocodec (Autodocodec),
-                                         HasCodec (codec), object,
-                                         requiredField, (.=))
-import           Control.Arrow
-import           Control.Monad.IO.Class (MonadIO)
-import           Data.Aeson             (FromJSON, ToJSON)
+
 import           Data.Text
-import           Dhall                  (FromDhall, ToDhall)
-import           GHC.Generics           (Generic)
+import           Dhall        (FromDhall, ToDhall)
+import           GHC.Generics (Generic)
 
 data Joke = Joke { genre :: Text, setup :: Text, punchline :: Text }
-    deriving stock (Show, Eq, Generic)
-    deriving (FromJSON, ToJSON) via (Autodocodec Joke)
-
-instance HasCodec Joke where
-    codec =
-        object "The structure of a Joke" $
-            Joke <$> requiredField "genre" "The category of joke" .= (.genre)
-                 <*> requiredField "setup" "The setup of the joke" .= (.setup)
-                 <*> requiredField "punchline" "The punchline" .= (.punchline)
+    deriving (Generic, Show, FromDhall, ToDhall)
 
 newtype Dog = Dog { name :: String }
-    deriving stock (Show, Eq, Generic)
-    deriving (FromJSON, ToJSON) via (Autodocodec Dog)
-
-instance HasCodec Dog where
-    codec =
-        object "The structure of a Dog" $
-            Dog <$> requiredField "name" "The name of the dog" .= (.name)
+    deriving (Generic, Show, FromDhall, ToDhall)
 
 data BetterJoke
     = DadJoke { setup :: Text, punchline :: Text }
@@ -59,7 +39,6 @@ data Task = Task
     , priority    :: Priority
     , status      :: TaskStatus
     , dueDate     :: Maybe Text
-    , assignee    :: Maybe Text
     , tags        :: [Text]
     }
     deriving (Generic, Show, FromDhall, ToDhall)
