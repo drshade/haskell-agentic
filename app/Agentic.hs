@@ -86,27 +86,28 @@ injectDhallSchema = arr $ \prompt -> prompt <> "\n\n" <> instructions <> "\n" <>
             \"
 
         extras :: Text
-        extras = "\
-            \Additionally - try to be as uncreative as possible when abiding by the schema above - e.g. if there is only field and the prompt has asked for many, don't try to squash all the results into this single field. Just insert one. I.e. do not break the contract of the schema as it will not be interpretted by a human or other agent, but rather a structured parser.\n\
-            \"
+        extras = "Additionally - try to be as uncreative as possible when abiding by the schema - e.g. if there is only field and the prompt has asked for many, don't try to squash all the results into this single field. Just insert one. I.e. do not break the contract of the schema as it will not be interpretted by a human or other agent, but rather a structured parser."
 
         examples :: Text
         examples = "\
-            \DHALL SYNTAX RULES:\n\
-            \- For union types, use: (UnionType).Constructor { data }\n\
-            \- The union type must be written in full before the dot\n\
-            \\n\
-            \For this response, use this exact pattern:\n\
-            \(< DadJoke : { setup : Text, punchline : Text } | OneLiner : { line : Text } | Story : { paragraphs : List Text } >).DadJoke { setup = \"setup text\", punchline = \"punchline text\" }\n\
-            \\n\
-            \(< DadJoke : { setup : Text, punchline : Text } | OneLiner : { line : Text } | Story : { paragraphs : List Text } >).OneLiner { line = \"one liner joke\" }\n\
-            \\n\
-            \(< DadJoke : { setup : Text, punchline : Text } | OneLiner : { line : Text } | Story : { paragraphs : List Text } >).Story { paragraphs = [\"paragraph 1\", \"paragraph 2\"] }\n\
-            \\n\
-            \CRITICAL: You MUST include the full union type before the dot!\n\
-            \Wrong: OneLiner { line = \"joke\" }\n\
-            \Right: (< DadJoke : { setup : Text, punchline : Text } | OneLiner : { line : Text } | Story : { paragraphs : List Text } >).OneLiner { line = \"joke\" }\n\
-            \"
+        \Examples:\n\
+        \Example schema: < Dog : { name : Text, age : Natural, breed : Text } | Cat : { name : Text } > \n\
+        \Valid response: \n\
+        \   let Schema = < Dog : { name : Text, age : Natural, breed : Text } \n\
+        \                  Cat : { name : Text } >\n\
+        \   in Schema.Dog { name = \"Rex\", age = 7, breed = \"schauzer\" }\n\
+        \Invalid response: \n\
+        \   Dog { name = \"Rex\", age = 7, breed = \"schauzer\" }\n\
+        \\n\
+        \Example schema: { name : Text, age : Integer, maritalStatus : < Unmarried | Married | Widowed > }\n\
+        \Valid response: \n\
+        \let Schema = { name : Text, age : Integer, maritalStatus : < Unmarried | Married | Widowed > }\n\
+        \in { name = \"Jane Doe\", age = +29, maritalStatus = < Unmarried | Married | Widowed >.Unmarried } : Schema\n\
+        \Valid response: \n\
+        \let MartitalStatus = < Unmarried | Married | Widowed > \n\
+        \let Schema = { name : Text, age : Integer, maritalStatus : MaritalStatus }\n\
+        \in { name = \"Jane Doe\", age = +29, maritalStatus = MartitalStatus.Unmarried } : Schema\n\
+        \"
 
 prompt :: Arrow a => a Text Text
 prompt = arr id
