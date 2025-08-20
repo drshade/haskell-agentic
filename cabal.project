@@ -1,0 +1,6 @@
+-- cabal.project
+packages: .
+
+allow-newer:
+    -- Dhall doesn't officially support GHC 9.12 yet - but seems to be OK
+    dhall:template-haskell
