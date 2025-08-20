@@ -86,7 +86,15 @@ injectDhallSchema = arr $ \prompt -> prompt <> "\n\n" <> instructions <> "\n" <>
             \"
 
         extras :: Text
-        extras = "Additionally - try to be as uncreative as possible when abiding by the schema - e.g. if there is only field and the prompt has asked for many, don't try to squash all the results into this single field. Just insert one. I.e. do not break the contract of the schema as it will not be interpretted by a human or other agent, but rather a structured parser."
+        extras = "\
+        \Additionally - try to be as uncreative as possible when abiding by the schema.\
+        \ e.g. if there is only field and the prompt has asked for many, don't try to \
+        \squash all the results into this single field. Just insert one. \
+        \Do not break the contract of the schema as it will not be interpretted by a \
+        \human or other agent, but rather a structured parser.\
+        \You may introduce your own variables using let syntax (see examples) for \
+        \dealing with repeated values to save space.\
+        \"
 
         examples :: Text
         examples = "\
@@ -101,12 +109,23 @@ injectDhallSchema = arr $ \prompt -> prompt <> "\n\n" <> instructions <> "\n" <>
         \\n\
         \Example schema: { name : Text, age : Integer, maritalStatus : < Unmarried | Married | Widowed > }\n\
         \Valid response: \n\
-        \let Schema = { name : Text, age : Integer, maritalStatus : < Unmarried | Married | Widowed > }\n\
-        \in { name = \"Jane Doe\", age = +29, maritalStatus = < Unmarried | Married | Widowed >.Unmarried } : Schema\n\
+        \   let Schema = { name : Text, age : Integer, maritalStatus : < Unmarried | Married | Widowed > }\n\
+        \   in { name = \"Jane Doe\", age = +29, maritalStatus = < Unmarried | Married | Widowed >.Unmarried } : Schema\n\
         \Valid response: \n\
-        \let MartitalStatus = < Unmarried | Married | Widowed > \n\
-        \let Schema = { name : Text, age : Integer, maritalStatus : MaritalStatus }\n\
-        \in { name = \"Jane Doe\", age = +29, maritalStatus = MartitalStatus.Unmarried } : Schema\n\
+        \   let MartitalStatus = < Unmarried | Married | Widowed > \n\
+        \   let Schema = { name : Text, age : Integer, maritalStatus : MaritalStatus }\n\
+        \   in { name = \"Jane Doe\", age = +29, maritalStatus = MartitalStatus.Unmarried } : Schema\n\
+        \\n\
+        \Example schema: List { name : Text, description : Optional Text }\n\
+        \Valid response: \n\
+        \   let Schema = { name : Text, description : Optional Text }\n\
+        \   in [ { name = \"Pizza\", description = Some \"Tasty!\" }, { name = \"Burgers\", description = None Text } ] : List Schema\n\
+        \Valid response: \n\
+        \   let Schema = { name : Text, description : Optional Text }\n\
+        \   let mkFood = \\(n : Text) ->\n\
+        \          let description = None Text\n\
+        \          in { name = n, description }\n\
+        \   in [ mkFood \"pizza\", mkFood \"burgers\" ] : List Schema\n\
         \"
 
 prompt :: Arrow a => a Text Text

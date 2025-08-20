@@ -47,4 +47,21 @@ data ApplicationForm = ApplicationForm
     }
     deriving (Generic, Show, FromDhall, ToDhall)
 
+data Priority = Low | Medium | High | Urgent
+    deriving (Generic, Show, FromDhall, ToDhall, Eq)
+
+data TaskStatus = Todo | InProgress | Blocked | Completed
+    deriving (Generic, Show, FromDhall, ToDhall, Eq)
+
+data Task = Task
+    { title       :: Text
+    , description :: Maybe Text
+    , priority    :: Priority
+    , status      :: TaskStatus
+    , dueDate     :: Maybe Text
+    , assignee    :: Maybe Text
+    , tags        :: [Text]
+    }
+    deriving (Generic, Show, FromDhall, ToDhall)
+
 
