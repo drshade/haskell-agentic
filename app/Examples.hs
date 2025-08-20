@@ -1,4 +1,4 @@
-module Jokes where
+module Examples where
 
 import           Agentic
 import           Autodocodec            (Autodocodec (Autodocodec),
@@ -37,13 +37,14 @@ data BetterJoke
     | Story { paragraphs :: [Text] }
     deriving (Generic, Show, FromDhall, ToDhall)
 
-generateJoke :: Arrow a => a () Text
-generateJoke = arr $ const "Give me some dad jokes"
+data MaritalStatus = Unmarried | Married | Widowed
+    deriving (Generic, Show, FromDhall, ToDhall)
 
-showJoke :: Arrow a => a Joke Text
-showJoke = arr $ \joke -> joke.setup <> "\n\n" <> joke.punchline
-
-agent :: MonadIO m => Kleisli m () Text
-agent = generateJoke >...> showJoke
+data ApplicationForm = ApplicationForm
+    { name          :: Text
+    , age           :: Int
+    , maritalStatus :: MaritalStatus
+    }
+    deriving (Generic, Show, FromDhall, ToDhall)
 
 
