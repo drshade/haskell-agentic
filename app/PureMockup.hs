@@ -19,9 +19,9 @@ data Joke = Joke { genre :: Text, setup :: Text, punchline :: Text }
 instance HasCodec Joke where
   codec =
     object "The structure of a Joke" $
-      Joke <$> requiredField "genre" "The category of joke" .= genre
-           <*> requiredField "setup" "The setup of the joke" .= setup
-           <*> requiredField "punchline" "The punchline" .= punchline
+      Joke <$> requiredField "genre" "The category of joke" .= (.genre)
+           <*> requiredField "setup" "The setup of the joke" .= (.setup)
+           <*> requiredField "punchline" "The punchline" .= (.punchline)
 
 schema :: forall a. HasCodec a => Text
 schema = decodeUtf8 $ LBS.toStrict $ encode $ jsonSchemaViaCodec @a
@@ -49,7 +49,7 @@ generateJoke :: Arrow a => a () Text
 generateJoke = arr $ const "Give me a dad joke"
 
 showJoke :: Arrow a => a Joke Text
-showJoke = arr $ \joke -> setup joke <> "\n\n" <> punchline joke
+showJoke = arr $ \joke -> joke.setup <> "\n\n" <> joke.punchline
 
 agent :: Arrow a => a () Text
 agent = generateJoke >...> showJoke
