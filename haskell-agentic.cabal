@@ -58,6 +58,7 @@ executable haskell-agentic
   default-extensions:
     AllowAmbiguousTypes
     Arrows
+    ConstraintKinds
     DeriveAnyClass
     DeriveGeneric
     DerivingVia
