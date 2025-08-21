@@ -9,6 +9,7 @@ import           Data.Either.Validation  (Validation (Failure, Success))
 import           Data.Text               hiding (show)
 import           Dhall                   (FromDhall, ToDhall)
 import qualified Dhall
+import           Dhall.Core              (Expr (Text))
 import qualified Dhall.Core
 import qualified LLM                     (chat)
 
@@ -72,7 +73,7 @@ dhallParse = Kleisli $ \input -> do
 
 -- Inject Dhall schema and instructions into prompt
 injectDhallSchema :: forall s m. (FromDhall s, ToDhall s) => Agentic m Text Text
-injectDhallSchema = Kleisli $ \prompt' -> pure $ prompt' <> "\n\n" <> instructions <> "\n" <> dhallSchema @s <> "\n\n" <> examples <> "\n\n" <> extras
+injectDhallSchema = Kleisli $ \prompt' -> pure $ prompt' <> "\n\n" <> instructions <> "\n" <> dhallSchema @s <> "\n\n" <> examples <> "\n\n" <> syntax <> "\n\n" <> extras
     where
         instructions :: Text
         instructions = "\
@@ -89,6 +90,13 @@ injectDhallSchema = Kleisli $ \prompt' -> pure $ prompt' <> "\n\n" <> instructio
         \You may introduce your own variables and functions using let syntax (see examples) for \
         \dealing with repeated values and/or to save space.\
         \If asked to do repetitive work, always introduce a function to construct the output.\n\
+        \"
+
+        syntax :: Text
+        syntax = "\
+        \Extra syntax rules:\n\
+        \Escape double-quotes with backslash (but not single quotes) in Text\n\
+        \Natural numbers need no prefixes but Integers always need the sign prefixed (e.g. +10 or -100)\n\
         \"
 
         examples :: Text
@@ -114,7 +122,7 @@ injectDhallSchema = Kleisli $ \prompt' -> pure $ prompt' <> "\n\n" <> instructio
         \Example schema: List { name : Text, description : Optional Text }\n\
         \Valid response: \n\
         \   let Schema = { name : Text, description : Optional Text }\n\
-        \   in [ { name = \"Pizza\", description = Some \"Tasty!\" }, { name = \"Burgers\", description = None Text } ] : List Schema\n\
+        \   in [ { name = \"Pizza\", description = Some \"Tasty!\" }, { name = \"Bangers 'n mash\", description = None Text } ] : List Schema\n\
         \Valid response: \n\
         \   let Schema = { name : Text, description : Optional Text }\n\
         \   let mkFood = \\(n : Text) ->\n\

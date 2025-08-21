@@ -84,6 +84,41 @@ ghci> run (prompt >>> inject (Joke "knockknock" "knock knock? whos there? boo! b
 KnockKnock {whosThere = "boo!", punchline = "don't cry it's only a joke!"}
 ```
 
+Under the hood - the LLM is generating replies as Dhall objects, and for more complex replies can build fairly sophisticated responses, for example:
+
+```haskell
+ghci> run (prompt >>> extract @[(BetterJoke, Joke)]) "a few quick dad jokes"
+[ ( DadJoke {setup = "I only know 25 letters of the alphabet.", punchline = "I don't know Y."}
+  , Joke {genre = "DadJoke", setup = "I only know 25 letters of the alphabet.", punchline = "I don't know Y."}
+  )
+, ( OneLiner {line = "I'm reading a book about anti-gravity. It's impossible to put down."}
+  , Joke {genre = "OneLiner", setup = "Reading a book about anti-gravity.", punchline = "It's impossible to put down."}
+  )
+, ( KnockKnock {whosThere = "Olive", punchline = "Olive you!"}
+  , Joke {genre = "KnockKnock", setup = "Olive", punchline = "Olive you!"}
+  )
+]
+```
+
+Which the LLM represented like this:
+
+```dhall
+let AD = < DadJoke : { setup : Text, punchline : Text }
+         | OneLiner : { line : Text }
+         | Story : { paragraphs : List Text }
+         | KnockKnock : { whosThere : Text, punchline : Text } >
+let Schema = { _1 : AD, _2 : { genre : Text, setup : Text, punchline : Text } }
+let mk = \(variant : AD) -> \(genre : Text) -> \(setup : Text) -> \(punchline : Text) ->
+          { _1 = variant, _2 = { genre = genre, setup = setup, punchline = punchline } }
+in [ mk (AD.DadJoke { setup = "I only know 25 letters of the alphabet.", punchline = "I don't know Y." })
+         "DadJoke" "I only know 25 letters of the alphabet." "I don't know Y."
+   , mk (AD.OneLiner { line = "I'm reading a book about anti-gravity. It's impossible to put down." })
+         "OneLiner" "Reading a book about anti-gravity." "It's impossible to put down."
+   , mk (AD.KnockKnock { whosThere = "Olive", punchline = "Olive you!" })
+         "KnockKnock" "Olive" "Olive you!"
+   ] : List Schema
+```
+
 Typesafe prompt responses FTW!
 
 The system teaches the LLM Dhall syntax through examples and constrains outputs to match the expected schema, eliminating fragile string parsing and runtime type errors common in JSON-based approaches.
