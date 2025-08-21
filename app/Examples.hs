@@ -1,7 +1,7 @@
 module Examples where
 
 
-import           Agentic                (AgenticRWS, prompt, roundtripAs,
+import           Agentic                (AgenticRWS, extract, prompt,
                                          roundtripAsWithRetry, runAgentic)
 import           Control.Arrow          (Kleisli (Kleisli, runKleisli), (>>>))
 import           Control.Monad.IO.Class (MonadIO, liftIO)
@@ -24,6 +24,7 @@ data BetterJoke
     = DadJoke { setup :: Text, punchline :: Text }
     | OneLiner { line :: Text }
     | Story { paragraphs :: [Text] }
+    | KnockKnock { whosThere :: Text, punchline :: Text }
     deriving (Generic, Show, FromDhall, ToDhall)
 
 data MaritalStatus = Unmarried | Married | Widowed
@@ -50,7 +51,7 @@ withTasks :: AgenticRWS m => Kleisli m Text Text
 withTasks = Kleisli $ \input -> do
     let instruction = "Goal: \n" <> input <> "\n\n" <> "Return the list of tasks required to complete this, and I will call you back with each individual task"
 
-    tasks <- runAgentic (prompt >>> roundtripAs @[Task]) instruction
+    tasks <- runAgentic (prompt >>> extract @[Task]) instruction
 
     liftIO $ do
         print "Returned tasks"
@@ -79,5 +80,19 @@ withTasks = Kleisli $ \input -> do
     pure "hello"
 
 
+data TicTacToePosition = Empty | X | O
+    deriving (Generic, Show, FromDhall, ToDhall)
 
+data TicTacToeGame = TicTacToeGame
+    { topLeft      :: TicTacToePosition
+    , topMiddle    :: TicTacToePosition
+    , topRight     :: TicTacToePosition
+    , middleLeft   :: TicTacToePosition
+    , middleMiddle :: TicTacToePosition
+    , middleRight  :: TicTacToePosition
+    , bottomLeft   :: TicTacToePosition
+    , bottomMiddle :: TicTacToePosition
+    , bottomRight  :: TicTacToePosition
+    }
+    deriving (Generic, Show, FromDhall, ToDhall)
 
