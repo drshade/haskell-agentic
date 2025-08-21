@@ -25,7 +25,7 @@ orFail = arr $ either (error . unpack) id
 -- Glue two arrows together, injecting the schema of the type required as input to second arrow
 -- to the prompt given by the first (including parsing or failing of that type)
 (>...>) :: forall a b c m. (FromDhall b, ToDhall b) => Agentic m a Text -> Agentic m b c -> Agentic m a c
-(>...>) l r = l >>> roundtripAs @b >>> r
+(>...>) l r = l >>> extract @b >>> r
 
 runLLM :: Agentic m Text Text
 runLLM = Kleisli $ \prompt' -> do
@@ -53,8 +53,8 @@ roundtripAsWithRetry = Kleisli $ \input -> do
             pure parsed'
         Right result -> pure $ Right result
 
-roundtripAs :: forall s m. (FromDhall s, ToDhall s) => Agentic m Text s
-roundtripAs = injectDhallSchema @s >>> runLLM >>> dhallParse @s >>> orFail
+extract :: forall s m. (FromDhall s, ToDhall s) => Agentic m Text s
+extract = injectDhallSchema @s >>> runLLM >>> dhallParse @s >>> orFail
 
 -- Generate Dhall schema from type
 dhallSchema :: forall a. FromDhall a => Text
@@ -132,14 +132,19 @@ injectDhallSchema = Kleisli $ \prompt' -> pure $ prompt' <> "\n\n" <> instructio
         \   in { _1 = { name = \"Robert\"}, _2 = Schema._2.Unmarried } : Schema\n\
         \"
 
+inject :: forall s m. (ToDhall s) => s -> Agentic m Text Text
+inject obj = Kleisli $ \prompt -> do
+    let dhall = Dhall.Core.pretty $ Dhall.embed Dhall.inject obj
+    pure $ prompt <> "\n\nInput:\n" <> dhall
+
 prompt :: Arrow a => a Text Text
 prompt = arr id
 
 runAgentic :: Kleisli m a b -> a -> m b
 runAgentic = runKleisli
 
-runFull :: Kleisli (RWST Environment Events State IO) Text a -> Text -> IO a
-runFull k input = do
+run :: Kleisli (RWST Environment Events State IO) Text a -> Text -> IO a
+run k input = do
     -- Initial conditions for RWS
     let environment = Environment { prompt = input }
         state = State ()
