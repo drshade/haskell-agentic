@@ -1,20 +1,22 @@
 module Examples where
 
 
-import           Agentic                (AgenticRWS, extract, prompt,
+import           Agentic                (AgenticRWS, extract, inject, prompt,
                                          roundtripAsWithRetry, runAgentic)
 import           Control.Arrow          (Kleisli (Kleisli, runKleisli), (>>>))
+import           Control.Monad          (foldM)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
+import           Control.Monad.Loops    (iterateUntilM, whileM)
 import           Data.Text
 import           Dhall                  (FromDhall, ToDhall)
 import           GHC.Generics           (Generic)
 import           Prelude                hiding (show)
 
 data Joke = Joke
-            { genre     :: Text
-            , setup     :: Text
-            , punchline :: Text
-            }
+    { genre     :: Text
+    , setup     :: Text
+    , punchline :: Text
+    }
     deriving (Generic, Show, FromDhall, ToDhall)
 
 newtype Dog = Dog { name :: String }
@@ -49,7 +51,8 @@ data Task = Task
 
 withTasks :: AgenticRWS m => Kleisli m Text Text
 withTasks = Kleisli $ \input -> do
-    let instruction = "Goal: \n" <> input <> "\n\n" <> "Return the list of tasks required to complete this, and I will call you back with each individual task"
+    let instruction = "Goal: \n" <> input
+            <> "\n\n" <> "Return the list of tasks required to complete this, and I will call you back with each individual task"
 
     tasks <- runAgentic (prompt >>> extract @[Task]) instruction
 
@@ -80,12 +83,30 @@ withTasks = Kleisli $ \input -> do
     pure "hello"
 
 
-data Space = Empty | X | O
+data Space = Blank | X | O
     deriving (Generic, Show, FromDhall, ToDhall)
 
 data Row = Row Space Space Space
     deriving (Generic, Show, FromDhall, ToDhall)
 
-data TicTacToe = TicTacToe Row Row Row
+data Board = Board Row Row Row
     deriving (Generic, Show, FromDhall, ToDhall)
 
+data GameState = Playing | Ended
+    deriving (Generic, Eq, Show, FromDhall, ToDhall)
+
+data Game = Game Board GameState
+    deriving (Generic, Show, FromDhall, ToDhall)
+
+playTicTacToe :: AgenticRWS m => Kleisli m a Game
+playTicTacToe = Kleisli $ \_input -> do
+    iterateUntilM
+        -- Repeat until game ends
+        (\(Game _ state) -> state == Ended)
+        -- Ask the LLM to play the next move
+        (\game -> do
+            liftIO $ print game
+            runAgentic (prompt >>> inject game >>> extract @Game) "Play the next move!"
+        )
+        -- The starting game state
+        (Game (Board (Row Blank Blank Blank) (Row Blank Blank Blank) (Row Blank Blank Blank)) Playing)
