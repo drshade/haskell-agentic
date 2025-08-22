@@ -1,17 +1,12 @@
 # Agentic Haskell
 
-WORK IN PROGRESS
+WARNING: in progress ;)
 
-## Dhall-Typed LLM Outputs
+## Strictly Typed LLM Inputs & Outputs
 
-This research explores using Dhall as a schema language for structured LLM outputs. By leveraging Dhall's type system and Haskell's type classes, we can get LLMs to generate responses that parse directly into strongly-typed Haskell values.
+Its a real pain-in-the-ass trying to build "agentic" stuff, when the best tool you have is "pls respond in JSON". Its too weak, JSON doesn't support sum types, and nor does it have a standard schema. 
 
-### Key Features
-
-- **Type-safe LLM responses**: Claude generates valid Dhall expressions that are automatically parsed into Haskell data types
-- **Automatic schema generation**: Dhall schemas are derived from Haskell types via `FromDhall`/`ToDhall` instances
-- **Complex type support**: Handles sum types, product types, optionals, lists, and nested structures
-- **Compositional API**: Simple arrow-based interface (`prompt >>> roundtripAsDhall @MyType`)
+This research explores using an alternative schema language called Dhall for strictly constraining inputs to and outputs from LLMs. By leveraging Dhall's type system and Haskell's type classes, we can get LLMs to generate responses that parse directly into strongly-typed Haskell values too - meaning we can simply compose smaller bits together to form agents.
 
 ### Example
 
