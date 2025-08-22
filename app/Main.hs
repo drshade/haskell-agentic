@@ -3,10 +3,10 @@
 module Main where
 
 import           Control.Monad.Free (Free (..), liftF)
-import           Control.Monad.RWS  (RWS, ask, get, modify, put, tell)
+import           Control.Monad.RWS  (RWS, ask, get, modify, tell)
 import           Data.List          (isInfixOf)
 import           Data.Map           (Map)
-import qualified Data.Map           as Map (lookup, member)
+import qualified Data.Map           as Map (lookup)
 
 -- Define the DSL
 newtype Area = Area String

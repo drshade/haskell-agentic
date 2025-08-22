@@ -4,7 +4,7 @@ import           Autodocodec          (Autodocodec (Autodocodec),
                                        HasCodec (codec), object, requiredField,
                                        (.=))
 import           Autodocodec.Schema   (jsonSchemaViaCodec)
-import           Control.Arrow        (Arrow, arr, returnA, (>>>))
+import           Control.Arrow        (Arrow, arr, (>>>))
 import           Data.Aeson           (FromJSON, ToJSON, eitherDecode, encode)
 import           Data.Bifunctor       (first)
 import qualified Data.ByteString.Lazy as LBS
@@ -38,7 +38,7 @@ orFail = arr $ either (error . unpack) id
 (>...>) l r = l >>> injectSchema @b >>> runLLM >>> parsed @b >>> orFail >>> r
 
 runLLM :: Arrow a => a Text Text
-runLLM = arr $ \prompt ->
+runLLM = arr $ \_prompt ->
     -- Run the prompt here... mockup for now to retain clarity (free from IO)
     "{\"genre\":\"dad joke\",\"setup\":\"When does a joke become a dad joke?\",\"punchline\":\"When the punchline becomes apparent\"}"
 

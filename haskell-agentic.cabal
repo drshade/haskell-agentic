@@ -52,6 +52,7 @@ executable haskell-agentic
     Agentic
     Examples
     LLM
+    Prompts
     PureMockup
 
   -- LANGUAGE extensions used by modules in this package.
@@ -85,6 +86,7 @@ executable haskell-agentic
     openai,
     text,
     vector,
+    monad-loops
 
   -- Directories containing source files.
   hs-source-dirs: app
