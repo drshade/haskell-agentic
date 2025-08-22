@@ -119,6 +119,39 @@ in [ mk (AD.DadJoke { setup = "I only know 25 letters of the alphabet.", punchli
    ] : List Schema
 ```
 
+Wanna play a game of Tic Tac Toe?
+
+```haskell
+data Space = Empty | X | O
+    deriving (Generic, Show, FromDhall, ToDhall)
+
+data Row = Row Space Space Space
+    deriving (Generic, Show, FromDhall, ToDhall)
+
+data TicTacToe = TicTacToe Row Row Row
+    deriving (Generic, Show, FromDhall, ToDhall)
+```
+
+Make the first move Mr. LLM!
+
+```haskell
+ghci> run (prompt >>> extract @TicTacToe) "make the first move!"
+TicTacToe (Row Empty Empty Empty) (Row Empty X Empty) (Row Empty Empty Empty)
+```
+
+Which internally the LLM returned like this:
+
+```dhall
+let Move = < Empty | X | O >
+let Schema = { _1 : { _1 : Move, _2 : Move, _3 : Move }
+             , _2 : { _1 : Move, _2 : Move, _3 : Move }
+             , _3 : { _1 : Move, _2 : Move, _3 : Move } }
+let emptyRow = { _1 = Move.Empty, _2 = Move.Empty, _3 = Move.Empty }
+in { _1 = emptyRow
+   , _2 = { _1 = Move.Empty, _2 = Move.X, _3 = Move.Empty }
+   , _3 = emptyRow } : Schema
+```
+
 Typesafe prompt responses FTW!
 
 The system teaches the LLM Dhall syntax through examples and constrains outputs to match the expected schema, eliminating fragile string parsing and runtime type errors common in JSON-based approaches.
@@ -131,4 +164,8 @@ ghci> run (prompt >>> extract @[(BetterJoke, Joke)]) "a few quick jokes"
 
 -- Another example using Task
 ghci> run (prompt >>> extract @[Task]) "3 important tasks when planning a vacation"
+
+-- A guy on r/haskell's example
+ghci> run (prompt >>> inject (99,27) >>> extract @Int) "calc gcd, pls!"
+9
 ```
