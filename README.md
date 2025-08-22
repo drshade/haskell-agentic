@@ -48,7 +48,7 @@ ghci> run (prompt >>> extract @[Joke]) "a few jokes please!"
 Or just a plain old string?
 
 ```haskell
-run (prompt >>> extract @Text) "a funny joke please!"
+ghci> run (prompt >>> extract @Text) "a funny joke please!"
 "Why don't scientists trust atoms? Because they make up everything!"
 ```
 
@@ -104,19 +104,19 @@ Which the LLM represented like this:
 
 ```dhall
 let AD = < DadJoke : { setup : Text, punchline : Text }
-         | OneLiner : { line : Text }
-         | Story : { paragraphs : List Text }
-         | KnockKnock : { whosThere : Text, punchline : Text } >
+        | OneLiner : { line : Text }
+        | Story : { paragraphs : List Text }
+        | KnockKnock : { whosThere : Text, punchline : Text } >
 let Schema = { _1 : AD, _2 : { genre : Text, setup : Text, punchline : Text } }
 let mk = \(variant : AD) -> \(genre : Text) -> \(setup : Text) -> \(punchline : Text) ->
           { _1 = variant, _2 = { genre = genre, setup = setup, punchline = punchline } }
 in [ mk (AD.DadJoke { setup = "I only know 25 letters of the alphabet.", punchline = "I don't know Y." })
-         "DadJoke" "I only know 25 letters of the alphabet." "I don't know Y."
-   , mk (AD.OneLiner { line = "I'm reading a book about anti-gravity. It's impossible to put down." })
-         "OneLiner" "Reading a book about anti-gravity." "It's impossible to put down."
-   , mk (AD.KnockKnock { whosThere = "Olive", punchline = "Olive you!" })
-         "KnockKnock" "Olive" "Olive you!"
-   ] : List Schema
+        "DadJoke" "I only know 25 letters of the alphabet." "I don't know Y."
+  , mk (AD.OneLiner { line = "I'm reading a book about anti-gravity. It's impossible to put down." })
+        "OneLiner" "Reading a book about anti-gravity." "It's impossible to put down."
+  , mk (AD.KnockKnock { whosThere = "Olive", punchline = "Olive you!" })
+        "KnockKnock" "Olive" "Olive you!"
+  ] : List Schema
 ```
 
 Wanna play a game of Tic Tac Toe?
@@ -152,7 +152,7 @@ in { _1 = emptyRow
    , _3 = emptyRow } : Schema
 ```
 
-But how about a full game of TicTacToe? Agentic mode activated!
+But how about a full game of Tic Tac Toe? Agentic mode activated!
 
 ```haskell
 -- Add a few more types to represent the game state:
