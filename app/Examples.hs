@@ -80,19 +80,12 @@ withTasks = Kleisli $ \input -> do
     pure "hello"
 
 
-data TicTacToePosition = Empty | X | O
+data Space = Empty | X | O
     deriving (Generic, Show, FromDhall, ToDhall)
 
-data TicTacToeGame = TicTacToeGame
-    { topLeft      :: TicTacToePosition
-    , topMiddle    :: TicTacToePosition
-    , topRight     :: TicTacToePosition
-    , middleLeft   :: TicTacToePosition
-    , middleMiddle :: TicTacToePosition
-    , middleRight  :: TicTacToePosition
-    , bottomLeft   :: TicTacToePosition
-    , bottomMiddle :: TicTacToePosition
-    , bottomRight  :: TicTacToePosition
-    }
+data Row = Row Space Space Space
+    deriving (Generic, Show, FromDhall, ToDhall)
+
+data TicTacToe = TicTacToe Row Row Row
     deriving (Generic, Show, FromDhall, ToDhall)
 
