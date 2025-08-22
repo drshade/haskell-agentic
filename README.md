@@ -122,21 +122,21 @@ in [ mk (AD.DadJoke { setup = "I only know 25 letters of the alphabet.", punchli
 Wanna play a game of Tic Tac Toe?
 
 ```haskell
-data Space = Empty | X | O
+data Space = Blank | X | O
     deriving (Generic, Show, FromDhall, ToDhall)
 
 data Row = Row Space Space Space
     deriving (Generic, Show, FromDhall, ToDhall)
 
-data TicTacToe = TicTacToe Row Row Row
+data Board = Board Row Row Row
     deriving (Generic, Show, FromDhall, ToDhall)
 ```
 
 Make the first move Mr. LLM!
 
 ```haskell
-ghci> run (prompt >>> extract @TicTacToe) "make the first move!"
-TicTacToe (Row Empty Empty Empty) (Row Empty X Empty) (Row Empty Empty Empty)
+ghci> run (prompt >>> extract @Board) "make the first move!"
+Board (Row Blank Blank Blank) (Row Blank X Blank) (Row Blank Blank Blank)
 ```
 
 Which internally the LLM returned like this:
@@ -150,6 +150,47 @@ let emptyRow = { _1 = Move.Empty, _2 = Move.Empty, _3 = Move.Empty }
 in { _1 = emptyRow
    , _2 = { _1 = Move.Empty, _2 = Move.X, _3 = Move.Empty }
    , _3 = emptyRow } : Schema
+```
+
+But how about a full game of TicTacToe? Agentic mode activated!
+
+```haskell
+-- Add a few more types to represent the game state:
+
+data GameState = Playing | Ended
+    deriving (Generic, Eq, Show, FromDhall, ToDhall)
+
+data Game = Game Board GameState
+    deriving (Generic, Show, FromDhall, ToDhall)
+```
+
+And write a little while loop in haskell:
+
+```haskell
+playTicTacToe :: AgenticRWS m => Kleisli m a Game
+playTicTacToe = Kleisli $ \_input -> do
+    iterateUntilM
+        -- Repeat until game ends
+        (\(Game _ state) -> state == Ended)
+        -- Ask the LLM to play the next move
+        (\game -> do
+            liftIO $ print game
+            runAgentic (prompt >>> inject game >>> extract @Game) "Play the next move!"
+        )
+        -- The starting game state
+        (Game (Board (Row Blank Blank Blank) (Row Blank Blank Blank) (Row Blank Blank Blank)) Playing)
+```
+
+And lets see this poor LLM play against itself!
+
+```haskell
+ghci> run (playTicTacToe) ""
+Game (Board (Row Blank Blank Blank) (Row Blank Blank Blank) (Row Blank Blank Blank)) Playing
+Game (Board (Row Blank Blank Blank) (Row Blank X Blank) (Row Blank Blank Blank)) Playing
+Game (Board (Row X Blank Blank) (Row Blank X Blank) (Row Blank Blank Blank)) Playing
+Game (Board (Row X Blank Blank) (Row Blank X Blank) (Row Blank Blank O)) Playing
+Game (Board (Row X Blank Blank) (Row Blank X Blank) (Row X Blank O)) Playing
+Game (Board (Row X Blank Blank) (Row X X Blank) (Row X Blank O)) Ended
 ```
 
 Typesafe prompt responses FTW!
