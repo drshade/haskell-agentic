@@ -277,7 +277,7 @@ Typesafe prompt responses FTW!
 
 The system teaches the LLM Dhall syntax through examples and constrains outputs to match the expected schema, eliminating fragile string parsing and runtime type errors common in JSON-based approaches.
 
-### Others examples...
+### Other examples...
 
 ```haskell
 -- This one is cool - returning a tuple
