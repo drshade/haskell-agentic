@@ -89,6 +89,7 @@ executable haskell-agentic
     mtl,
     openai,
     text,
+    time,
     unliftio,
     vector,
 

@@ -7,6 +7,7 @@ WARNING: in progress ;)
 - [x] Schema extract and parse
 - [x] Type-safe prompting (`inject` & `extract`)
 - [x] Fanout combinator and example (`<<.>>`)
+- [x] Support for datetime (just works - `UTCTime`)
 - [ ] Retry mechanism (when LLM fails to produce compliant schema - give her another chance)
 - [ ] Session management (something like `>>> withSession @...` ?) 
 - [ ] Re-think RWS (as State is inherently non-concurrent... do we even want it?)
@@ -299,4 +300,23 @@ ghci> runIO (prompt >>> extract @[Task]) "3 important tasks when planning a vaca
 -- A guy on r/haskell's example
 ghci> runIO (prompt >>> inject (99,27) >>> extract @Int) "calc gcd, pls!"
 9
+
+-- Date / Time
+ghci> runIO (prompt >>> extract @UTCTime) "when is xmas next year?"
+2026-12-25 00:00:00 UTC
+
+ghci> runIO (prompt >>> extract @DayOfWeek) "when is xmas next year?"
+Friday
+
+-- Map
+ghci> runIO (prompt >>> extract @(Map Text Double)) "approximate rate versus USD of top 5 currencies"
+fromList [("AUD",0.66),("CAD",0.74),("EUR",1.08),("GBP",1.27),("JPY",6.7e-3)]
+
+-- Logical stuff
+ghci> runIO (prompt >>> extract @Bool) "if its raining outside then we don't go to the beach. It always rains when the postman visits. The postman is here. Can we go to the beach?"
+
+ghci> runIO (prompt >>> extract @Bool) "If it's busy, we need a reservation. If there's a rugby game tonight, the restaurant will be busy. The restaurant is always busy on the Friday & Saturday. The Springboks are playing tonight. Today is Wednesday. Do we need to book?"
+
+ghci> runIO (prompt >>> extract @(Maybe Bool)) "The barber is the 'one who shaves all those, and those only, who do not shave themselves'. The question is, does the barber shave himself?"
+
 ```
