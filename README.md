@@ -24,14 +24,14 @@ data Joke = Joke
 We can convince the LLM to reply to us conforming to this type:
 
 ```haskell
-ghci> run (prompt >>> extract @Joke) "a joke please"
+ghci> runIO (prompt >>> extract @Joke) "a joke please"
 Joke {genre = "Dad joke", setup = "Why did the scarecrow win an award?", punchline = "Because he was outstanding in his field."}
 ```
 
 How about a list of them?
 
 ```haskell
-ghci> run (prompt >>> extract @[Joke]) "a few jokes please!"
+ghci> runIO (prompt >>> extract @[Joke]) "a few jokes please!"
 [ Joke {genre = "Dad", setup = "I'm reading a book about anti-gravity.", punchline = "It's impossible to put down."}
 , Joke {genre = "One-liner", setup = "I told my wife she was drawing her eyebrows too high.", punchline = "She looked surprised."}
 , Joke {genre = "Programming", setup = "Why do programmers prefer dark mode?", punchline = "Because light attracts bugs."}
@@ -43,14 +43,14 @@ ghci> run (prompt >>> extract @[Joke]) "a few jokes please!"
 Or just a plain old string?
 
 ```haskell
-ghci> run (prompt >>> extract @Text) "a funny joke please!"
+ghci> runIO (prompt >>> extract @Text) "a funny joke please!"
 "Why don't scientists trust atoms? Because they make up everything!"
 ```
 
 Whats the funniest number?
 
 ```haskell
-ghci> run (prompt >>> extract @Int) "a funny joke please!"
+ghci> runIO (prompt >>> extract @Int) "a funny joke please!"
 42
 ```
 
@@ -68,21 +68,21 @@ data BetterJoke
 No problemo for our LLM:
 
 ```haskell
-ghci> run (prompt >>> extract @BetterJoke) "an haskell joke please!"
+ghci> runIO (prompt >>> extract @BetterJoke) "an haskell joke please!"
 DadJoke {setup = "Why do Haskell programmers prefer pure functions?", punchline = "Because they don't like side effects."}
 ```
 
 How about injecting an object, and have it convert to another?
 
 ```haskell
-ghci> run (prompt >>> inject (Joke "knockknock" "knock knock? whos there? boo! boo who?" "don't cry it's only a joke!") >>> extract @BetterJoke) "convert this!"
+ghci> runIO (prompt >>> inject (Joke "knockknock" "knock knock? whos there? boo! boo who?" "don't cry it's only a joke!") >>> extract @BetterJoke) "convert this!"
 KnockKnock {whosThere = "boo!", punchline = "don't cry it's only a joke!"}
 ```
 
 Under the hood - the LLM is generating replies as Dhall objects, and for more complex replies can build fairly sophisticated responses, for example:
 
 ```haskell
-ghci> run (prompt >>> extract @[(BetterJoke, Joke)]) "a few quick dad jokes"
+ghci> runIO (prompt >>> extract @[(BetterJoke, Joke)]) "a few quick dad jokes"
 [ ( DadJoke {setup = "I only know 25 letters of the alphabet.", punchline = "I don't know Y."}
   , Joke {genre = "DadJoke", setup = "I only know 25 letters of the alphabet.", punchline = "I don't know Y."}
   )
@@ -130,7 +130,7 @@ data Board = Board Row Row Row
 Make the first move Mr. LLM!
 
 ```haskell
-ghci> run (prompt >>> extract @Board) "make the first move!"
+ghci> runIO (prompt >>> extract @Board) "make the first move!"
 Board (Row Blank Blank Blank) (Row Blank X Blank) (Row Blank Blank Blank)
 ```
 
@@ -162,15 +162,15 @@ data Game = Game Board GameState
 And write a little while loop in haskell:
 
 ```haskell
-playTicTacToe :: AgenticRWS m => Kleisli m a Game
-playTicTacToe = Kleisli $ \_input -> do
+playTicTacToe :: AgenticRWS m => Agentic m a Game
+playTicTacToe = Agentic $ \_input -> do
     iterateUntilM
         -- Repeat until game ends
         (\(Game _ state) -> state == Ended)
         -- Ask the LLM to play the next move
         (\game -> do
             liftIO $ print game
-            runAgentic (prompt >>> inject game >>> extract @Game) "Play the next move!"
+            run (prompt >>> inject game >>> extract @Game) "Play the next move!"
         )
         -- The starting game state
         (Game (Board (Row Blank Blank Blank) (Row Blank Blank Blank) (Row Blank Blank Blank)) Playing)
@@ -179,13 +179,17 @@ playTicTacToe = Kleisli $ \_input -> do
 And lets see this poor LLM play against itself!
 
 ```haskell
-ghci> run (playTicTacToe) ""
+ghci> runIO playTicTacToe "play!"
 Game (Board (Row Blank Blank Blank) (Row Blank Blank Blank) (Row Blank Blank Blank)) Playing
 Game (Board (Row Blank Blank Blank) (Row Blank X Blank) (Row Blank Blank Blank)) Playing
-Game (Board (Row X Blank Blank) (Row Blank X Blank) (Row Blank Blank Blank)) Playing
-Game (Board (Row X Blank Blank) (Row Blank X Blank) (Row Blank Blank O)) Playing
-Game (Board (Row X Blank Blank) (Row Blank X Blank) (Row X Blank O)) Playing
-Game (Board (Row X Blank Blank) (Row X X Blank) (Row X Blank O)) Ended
+Game (Board (Row O Blank Blank) (Row Blank X Blank) (Row Blank Blank Blank)) Playing
+Game (Board (Row O Blank Blank) (Row Blank X Blank) (Row Blank Blank X)) Playing
+Game (Board (Row O Blank O) (Row Blank X Blank) (Row Blank Blank X)) Playing
+Game (Board (Row O X O) (Row Blank X Blank) (Row Blank Blank X)) Playing
+Game (Board (Row O X O) (Row Blank X Blank) (Row Blank O X)) Playing
+Game (Board (Row O X O) (Row X X Blank) (Row Blank O X)) Playing
+Game (Board (Row O X O) (Row X X O) (Row Blank O X)) Playing
+Game (Board (Row O X O) (Row X X O) (Row X O X)) Ended
 ```
 
 ## Agentic Examples
@@ -200,8 +204,7 @@ data Dino = Dino
     deriving (Generic, Show, FromDhall, ToDhall)
 
 data DinoPic = DinoPic
-    { name     :: Text
-    , asciiPic :: Text
+    { asciiPic :: Text
     }
     deriving (Generic, Show, FromDhall, ToDhall)
 
@@ -278,12 +281,12 @@ The system teaches the LLM Dhall syntax through examples and constrains outputs 
 
 ```haskell
 -- This one is cool - returning a tuple
-ghci> run (prompt >>> extract @[(BetterJoke, Joke)]) "a few quick jokes"
+ghci> runIO (prompt >>> extract @[(BetterJoke, Joke)]) "a few quick jokes"
 
 -- Another example using Task
-ghci> run (prompt >>> extract @[Task]) "3 important tasks when planning a vacation"
+ghci> runIO (prompt >>> extract @[Task]) "3 important tasks when planning a vacation"
 
 -- A guy on r/haskell's example
-ghci> run (prompt >>> inject (99,27) >>> extract @Int) "calc gcd, pls!"
+ghci> runIO (prompt >>> inject (99,27) >>> extract @Int) "calc gcd, pls!"
 9
 ```
