@@ -9,10 +9,10 @@ import           Data.Either.Validation  (Validation (Failure, Success))
 import           Data.Text               hiding (show)
 import           Dhall                   (FromDhall, ToDhall)
 import qualified Dhall
-import           Dhall.Core              (Expr (Text))
 import qualified Dhall.Core
 import qualified LLM                     (chat)
 import qualified Prompts
+import           UnliftIO                (MonadUnliftIO)
 
 type AgenticRWS m = (MonadIO m, MonadRWS Environment Events State m)
 type Agentic m a b = AgenticRWS m => Kleisli m a b
@@ -24,22 +24,17 @@ newtype State = State ()
 orFail :: Arrow a => a (Either Text c) c
 orFail = arr $ either (error . unpack) id
 
--- Glue two arrows together, injecting the schema of the type required as input to second arrow
--- to the prompt given by the first (including parsing or failing of that type)
-(>...>) :: forall a b c m. (FromDhall b, ToDhall b) => Agentic m a Text -> Agentic m b c -> Agentic m a c
-(>...>) l r = l >>> extract @b >>> r
-
 runLLM :: Agentic m Text Text
 runLLM = Kleisli $ \prompt' -> do
     reply <- liftIO $ LLM.chat prompt'
     tell [(prompt', reply)]
     pure reply
 
-roundtripAsWithRetry :: forall s m. (FromDhall s, ToDhall s) => Agentic m Text (Either Text s)
-roundtripAsWithRetry = Kleisli $ \input -> do
+extractWithRetry :: forall s m. (FromDhall s, ToDhall s) => Agentic m Text (Either Text s)
+extractWithRetry = Kleisli $ \input -> do
     let attempt input' = do
-            reply <- runAgentic (injectDhallSchema @s >>> runLLM) input'
-            parsed <- runAgentic (dhallParse @s) reply
+            reply <- runAgentic (injectSchema @s >>> runLLM) input'
+            parsed <- runAgentic (parse @s) reply
             pure (reply, parsed)
     (reply, parsed) <- attempt input
     case parsed of
@@ -50,22 +45,22 @@ roundtripAsWithRetry = Kleisli $ \input -> do
         Right result -> pure $ Right result
 
 extract :: forall s m. (FromDhall s, ToDhall s) => Agentic m Text s
-extract = injectDhallSchema @s >>> runLLM >>> dhallParse @s >>> orFail
+extract = injectSchema @s >>> runLLM >>> parse @s >>> orFail
 
-dhallSchema :: forall a. FromDhall a => Text
-dhallSchema = case Dhall.expected (Dhall.auto @a) of
+schemaOf :: forall a. FromDhall a => Text
+schemaOf = case Dhall.expected (Dhall.auto @a) of
     Success result -> Dhall.Core.pretty result
     Failure err    -> error $ show err
 
-dhallParse :: forall b m. (FromDhall b) => Agentic m Text (Either Text b)
-dhallParse = Kleisli $ \input -> do
+parse :: forall b m. (FromDhall b) => Agentic m Text (Either Text b)
+parse = Kleisli $ \input -> do
     result <- liftIO $ try $ Dhall.input Dhall.auto input
     case result of
         Right value -> pure $ Right value
         Left (err :: SomeException) -> pure $ Left $ "Dhall parse error: " <> pack (show err) <> "\nInput was: " <> input
 
-injectDhallSchema :: forall s m. (FromDhall s, ToDhall s) => Agentic m Text Text
-injectDhallSchema = Kleisli $ \prompt' -> pure $ Prompts.injectDhallSchema prompt' (dhallSchema @s)
+injectSchema :: forall s m. (FromDhall s, ToDhall s) => Agentic m Text Text
+injectSchema = Kleisli $ \prompt' -> pure $ Prompts.injectDhallSchema prompt' (schemaOf @s)
 
 inject :: forall s m. (ToDhall s) => s -> Agentic m Text Text
 inject obj = Kleisli $ \prompt' -> do
@@ -86,10 +81,11 @@ run k input = do
 
     (a, _finalState, logs) <- runRWST (runKleisli k input) environment state
 
-    mapM_   (\(llmInput, llmOutput) -> do
+    mapM_   (\(_llmInput, _llmOutput) -> do
                 -- putStrLn $ "LLM Input:\n[" <> unpack llmInput <> "]"
                 -- putStrLn $ "LLM Output:\n[" <> unpack llmOutput <> "]"
                 pure ()
             ) logs
 
     pure a
+

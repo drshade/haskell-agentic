@@ -1,16 +1,18 @@
 module Examples where
 
 
-import           Agentic                (AgenticRWS, extract, inject, prompt,
-                                         roundtripAsWithRetry, runAgentic)
-import           Control.Arrow          (Kleisli (Kleisli, runKleisli), (>>>))
-import           Control.Monad          (foldM)
-import           Control.Monad.IO.Class (MonadIO, liftIO)
-import           Control.Monad.Loops    (iterateUntilM, whileM)
+import           Agentic                (AgenticRWS, extract, extractWithRetry,
+                                         inject, prompt, run, runAgentic)
+import           Control.Arrow          (Kleisli (Kleisli), (>>>))
+import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Loops    (iterateUntilM)
+import           Control.Monad.RWS      (MonadIO)
 import           Data.Text
 import           Dhall                  (FromDhall, ToDhall)
 import           GHC.Generics           (Generic)
 import           Prelude                hiding (show)
+import           UnliftIO               (MonadUnliftIO)
+import           UnliftIO.Async
 
 data Joke = Joke
     { genre     :: Text
@@ -49,6 +51,31 @@ data Task = Task
     }
     deriving (Generic, Show, FromDhall, ToDhall)
 
+data Dino = Dino
+    { name        :: Text
+    , description :: Text
+    , asciiPic    :: Text
+    }
+    deriving (Generic, Show, FromDhall, ToDhall)
+
+dinoProject :: forall a m. (AgenticRWS m, MonadUnliftIO m) => Kleisli m a [Dino]
+dinoProject = Kleisli $ \_ -> do
+    names <- runAgentic (prompt >>> extract @[Text]) "Suggest 3 dinosaur names for my grade 5 project"
+    dinos <- mapConcurrently (\name -> runAgentic (prompt >>> inject name >>> extract @Dino) "Do the research on this dinosaur") names
+    pure dinos
+
+printDinos :: AgenticRWS m => Kleisli m [Dino] ()
+printDinos = Kleisli $ \dinos -> do
+    mapM_ (\dino -> do
+            liftIO $ do
+                putStrLn $ unpack dino.name
+                putStrLn $ unpack dino.description
+                putStrLn $ unpack dino.asciiPic
+        ) dinos
+
+runProject :: IO ()
+runProject = run (dinoProject >>> printDinos) "run!"
+
 withTasks :: AgenticRWS m => Kleisli m Text Text
 withTasks = Kleisli $ \input -> do
     let instruction = "Goal: \n" <> input
@@ -71,7 +98,7 @@ withTasks = Kleisli $ \input -> do
                                         <> "Subtask: " <> show task
                                         <> "\n\n" <> "Work only on the subtask and return this, I will bring all the results back to you for consolidation once all tasks are completed"
                                         <> "\n\n" <> "You should return the updated task in either Failed or Completed state (do not leave it as Todo or InProgress)"
-                updatedTask <- runAgentic (prompt >>> roundtripAsWithRetry @Task) taskInstruction
+                updatedTask <- runAgentic (prompt >>> extractWithRetry @Task) taskInstruction
                 liftIO $ print $ show updatedTask
                 pure updatedTask
               ) tasks
@@ -81,7 +108,6 @@ withTasks = Kleisli $ \input -> do
         print $ show completedTasks
 
     pure "hello"
-
 
 data Space = Blank | X | O
     deriving (Generic, Show, FromDhall, ToDhall)
@@ -110,3 +136,5 @@ playTicTacToe = Kleisli $ \_input -> do
         )
         -- The starting game state
         (Game (Board (Row Blank Blank Blank) (Row Blank Blank Blank) (Row Blank Blank Blank)) Playing)
+
+

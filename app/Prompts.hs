@@ -77,8 +77,24 @@ injectDhallSchema prompt dhallSchema =
            let Schema = { _1 : { name : Text }, _2 : MaritalStatus }
            in { _1 = { name = "Robert"}, _2 = Schema._2.Unmarried } : Schema
 
+         Example schema: { name: Text, pic : Text }
+         Valid response:
+            let Schema = { name: Text, pic : Text }
+            in { name = "Dino"
+               , pic =
+               ''
+                     __
+                     / ")
+               .-^^^-/ /
+            __/       /
+            <__.'_'''_'
+               ''
+               } : Schema
+
         Extra syntax rules:
         Escape double-quotes with backslash (but not single quotes) in Text
+        Multiline strings start and end with '' on a blank line. 
+        Single and double quotes can be used without escaping in a multiline string, except for two single quotes which must be escaped by inserting three single quotes.
         Natural numbers need no prefixes but Integers always need the sign prefixed (e.g. +10 or -100)
 
         Additionally - try to be as uncreative as possible when abiding by the schema.
