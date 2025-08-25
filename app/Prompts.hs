@@ -40,6 +40,14 @@ injectDhallSchema prompt dhallSchema =
       Return response in Dhall format using the following schema:
       %s
 
+      Language reference:
+      %s
+      """ prompt dhallSchema languageReference1
+
+languageReference1 :: Text
+languageReference1 =
+   pack
+      """
       Examples:
       Example schema: < Dog : { name : Text, age : Natural, breed : Text } | Cat : { name : Text } >
       Valid response:
@@ -143,6 +151,26 @@ injectDhallSchema prompt dhallSchema =
          let add = https://prelude.dhall-lang.org/Integer/add
           in add +1 +4
 
+      other helpful imports in https://prelude.dhall-lang.org/Integer:
+         abs: Integer → Natural
+         add: Integer → Integer → Integer
+         clamp: Integer → Natural
+         equal: Integer → Integer → Bool
+         greaterThan: Integer → Integer → Bool
+         greaterThanEqual: Integer → Integer → Bool
+         lessThan: Integer → Integer → Bool
+         lessThanEqual: Integer → Integer → Bool
+         multiply: Integer → Integer → Integer
+         negate: Integer → Integer
+         negative: Integer → Bool
+         nonNegative: Integer → Bool
+         nonPositive: Integer → Bool
+         positive: Integer → Bool
+         show: Integer → Text
+         subtract: Integer → Integer → Integer
+         toDouble: Integer → Double
+         toNatural: Integer → Optional Natural
+
       Additionally - try to be as uncreative as possible when abiding by the schema.
       e.g. if there is only field and the prompt has asked for many, don't try to
       squash all the results into this single field. Just insert one.
@@ -152,4 +180,42 @@ injectDhallSchema prompt dhallSchema =
       dealing with repeated values and/or to save space.
       If asked to do repetitive work, generally you should introduce a function to
       construct the output.
-      """ prompt dhallSchema
+      """
+
+languageReference2 :: Text
+languageReference2 = 
+   """
+   Dhall Language Reference:
+   - Strongly typed functional configuration language with type inference
+   - Syntax: λ(x : T) -> body for functions, : for type annotations, . for record access
+   - Primitives: Bool (True/False), Natural (0,1,2...), Integer (+1,-5), Double, Text, Date, Time, TimeZone
+   - Collections: List T, Optional T, Records {field:Type}, Unions <Tag:Type|Other>
+   - Operators: Bool (&&,||,==,!=), Natural (+,*), Text (++), List (#), Record (∧,⫽,//)
+   - Keywords: let, in, if/then/else, merge, Some/None, with, toMap
+   - Functions: Natural/fold, List/length, Text/replace, Integer/show, etc.
+   - String literals: "text" or multiline '' text '' (escape '' with ''')
+   - Type constraints: Natural + only works with Natural, not Integer
+   - Imports: https://prelude.dhall-lang.org/... for extended functions
+   - Schema adherence: Always include type annotations and let bindings as shown in examples
+
+   Examples:
+   -- Record with optional field and union
+   let Status = < Active | Inactive >
+   let User = { name : Text, age : Natural, status : Status, bio : Optional Text }
+   in { name = "Alice", age = 30, status = Status.Active, bio = Some "Developer" } : User
+
+   -- Function with conditional logic  
+   let canVote = λ(age : Natural) -> Natural/isZero (Natural/subtract age 18)
+   in canVote 21
+
+   -- List processing with fold
+   let numbers = [1, 2, 3, 4] : List Natural
+   let sum = List/fold Natural numbers Natural (λ(x : Natural) -> λ(acc : Natural) -> x + acc) 0
+   in { total = sum, count = List/length Natural numbers }
+
+   When using the same union type repeatedly, introduce a let binding for it:
+   Example: Instead of repeating < Red | Green | Blue >.Red everywhere,
+   use: let Color = < Red | Green | Blue > in Color.Red
+   
+   IMPORTANT: Return ONLY valid Dhall code - no markdown code blocks, no explanations, no preamble.
+   """
