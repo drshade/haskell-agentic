@@ -188,6 +188,86 @@ Game (Board (Row X Blank Blank) (Row Blank X Blank) (Row X Blank O)) Playing
 Game (Board (Row X Blank Blank) (Row X X Blank) (Row X Blank O)) Ended
 ```
 
+Lets do something really agentic, researching a project for grade 5:
+
+```haskell
+data Dino = Dino
+    { name        :: Text
+    , description :: Text
+    }
+    deriving (Generic, Show, FromDhall, ToDhall)
+
+data DinoPic = DinoPic
+    { name     :: Text
+    , asciiPic :: Text
+    }
+    deriving (Generic, Show, FromDhall, ToDhall)
+
+dinoProject :: forall a m. (AgenticRWS m, MonadUnliftIO m) => Agentic m a Text
+dinoProject =
+    let suggestDinos :: Agentic m a [Text]
+        suggestDinos = Agentic $ const $ run (prompt >>> extract @[Text]) "Suggest 3 dinosaur names for my grade 5 project"
+
+        researchDino :: Agentic m Text Dino
+        researchDino = Agentic $ \name -> run (prompt >>> inject name >>> extract @Dino) "Research this dinosaur"
+
+        drawPic :: Agentic m Dino (Dino, DinoPic)
+        drawPic = Agentic $ \dino -> do
+            pic <- run (prompt >>> inject dino.name >>> extract @DinoPic) "Draw an ascii picture of this dinosaur, 10 lines high"
+            pure (dino, pic)
+
+        buildPoster :: Agentic m [(Dino, DinoPic)] Text
+        buildPoster = Agentic $ \dinos -> run (prompt >>> inject dinos >>> extract @Text) "Create the poster"
+
+    in (suggestDinos <<.>> (researchDino >>> drawPic)) >>> buildPoster
+```
+
+```haskell
+ghci> runIO dinoProject "" >>= putStrLn . unpack
+[...beautiful poster...]
+```
+
+Diagrammatically this looks like:
+
+```mermaid
+stateDiagram-v2
+[*] --> suggestDinos
+
+suggestDinos --> Brontosaurus
+suggestDinos --> Stegosaurus
+suggestDinos --> Triceratops
+
+state Brontosaurus {
+    [*] --> research_a
+    research_a --> drawPic_a
+    drawPic_a --> [*]
+}
+state Stegosaurus {
+    [*] --> research_b
+    research_b --> drawPic_b
+    drawPic_b --> [*]
+}
+state Triceratops {
+    [*] --> research_c
+    research_c --> drawPic_c
+    drawPic_c --> [*]
+}
+
+Brontosaurus --> buildPoster
+Stegosaurus --> buildPoster
+Triceratops --> buildPoster
+
+buildPoster --> [*]
+
+research_a: researchDino
+research_b: researchDino
+research_c: researchDino
+drawPic_a: drawPic
+drawPic_b: drawPic
+drawPic_c: drawPic
+```
+
+
 Typesafe prompt responses FTW!
 
 The system teaches the LLM Dhall syntax through examples and constrains outputs to match the expected schema, eliminating fragile string parsing and runtime type errors common in JSON-based approaches.
