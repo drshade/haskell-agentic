@@ -97,6 +97,7 @@ runIO k input = do
     pure a
 
 -- My merging MonadUnliftIO instance (easy because State is current (), but in future it wont be!)
+-- This can probably fall away if / when we move away from RWS to RW alone
 instance MonadUnliftIO (RWST Environment Events State IO) where
   withRunInIO :: ((forall a. RWST Environment Events State IO a -> IO a) -> IO b) -> RWST Environment Events State IO b
   withRunInIO action = do

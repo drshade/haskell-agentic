@@ -2,6 +2,17 @@
 
 WARNING: in progress ;)
 
+## Roadmap
+
+- [x] Schema extract and parse
+- [x] Type-safe prompting (`inject` & `extract`)
+- [x] Fanout combinator and example (`<<.>>`)
+- [ ] Retry mechanism (when LLM fails to produce compliant schema - give her another chance)
+- [ ] Session management (something like `>>> withSession @...` ?) 
+- [ ] Re-think RWS (as State is inherently non-concurrent... do we even want it?)
+- [ ] Proper task based example
+- [ ] Tool use (something like `>>> injectTools [...]` and `>>> usedTool`)
+
 ## Strictly Typed LLM Inputs & Outputs
 
 Its a real pain-in-the-ass trying to build "agentic" stuff, when the best tool you have is "pls respond in JSON". Its too weak, JSON doesn't support sum types, and nor does it have a standard schema. 
@@ -271,7 +282,6 @@ drawPic_a: drawPic
 drawPic_b: drawPic
 drawPic_c: drawPic
 ```
-
 
 Typesafe prompt responses FTW!
 
