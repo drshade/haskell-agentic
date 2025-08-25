@@ -18,7 +18,7 @@ chat input = liftIO $ do
 
     ChatCompletionObject{ choices } <- createChatCompletion _CreateChatCompletion
         { messages = [ User{ content = [ Text{ text = input } ], name = Nothing } ]
-        , model = "gpt-5-mini"
+        , model = "gpt-5"
         }
 
     let result = Text.intercalate "\n" $ Vector.toList $ (\Choice{ message } -> messageToContent message) <$> choices
