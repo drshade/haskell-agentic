@@ -188,6 +188,8 @@ Game (Board (Row X Blank Blank) (Row Blank X Blank) (Row X Blank O)) Playing
 Game (Board (Row X Blank Blank) (Row X X Blank) (Row X Blank O)) Ended
 ```
 
+## Agentic Examples
+
 Lets do something really agentic, researching a project for grade 5:
 
 ```haskell
