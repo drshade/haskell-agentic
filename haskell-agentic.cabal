@@ -70,6 +70,7 @@ executable haskell-agentic
     OverloadedLists
     OverloadedRecordDot
     OverloadedStrings
+    PatternSynonyms
     TypeApplications
 
   -- Other library packages from which modules are imported.
