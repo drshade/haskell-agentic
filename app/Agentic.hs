@@ -89,8 +89,8 @@ runIO k input = do
     (a, _finalState, logs) <- runRWST (runKleisli k input) environment state
 
     mapM_   (\(_llmInput, _llmOutput) -> do
-                -- putStrLn $ "LLM Input:\n[" <> unpack llmInput <> "]"
-                -- putStrLn $ "LLM Output:\n[" <> unpack llmOutput <> "]"
+                putStrLn $ "LLM Input:\n[" <> unpack _llmInput <> "]"
+                putStrLn $ "LLM Output:\n[" <> unpack _llmOutput <> "]"
                 pure ()
             ) logs
 

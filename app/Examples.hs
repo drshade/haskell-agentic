@@ -144,3 +144,6 @@ playTicTacToe = Agentic $ \_input -> do
         (Game (Board (Row Blank Blank Blank) (Row Blank Blank Blank) (Row Blank Blank Blank)) Playing)
 
 
+increment :: AgenticRWS m => Agentic m Text Int
+increment = Agentic$ \input -> do
+    run (prompt >>> inject input >>> extract @Int) "increment this"
