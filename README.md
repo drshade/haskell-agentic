@@ -305,11 +305,17 @@ CRETACEOUS DINOS — POSTER
             \  \____/ /
              `-.__.-'
 
-Tyrannosaurus rex is a large theropod dinosaur from the Late Cretaceous (mainly the Maastrichtian, about 68–66 million years ago), known from western North America. Adults reached len
+Tyrannosaurus rex is a large theropod dinosaur from the Late Cretaceous (mainly 
+the Maastrichtian, about 68–66 million years ago), known from western North 
+America. Adults reached len
 
-Distinctive anatomical features include a large, heavy head, short two-fingered forelimbs with powerful musculature attachments, long and muscular hind limbs, and a counterbalancing t
+Distinctive anatomical features include a large, heavy head, short two-fingered 
+forelimbs with powerful musculature attachments, long and muscular hind limbs, 
+and a counterbalancing t
 
-Ecologically, T. rex is interpreted as an apex predator and likely opportunistic feeder (hunting live prey and scavenging). It was first named and described by Henry Fairfield Osborn
+Ecologically, T. rex is interpreted as an apex predator and likely opportunistic 
+feeder (hunting live prey and scavenging). It was first named and described by 
+Henry Fairfield Osborn
 
 ------------------------------------------------------------
 
@@ -327,7 +333,9 @@ Ecologically, T. rex is interpreted as an apex predator and likely opportunistic
           \___\_____/___/
              /_/ \_\
 
-Triceratops is a genus of large herbivorous ceratopsid dinosaur from the latest Cretaceous of western North America (approximately 68–66 million years ago). First named by O. C. Marsh
+Triceratops is a genus of large herbivorous ceratopsid dinosaur from the latest 
+Cretaceous of western North America (approximately 68–66 million years ago). 
+First named by O. C. Marsh
 
 ------------------------------------------------------------
 
@@ -346,7 +354,17 @@ Triceratops is a genus of large herbivorous ceratopsid dinosaur from the latest 
          _/ _/
 
 
-Velociraptor is a small, bipedal dromaeosaurid theropod from the Late Cretaceous (approximately 75–71 million years ago), known primarily from the Djadokhta and Barun Goyot formations of Mongolia. Adults measured about 2.0 m in length, stood roughly 0.5 m at the hip, and are estimated to have weighed on the order of 15 kg. Distinctive anatomical features include a long, stiffened tail, an enlarged recurved "sickle" claw on the second toe, and forelimbs adapted for grasping. Direct fossil evidence (quill knobs on the ulna) indicates the presence of feathers. A famous specimen, the "Fighting Dinosaurs," preserves a Velociraptor locked in combat with a Protoceratops. First named in 1924 (Velociraptor mongoliensis), the genus is often misrepresented in popular media as being much larger and more reptilian than the fossil record supports.
+Velociraptor is a small, bipedal dromaeosaurid theropod from the Late Cretaceous 
+(approximately 75–71 million years ago), known primarily from the Djadokhta and 
+Barun Goyot formations of Mongolia. Adults measured about 2.0 m in length, stood 
+roughly 0.5 m at the hip, and are estimated to have weighed on the order of 15 
+kg. Distinctive anatomical features include a long, stiffened tail, an enlarged 
+recurved "sickle" claw on the second toe, and forelimbs adapted for grasping. 
+Direct fossil evidence (quill knobs on the ulna) indicates the presence of 
+feathers. A famous specimen, the "Fighting Dinosaurs," preserves a Velociraptor 
+locked in combat with a Protoceratops. First named in 1924 (Velociraptor 
+mongoliensis), the genus is often misrepresented in popular media as being much 
+larger and more reptilian than the fossil record supports.
 
 ------------------------------------------------------------
 
