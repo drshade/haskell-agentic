@@ -37,15 +37,17 @@ injectDhallSchema prompt dhallSchema =
 
       Return response in Dhall format using the following schema:
       %s
-
-      Language reference:
-      %s
-      """ prompt dhallSchema languageReference1
+      """ prompt dhallSchema
 
 languageReference1 :: Text
 languageReference1 =
    pack
       """
+      You reply to all responses in Dhall format only.
+
+      --------
+      Dhall language reference
+      --------
       Examples:
       Example schema: < Dog : { name : Text, age : Natural, breed : Text } | Cat : { name : Text } >
       Valid response:
@@ -115,7 +117,6 @@ languageReference1 =
          Velociraptor is a small, bipedal dromaeosaurid theropod from the Late Cretaceous (about 75 to 71 million years ago), known mainly from Mongolia's Djadokhta and Barun Goyot formations. Adults were roughly 2.0 m long, about 0.5 m at the hip, and are estimated at around 15 kg. Distinctive features include a long, stiffened tail, an enlarged recurved "sickle" claw on the second toe, and evidence of feathers (quill knobs on the ulna). A famous fossil shows a Velociraptor locked in combat with a Protoceratops. First described in 1924 (Velociraptor mongoliensis), it is often misrepresented in popular media as much larger than it actually was.
          '' 
          } : Schema
-
 
       Extra syntax rules:
       Escape double-quotes with backslash (but not single quotes) in Text

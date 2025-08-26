@@ -25,33 +25,35 @@ pattern Agentic :: (a -> m b) -> Kleisli m a b
 pattern Agentic f = Kleisli f
 
 newtype Environment = Environment { prompt :: Text }
-type Events = [(Text, Text)]
+type Events = [(Prompt, Text)]
 newtype State = State ()
+
+data Prompt = Prompt { system :: Text, user :: Text }
 
 orFail :: Arrow a => a (Either Text c) c
 orFail = arr $ either (error . unpack) id
 
-runLLM :: Agentic m Text Text
-runLLM = Kleisli $ \prompt' -> do
-    reply <- liftIO $ LLM.chat prompt'
+runLLM :: Agentic m Prompt Text
+runLLM = Kleisli $ \prompt'@(Prompt system user) -> do
+    reply <- liftIO $ LLM.chat system user
     tell [(prompt', reply)]
     pure reply
 
-extractWithRetry :: forall s m. (FromDhall s, ToDhall s) => Agentic m Text (Either Text s)
-extractWithRetry = Kleisli $ \input -> do
+extractWithRetry :: forall s m. (FromDhall s, ToDhall s) => Agentic m Prompt (Either Text s)
+extractWithRetry = Kleisli $ \prompt'@(Prompt system user) -> do
     let attempt input' = do
             reply <- run (injectSchema @s >>> runLLM) input'
             parsed <- run (parse @s) reply
             pure (reply, parsed)
-    (reply, parsed) <- attempt input
+    (reply, parsed) <- attempt prompt'
     case parsed of
         Left err -> do
-            let instruction = Prompts.retryError err reply input
-            (_reply', parsed') <- attempt instruction
+            let instruction = Prompts.retryError err reply user
+            (_reply', parsed') <- attempt $ Prompt system instruction
             pure parsed'
         Right result -> pure $ Right result
 
-extract :: forall s m. (FromDhall s, ToDhall s) => Agentic m Text s
+extract :: forall s m. (FromDhall s, ToDhall s) => Agentic m Prompt s
 extract = injectSchema @s >>> runLLM >>> parse @s >>> orFail
 
 schemaOf :: forall a. FromDhall a => Text
@@ -66,16 +68,17 @@ parse = Kleisli $ \input -> do
         Right value -> pure $ Right value
         Left (err :: SomeException) -> pure $ Left $ "Dhall parse error: " <> pack (show err) <> "\nInput was: " <> input
 
-injectSchema :: forall s m. (FromDhall s, ToDhall s) => Agentic m Text Text
-injectSchema = Kleisli $ \prompt' -> pure $ Prompts.injectDhallSchema prompt' (schemaOf @s)
+injectSchema :: forall s m. (FromDhall s, ToDhall s) => Agentic m Prompt Prompt
+injectSchema = Kleisli $ \(Prompt _system user) ->
+    pure $ Prompt Prompts.languageReference1 (Prompts.injectDhallSchema user (schemaOf @s))
 
-inject :: forall s m. (ToDhall s) => s -> Agentic m Text Text
-inject obj = Kleisli $ \prompt' -> do
+inject :: forall s m. (ToDhall s) => s -> Agentic m Prompt Prompt
+inject obj = Kleisli $ \(Prompt system user) -> do
     let dhall = Dhall.Core.pretty $ Dhall.embed Dhall.inject obj
-    pure $ Prompts.injectObject prompt' dhall
+    pure $ Prompt system (Prompts.injectObject user dhall)
 
-prompt :: Arrow a => a Text Text
-prompt = arr id
+prompt :: Arrow a => a Text Prompt
+prompt = arr $ \user -> Prompt { system = "", user = user }
 
 run :: Kleisli m a b -> a -> m b
 run = runKleisli
@@ -88,8 +91,8 @@ runIO k input = do
 
     (a, _finalState, logs) <- runRWST (runKleisli k input) environment state
 
-    mapM_   (\(_llmInput, _llmOutput) -> do
-                putStrLn $ "LLM Input:\n[" <> unpack _llmInput <> "]"
+    mapM_   (\(Prompt system user, _llmOutput) -> do
+                putStrLn $ "LLM Input:\n[" <> unpack user <> "]"
                 putStrLn $ "LLM Output:\n[" <> unpack _llmOutput <> "]"
                 pure ()
             ) logs
