@@ -223,25 +223,24 @@ data DinoPic = DinoPic
 dinoProject :: forall a m. (AgenticRWS m, MonadUnliftIO m) => Agentic m a Text
 dinoProject =
     let suggestDinos :: Agentic m a [Text]
-        suggestDinos = Agentic $ const $ run (prompt >>> extract @[Text]) "Suggest 3 dinosaur names for my grade 5 project"
+        suggestDinos = Agentic $ const $ run (prompt >>> extract @[Text]) 
+                        "Suggest 3 dinosaur names for my grade 5 project"
 
         researchDino :: Agentic m Text Dino
-        researchDino = Agentic $ \name -> run (prompt >>> inject name >>> extract @Dino) "Research this dinosaur"
+        researchDino = Agentic $ \name -> run (prompt >>> inject name >>> extract @Dino) 
+                        "Research this dinosaur"
 
         drawPic :: Agentic m Dino (Dino, DinoPic)
         drawPic = Agentic $ \dino -> do
-            pic <- run (prompt >>> inject dino.name >>> extract @DinoPic) "Draw an ascii picture of this dinosaur, 10 lines high"
+            pic <- run (prompt >>> inject dino.name >>> extract @DinoPic) 
+                    "Draw an ascii picture of this dinosaur, 10 lines high"
             pure (dino, pic)
 
         buildPoster :: Agentic m [(Dino, DinoPic)] Text
-        buildPoster = Agentic $ \dinos -> run (prompt >>> inject dinos >>> extract @Text) "Create the poster"
+        buildPoster = Agentic $ \dinos -> run (prompt >>> inject dinos >>> extract @Text) 
+                        "Create the poster"
 
     in (suggestDinos <<.>> (researchDino >>> drawPic)) >>> buildPoster
-```
-
-```haskell
-ghci> runIO dinoProject "" >>= putStrLn . unpack
-[...beautiful poster...]
 ```
 
 Diagrammatically this looks like:
@@ -283,6 +282,81 @@ drawPic_a: drawPic
 drawPic_b: drawPic
 drawPic_c: drawPic
 ```
+
+So lets do it!
+
+```haskell
+ghci> runIO dinoProject "" >>= putStrLn . unpack
+==========================
+CRETACEOUS DINOS — POSTER
+==========================
+
+1) Tyrannosaurus rex
+---------------------
+
+                           __
+                          / _)
+                 .-^^^-/ / /
+              __/       / /
+             /  .-""-.  /
+            /  / 0  0\/
+           |   \  --/ |
+           |    '---' /
+            \  \____/ /
+             `-.__.-'
+
+Tyrannosaurus rex is a large theropod dinosaur from the Late Cretaceous (mainly the Maastrichtian, about 68–66 million years ago), known from western North America. Adults reached len
+
+Distinctive anatomical features include a large, heavy head, short two-fingered forelimbs with powerful musculature attachments, long and muscular hind limbs, and a counterbalancing t
+
+Ecologically, T. rex is interpreted as an apex predator and likely opportunistic feeder (hunting live prey and scavenging). It was first named and described by Henry Fairfield Osborn
+
+------------------------------------------------------------
+
+2) Triceratops
+---------------
+
+                ___
+              _/   \_
+           __/  ^ ^  \__
+          /  \  \_/  /  \
+         /    \_____/    \
+        |  _  /     \  _  |
+        | (_) |     | (_) |
+         \    |     |    /
+          \___\_____/___/
+             /_/ \_\
+
+Triceratops is a genus of large herbivorous ceratopsid dinosaur from the latest Cretaceous of western North America (approximately 68–66 million years ago). First named by O. C. Marsh
+
+------------------------------------------------------------
+
+3) Velociraptor
+---------------
+
+                    __
+                   / _)
+            .-^^^-/ /
+         __/       /
+        /  \  .-""-.
+        \   \/  ,  \
+         '--.\  `-'/
+             /  _/
+           _/  /
+         _/ _/
+
+
+Velociraptor is a small, bipedal dromaeosaurid theropod from the Late Cretaceous (approximately 75–71 million years ago), known primarily from the Djadokhta and Barun Goyot formations of Mongolia. Adults measured about 2.0 m in length, stood roughly 0.5 m at the hip, and are estimated to have weighed on the order of 15 kg. Distinctive anatomical features include a long, stiffened tail, an enlarged recurved "sickle" claw on the second toe, and forelimbs adapted for grasping. Direct fossil evidence (quill knobs on the ulna) indicates the presence of feathers. A famous specimen, the "Fighting Dinosaurs," preserves a Velociraptor locked in combat with a Protoceratops. First named in 1924 (Velociraptor mongoliensis), the genus is often misrepresented in popular media as being much larger and more reptilian than the fossil record supports.
+
+------------------------------------------------------------
+
+Credits:
+- Artwork: ASCII sketches included
+- Text: Summaries of fossil evidence and interpretations
+
+Enjoy your mini Cretaceous poster!
+```
+
 
 Typesafe prompt responses FTW!
 

@@ -53,6 +53,7 @@ executable haskell-agentic
     Combinators
     Examples
     LLM
+    Progress
     Prompts
     PureMockup
 
@@ -76,6 +77,7 @@ executable haskell-agentic
   -- Other library packages from which modules are imported.
   build-depends:
     aeson,
+    ansi-terminal,
     async,
     autodocodec,
     autodocodec-schema,
@@ -88,6 +90,7 @@ executable haskell-agentic
     monad-loops,
     mtl,
     openai,
+    stm,
     text,
     time,
     unliftio,
