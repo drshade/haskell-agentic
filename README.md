@@ -14,6 +14,10 @@ WARNING: in progress ;)
 - [ ] Proper task based example
 - [ ] Tool use (something like `>>> injectTools [...]` and `>>> usedTool`)
 
+Marais ideas
+- [ ] Add static bits to System prompt part of LLM call (to allow caching from call to the next)
+
+
 ## Strictly Typed LLM Inputs & Outputs
 
 Its a real pain-in-the-ass trying to build "agentic" stuff, when the best tool you have is "pls respond in JSON". Its too weak, JSON doesn't support sum types, and nor does it have a standard schema. 
