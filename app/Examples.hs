@@ -67,18 +67,22 @@ data DinoPic = DinoPic
 dinoProject :: forall a m. (AgenticRWS m, MonadUnliftIO m) => Agentic m a Text
 dinoProject =
     let suggestDinos :: Agentic m a [Text]
-        suggestDinos = Agentic $ const $ run (prompt >>> extract @[Text]) "Suggest 3 dinosaur names for my grade 5 project"
+        suggestDinos = Agentic $ const $ run (prompt >>> extract @[Text])
+                        "Suggest 3 dinosaur names for my grade 5 project"
 
         researchDino :: Agentic m Text Dino
-        researchDino = Agentic $ \name -> run (prompt >>> inject name >>> extract @Dino) "Research this dinosaur"
+        researchDino = Agentic $ \name -> run (prompt >>> inject name >>> extract @Dino)
+                        "Research this dinosaur"
 
         drawPic :: Agentic m Dino (Dino, DinoPic)
         drawPic = Agentic $ \dino -> do
-            pic <- run (prompt >>> inject dino.name >>> extract @DinoPic) "Draw an ascii picture of this dinosaur, 10 lines high"
+            pic <- run (prompt >>> inject dino.name >>> extract @DinoPic)
+                        "Draw an ascii picture of this dinosaur, 10 lines high"
             pure (dino, pic)
 
         buildPoster :: Agentic m [(Dino, DinoPic)] Text
-        buildPoster = Agentic $ \dinos -> run (prompt >>> inject dinos >>> extract @Text) "Create the poster"
+        buildPoster = Agentic $ \dinos -> run (prompt >>> inject dinos >>> extract @Text)
+                        "Create the poster"
 
     in (suggestDinos <<.>> (researchDino >>> drawPic)) >>> buildPoster
 
