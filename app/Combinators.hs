@@ -1,14 +1,12 @@
 module Combinators where
 import           Agentic
 import           Control.Arrow (Kleisli (..), (>>>))
-import           Control.Monad (join)
-import           Data.Text     (Text)
 import           Dhall         (FromDhall, ToDhall)
 import           UnliftIO      (MonadUnliftIO, mapConcurrently)
 
 -- Glue two arrows together, injecting the schema of the type required as input to second arrow
 -- to the prompt given by the first (including parsing or failing of that type)
-(>...>) :: forall a b c m. (FromDhall b, ToDhall b) => Agentic m a Text -> Agentic m b c -> Agentic m a c
+(>...>) :: forall a b c m. (FromDhall b, ToDhall b) => Agentic m a Prompt -> Agentic m b c -> Agentic m a c
 (>...>) l r = l >>> extract @b >>> r
 
 -- Fanout
