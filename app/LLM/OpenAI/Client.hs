@@ -1,5 +1,5 @@
 
-module LLM where
+module LLM.OpenAI.Client where
 
 import           OpenAI.V1
 import           OpenAI.V1.Chat.Completions
@@ -21,10 +21,13 @@ chat system user = liftIO $ do
             [ System{ content = [ Text{ text = system } ], name = Nothing }
             , User{ content = [ Text{ text = user } ], name = Nothing }
             ]
-        , model = "gpt-5-mini"
+        -- , model = "gpt-5-mini"
         -- , model = "gpt-4o"
+        , model = "o1"
         }
 
     let result = Text.intercalate "\n" $ Vector.toList $ (\Choice{ message } -> messageToContent message) <$> choices
 
     pure result
+
+

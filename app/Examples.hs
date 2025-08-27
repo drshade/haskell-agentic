@@ -42,16 +42,6 @@ data ApplicationForm = ApplicationForm
     }
     deriving (Generic, Show, FromDhall, ToDhall)
 
-data TaskStatus = Todo | InProgress | Failed { reason :: Text } | Completed { result :: Text }
-    deriving (Generic, Show, FromDhall, ToDhall, Eq)
-
-data Task = Task
-    { title       :: Text
-    , description :: Maybe Text
-    , status      :: TaskStatus
-    }
-    deriving (Generic, Show, FromDhall, ToDhall)
-
 data Dino = Dino
     { name        :: Text
     , description :: Text
@@ -86,38 +76,70 @@ dinoProject =
 
     in (suggestDinos <<.>> (researchDino >>> drawPic)) >>> buildPoster
 
-withTasks :: AgenticRWS m => Agentic m Text Text
-withTasks = Agentic $ \input -> do
-    let instruction = "Goal: \n" <> input
-            <> "\n\n" <> "Return the list of tasks required to complete this, and I will call you back with each individual task"
+data TaskStatus = Todo | Failed { reason :: Text } | Completed { result :: Text }
+    deriving (Generic, Show, FromDhall, ToDhall, Eq)
+
+data Task = Task
+    { title       :: Text
+    , description :: Maybe Text
+    , status      :: TaskStatus
+    }
+    deriving (Generic, Show, FromDhall, ToDhall)
+
+data Goal = Goal { goal  :: Text
+                 , tasks :: [Task]
+                 }
+    deriving (Generic, Show, FromDhall, ToDhall)
+
+withTasks :: AgenticRWS m => Int -> Agentic m Text Text
+withTasks max = Agentic $ \goal -> do
+    let instruction = "Goal: \n" <> goal
+            <> "\n\n" <> "Come up with a list of tasks to achieve the goal, set all tasks to Todo to start"
+            <> "\n\n" <> "Do not use more than " <> show max <> " tasks, but you are welcome to return less"
 
     tasks <- run (prompt >>> extract @[Task]) instruction
 
-    liftIO $ do
-        print "Returned tasks"
-        mapM_ (\task -> print $ "  " <> task.title <> " " <> show task.status) tasks
+    let printGoal (Goal goal tasks) = do
+                                putStrLn $ "Goal: " <> unpack goal
+                                mapM_ (\task -> putStrLn $ "  " <> unpack task.title <> " " <> unpack (show task.status)) tasks
 
-    completedTasks <-
-        mapM (\task -> do
+    completed :: Goal <- iterateUntilM
+        (\(Goal _ tasks') -> Prelude.all
+                                    (\task -> case task.status of
+                                        Completed { result } -> True
+                                        Failed { reason }    -> True
+                                        _                    -> False
+                                    ) tasks'
+        )
+        (\goal' -> do
+            liftIO $ printGoal goal'
+            run (prompt >>> inject goal' >>> extract @Goal) "Work on the next task in the list, and set to to Completed (including the result in the field itself)")
+        (Goal goal tasks)
 
-                liftIO $ print $ "  Working on " <> task.title <> "..."
+    liftIO $ putStrLn "Final goal:"
+    liftIO $ printGoal completed
 
-                let taskInstruction = "Complete the following task:\n"
-                                        <> show task <> "\n\nThis is part of the overall goal: \n"
-                                        <> input <> "\n\n"
-                                        <> "Subtask: " <> show task
-                                        <> "\n\n" <> "Work only on the subtask and return this, I will bring all the results back to you for consolidation once all tasks are completed"
-                                        <> "\n\n" <> "You should return the updated task in either Failed or Completed state (do not leave it as Todo or InProgress)"
-                updatedTask <- run (prompt >>> extractWithRetry @Task) taskInstruction
-                liftIO $ print $ show updatedTask
-                pure updatedTask
-              ) tasks
+    final <- run (prompt >>> inject completed >>> extract @Text) "Using all these tasks, complete the goal as described - i.e. produce the final result. Do not include any status or progress report, simply output what is required by the goal stated"
 
-    liftIO $ do
-        print "Completed Tasks:"
-        print $ show completedTasks
+    liftIO $ putStrLn $ unpack $ show final
 
-    pure "hello"
+    pure final
+
+    -- completedTasks <-
+    --     mapM (\task -> do
+    --             liftIO $ putStrLn $ "  Working on " <> unpack task.title <> "..."
+    --             updatedTask <- run (prompt >>> inject task >>> extract @(Task, String)) "Work on this task, returning the result"
+    --             liftIO $ putStrLn $ unpack $ show updatedTask
+    --             pure updatedTask
+    --           ) tasks
+
+    -- reduced <- run (prompt >>> inject (goal, completedTasks) >>> extract @Text) "Complete the goal based on these completed tasks"
+
+    -- liftIO $ do
+    --     putStrLn $ "Reduced:"
+    --     putStrLn $ unpack reduced
+
+    -- pure reduced
 
 data Space = Blank | X | O
     deriving (Generic, Show, FromDhall, ToDhall)
@@ -149,5 +171,23 @@ playTicTacToe = Agentic $ \_input -> do
 
 
 increment :: AgenticRWS m => Agentic m Text Int
-increment = Agentic$ \input -> do
+increment = Agentic $ \input -> do
     run (prompt >>> inject input >>> extract @Int) "increment this"
+
+-- extract :: forall s m. (FromDhall s, ToDhall s) => Agentic m Prompt s
+-- extract = injectSchema @s >>> runLLM >>> parse @s >>> orFail
+
+-- data Job s = Job
+--     { instruction :: Text
+--     , result      :: s
+--     }
+--     deriving (Generic, Show, FromDhall, ToDhall)
+
+-- synthesize :: forall i m. (FromDhall i, ToDhall i) => Agentic m Text Text
+-- synthesize = Agentic $ \input -> do
+--     job <- run (prompt >>> extract @(Job i)) $ "Complete the goal using whatever schema you like for field `result`: " <> input
+--     complete <- run (prompt >>> inject job >>> extract @Text) "Using the input, convert the output to text"
+--     pure complete
+
+-- test :: IO Text
+-- test = runIO synthesize "what is the date"
