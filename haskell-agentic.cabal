@@ -53,6 +53,8 @@ executable haskell-agentic
     Combinators
     Examples
     LLM.OpenAI.Client
+    LLM.Anthropic.Client
+    LLM.Anthropic.Types
     Progress
     Prompts
     PureMockup
@@ -87,6 +89,7 @@ executable haskell-agentic
     dhall >=1.41 && <1.43,
     either,
     free,
+    http-conduit,
     monad-loops,
     mtl,
     openai,
