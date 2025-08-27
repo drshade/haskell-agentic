@@ -52,7 +52,7 @@ executable haskell-agentic
     Agentic
     Combinators
     Examples
-    LLM
+    LLM.OpenAI.Client
     Progress
     Prompts
     PureMockup

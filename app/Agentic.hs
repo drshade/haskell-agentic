@@ -12,7 +12,7 @@ import           Data.Text               hiding (show)
 import           Dhall                   (FromDhall, ToDhall)
 import qualified Dhall
 import qualified Dhall.Core
-import qualified LLM                     (chat)
+import qualified LLM.OpenAI.Client       (chat)
 import qualified Prompts
 import           UnliftIO                (MonadUnliftIO (withRunInIO),
                                           atomically, modifyTVar, newTVarIO,
@@ -35,7 +35,7 @@ orFail = arr $ either (error . unpack) id
 
 runLLM :: Agentic m Prompt Text
 runLLM = Kleisli $ \prompt'@(Prompt system user) -> do
-    reply <- liftIO $ LLM.chat system user
+    reply <- liftIO $ LLM.OpenAI.Client.chat system user
     tell [(prompt', reply)]
     pure reply
 
@@ -92,8 +92,9 @@ runIO k input = do
     (a, _finalState, logs) <- runRWST (runKleisli k input) environment state
 
     mapM_   (\(Prompt system user, _llmOutput) -> do
-                putStrLn $ "LLM Input:\n[" <> unpack user <> "]"
-                putStrLn $ "LLM Output:\n[" <> unpack _llmOutput <> "]"
+                -- putStrLn $ "LLM System: \n[" <> unpack system <> "]"
+                -- putStrLn $ "LLM Input:\n[" <> unpack user <> "]"
+                -- putStrLn $ "LLM Output:\n[" <> unpack _llmOutput <> "]"
                 pure ()
             ) logs
 
