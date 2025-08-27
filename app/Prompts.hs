@@ -43,7 +43,7 @@ languageReference1 :: Text
 languageReference1 =
    pack
       """
-      You reply to all responses in Dhall format only.
+      You reply to all responses in Dhall format only, do not include any markdown or any other lead-in syntax. Just output pure Dhall as a bare string.
 
       --------
       Dhall language reference

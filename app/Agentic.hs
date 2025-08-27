@@ -12,7 +12,8 @@ import           Data.Text               hiding (show)
 import           Dhall                   (FromDhall, ToDhall)
 import qualified Dhall
 import qualified Dhall.Core
-import qualified LLM.OpenAI.Client       (chat)
+-- import qualified LLM.OpenAI.Client       (chat)
+import qualified LLM.Client
 import qualified Prompts
 import           UnliftIO                (MonadUnliftIO (withRunInIO),
                                           atomically, modifyTVar, newTVarIO,
@@ -35,7 +36,7 @@ orFail = arr $ either (error . unpack) id
 
 runLLM :: Agentic m Prompt Text
 runLLM = Kleisli $ \prompt'@(Prompt system user) -> do
-    reply <- liftIO $ LLM.OpenAI.Client.chat system user
+    reply <- liftIO $ LLM.Client.chat system user
     tell [(prompt', reply)]
     pure reply
 
