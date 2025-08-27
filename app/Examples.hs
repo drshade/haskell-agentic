@@ -2,9 +2,8 @@
 module Examples where
 
 
-import           Agentic                (Agentic, AgenticRWS, extract,
-                                         extractWithRetry, inject,
-                                         pattern Agentic, prompt, run, runIO)
+import           Agentic                (Agentic, AgenticRWS, extract, inject,
+                                         pattern Agentic, prompt, run)
 import           Combinators            ((<<.>>))
 import           Control.Arrow          ((>>>))
 import           Control.Monad.IO.Class (liftIO)
@@ -20,9 +19,6 @@ data Joke = Joke
     , setup     :: Text
     , punchline :: Text
     }
-    deriving (Generic, Show, FromDhall, ToDhall)
-
-newtype Dog = Dog { name :: String }
     deriving (Generic, Show, FromDhall, ToDhall)
 
 data BetterJoke
@@ -92,23 +88,23 @@ data Goal = Goal { goal  :: Text
     deriving (Generic, Show, FromDhall, ToDhall)
 
 withTasks :: AgenticRWS m => Int -> Agentic m Text Text
-withTasks max = Agentic $ \goal -> do
+withTasks max' = Agentic $ \goal -> do
     let instruction = "Goal: \n" <> goal
             <> "\n\n" <> "Come up with a list of tasks to achieve the goal, set all tasks to Todo to start"
-            <> "\n\n" <> "Do not use more than " <> show max <> " tasks, but you are welcome to return less"
+            <> "\n\n" <> "Do not use more than " <> show max' <> " tasks, but you are welcome to return less"
 
     tasks <- run (prompt >>> extract @[Task]) instruction
 
-    let printGoal (Goal goal tasks) = do
-                                putStrLn $ "Goal: " <> unpack goal
-                                mapM_ (\task -> putStrLn $ "  " <> unpack task.title <> " " <> unpack (show task.status)) tasks
+    let printGoal (Goal goal' tasks') = do
+                                putStrLn $ "Goal: " <> unpack goal'
+                                mapM_ (\task -> putStrLn $ "  " <> unpack task.title <> " " <> unpack (show task.status)) tasks'
 
     completed :: Goal <- iterateUntilM
         (\(Goal _ tasks') -> Prelude.all
                                     (\task -> case task.status of
-                                        Completed { result } -> True
-                                        Failed { reason }    -> True
-                                        _                    -> False
+                                        Completed { result = _ } -> True
+                                        Failed { reason = _ }    -> True
+                                        _                        -> False
                                     ) tasks'
         )
         (\goal' -> do
