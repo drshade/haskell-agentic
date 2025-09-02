@@ -107,6 +107,7 @@ languageReference1 =
    <__.'_'''_'
             ''
             } : Schema
+      (Notice the triple single quote above, which escapes the double single quote to avoid breaking the multiline string)
 
       Example schema: { name : Text, description : Text }
       Valid response:
@@ -127,10 +128,11 @@ languageReference1 =
       When asked to perform calculations - always attempt to write a function to compute the answer
       When asked to return logical responses - always attempt to write a function to compute the answer
 
+      --- BEGIN WORK IN PROGRESS ---
       Available datatypes and functions:
       Bool
          - keyword: if True then 3 else 5
-         - operators: ||, &&, ==, !=
+         - operators: ||, &&, ==, != (these only work on Bool, no other type, do not attempt to use them with other types)
       Natural
          - operators: +, *
          - functions: Natural/even, Natural/odd, Natural/isZero, Natural/subtract, Natural/fold, Natural/build, Natural/show, Natural/toInteger
@@ -161,25 +163,36 @@ languageReference1 =
          let add = https://prelude.dhall-lang.org/Integer/add
           in add +1 +4
 
-      other helpful imports in https://prelude.dhall-lang.org/Integer:
-         abs: Integer → Natural
-         add: Integer → Integer → Integer
-         clamp: Integer → Natural
-         equal: Integer → Integer → Bool
-         greaterThan: Integer → Integer → Bool
-         greaterThanEqual: Integer → Integer → Bool
-         lessThan: Integer → Integer → Bool
-         lessThanEqual: Integer → Integer → Bool
-         multiply: Integer → Integer → Integer
-         negate: Integer → Integer
-         negative: Integer → Bool
-         nonNegative: Integer → Bool
-         nonPositive: Integer → Bool
-         positive: Integer → Bool
-         show: Integer → Text
-         subtract: Integer → Integer → Integer
-         toDouble: Integer → Double
-         toNatural: Integer → Optional Natural
+      List/fold example:
+      List/fold Bool [True, False, True] Bool (\\(x : Bool) -> λ(y : Bool) -> x && y) True
+
+      You cannot compare Text using operator (==).
+
+      If you use any of the functions related to prelude, then you must include:
+      let Prelude = https://prelude.dhall-lang.org/package.dhall
+
+      And then you can use these additional functions such as:
+      Integer.abs: Integer → Natural
+      Integer.add: Integer → Integer → Integer
+      Integer.clamp: Integer → Natural
+      Integer.equal: Integer → Integer → Bool
+      Integer.greaterThan: Integer → Integer → Bool
+      Integer.greaterThanEqual: Integer → Integer → Bool
+      Integer.lessThan: Integer → Integer → Bool
+      Integer.lessThanEqual: Integer → Integer → Bool
+      Integer.multiply: Integer → Integer → Integer
+      Integer.negate: Integer → Integer
+      Integer.negative: Integer → Bool
+      Integer.nonNegative: Integer → Bool
+      Integer.nonPositive: Integer → Bool
+      Integer.positive: Integer → Bool
+      Integer.show: Integer → Text
+      Integer.subtract: Integer → Integer → Integer
+      Integer.toDouble: Integer → Double
+      Integer.toNatural: Integer → Optional Natural
+      Text.concatSep: ∀(separator : Text) → ∀(elements : List Text) → Text
+
+      --- END WORK IN PROGRESS ---
 
       Additionally - try to be as uncreative as possible when abiding by the schema.
       e.g. if there is only field and the prompt has asked for many, don't try to
@@ -190,6 +203,10 @@ languageReference1 =
       dealing with repeated values and/or to save space.
       If asked to do repetitive work, generally you should introduce a function to
       construct the output.
+
+      When asked to invoke tools, or when responding to queries where tool output is provided
+      do not forget to respond using the Dhall schema provided. This is a non-negotiable condition
+      to all responses. This is the only protocol you can respond using.
       """
 
 languageReference2 :: Text

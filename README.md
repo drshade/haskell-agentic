@@ -224,27 +224,38 @@ data DinoPic = DinoPic
     }
     deriving (Generic, Show, FromDhall, ToDhall)
 
+data DinoTrumpCard = DinoTrumpCard
+    { size         :: Int
+    , ferocity     :: Int
+    , speed        :: Int
+    , intelligence :: Int
+    , armor        :: Int
+    }
+    deriving (Generic, Show, FromDhall, ToDhall)
+
 dinoProject :: forall a m. (AgenticRWS m, MonadUnliftIO m) => Agentic m a Text
 dinoProject =
     let suggestDinos :: Agentic m a [Text]
-        suggestDinos = Agentic $ const $ run (prompt >>> extract @[Text]) 
+        suggestDinos = Agentic $ const $ run (prompt >>> extract @[Text])
                         "Suggest 3 dinosaur names for my grade 5 project"
 
         researchDino :: Agentic m Text Dino
-        researchDino = Agentic $ \name -> run (prompt >>> inject name >>> extract @Dino) 
+        researchDino = Agentic $ \name -> run (prompt >>> inject name >>> extract @Dino)
                         "Research this dinosaur"
 
-        drawPic :: Agentic m Dino (Dino, DinoPic)
-        drawPic = Agentic $ \dino -> do
-            pic <- run (prompt >>> inject dino.name >>> extract @DinoPic) 
-                    "Draw an ascii picture of this dinosaur, 10 lines high"
-            pure (dino, pic)
+        drawPic :: Agentic m Text DinoPic
+        drawPic = Agentic $ \name -> run (prompt >>> inject name >>> extract @DinoPic)
+                        "Draw an ascii picture of this dinosaur, 10 lines high"
 
-        buildPoster :: Agentic m [(Dino, DinoPic)] Text
-        buildPoster = Agentic $ \dinos -> run (prompt >>> inject dinos >>> extract @Text) 
+        buildTrumpCard :: Agentic m Text DinoTrumpCard
+        buildTrumpCard = Agentic $ \name -> run (prompt >>> inject name >>> extract @DinoTrumpCard)
+                        "Output a trump card for this dinosaur"
+
+        buildPoster :: Agentic m [(Dino, (DinoPic, DinoTrumpCard))] Text
+        buildPoster = Agentic $ \dinos -> run (prompt >>> inject dinos >>> extract @Text)
                         "Create the poster"
 
-    in (suggestDinos <<.>> (researchDino >>> drawPic)) >>> buildPoster
+    in (suggestDinos <<.>> (researchDino &&& drawPic &&& buildTrumpCard)) >>> buildPoster
 ```
 
 Diagrammatically this looks like:
@@ -259,18 +270,18 @@ suggestDinos --> Triceratops
 
 state Brontosaurus {
     [*] --> research_a
-    research_a --> drawPic_a
-    drawPic_a --> [*]
+    [*] --> drawPic_a
+    [*] --> buildTrumpCard_a
 }
 state Stegosaurus {
     [*] --> research_b
-    research_b --> drawPic_b
-    drawPic_b --> [*]
+    [*] --> drawPic_b
+    [*] --> buildTrumpCard_b
 }
 state Triceratops {
     [*] --> research_c
-    research_c --> drawPic_c
-    drawPic_c --> [*]
+    [*] --> drawPic_c
+    [*] --> buildTrumpCard_c
 }
 
 Brontosaurus --> buildPoster
@@ -285,6 +296,9 @@ research_c: researchDino
 drawPic_a: drawPic
 drawPic_b: drawPic
 drawPic_c: drawPic
+buildTrumpCard_a: buildTrumpCard
+buildTrumpCard_b: buildTrumpCard
+buildTrumpCard_c: buildTrumpCard
 ```
 
 So lets do it!
