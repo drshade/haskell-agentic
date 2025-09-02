@@ -8,12 +8,13 @@ import           Control.Monad.IO.Class  (MonadIO, liftIO)
 import           Control.Monad.RWS       (RWST (RWST), ask, get, runRWST, tell)
 import           Control.Monad.RWS.Class (MonadRWS)
 import           Data.Either.Validation  (Validation (Failure, Success))
-import           Data.Text               hiding (show)
+import           Data.Text               (Text, pack, unpack)
 import           Dhall                   (FromDhall, ToDhall)
 import qualified Dhall
 import qualified Dhall.Core
--- import qualified LLM.OpenAI.Client       (chat)
 import qualified LLM.Client
+import qualified LLM.OpenAI.Client       (chat)
+import           Prelude
 import qualified Prompts
 import           UnliftIO                (MonadUnliftIO (withRunInIO),
                                           atomically, modifyTVar, newTVarIO,
@@ -36,7 +37,9 @@ orFail = arr $ either (error . unpack) id
 
 runLLM :: Agentic m Prompt Text
 runLLM = Kleisli $ \prompt'@(Prompt system user) -> do
+    -- liftIO $ putStrLn $ "Calling LLM... [" <> take 20 (unpack user) <> "]"
     reply <- liftIO $ LLM.Client.chat system user
+    -- liftIO $ putStrLn "Calling LLM done!"
     tell [(prompt', reply)]
     pure reply
 
@@ -94,8 +97,8 @@ runIO k input = do
 
     mapM_   (\(Prompt _system _user, _llmOutput) -> do
                 -- putStrLn $ "LLM System: \n[" <> unpack _system <> "]"
-                -- putStrLn $ "LLM Input:\n[" <> unpack _user <> "]"
-                -- putStrLn $ "LLM Output:\n[" <> unpack _llmOutput <> "]"
+                putStrLn $ "LLM Input:\n[" <> unpack _user <> "]"
+                putStrLn $ "LLM Output:\n[" <> unpack _llmOutput <> "]"
                 pure ()
             ) logs
 

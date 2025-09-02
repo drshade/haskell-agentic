@@ -2,10 +2,11 @@
 module Examples where
 
 
-import           Agentic                (Agentic, AgenticRWS, extract, inject,
+import           Agentic                (Agentic, AgenticRWS, extract,
+                                         extractWithRetry, inject, orFail,
                                          pattern Agentic, prompt, run)
 import           Combinators            ((<<.>>))
-import           Control.Arrow          ((>>>))
+import           Control.Arrow          ((&&&), (>>>))
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Loops    (iterateUntilM)
 import           Data.Text
@@ -45,8 +46,16 @@ data Dino = Dino
     deriving (Generic, Show, FromDhall, ToDhall)
 
 data DinoPic = DinoPic
-    { name     :: Text
-    , asciiPic :: Text
+    { asciiPic :: Text
+    }
+    deriving (Generic, Show, FromDhall, ToDhall)
+
+data DinoTrumpCard = DinoTrumpCard
+    { size         :: Int
+    , ferocity     :: Int
+    , speed        :: Int
+    , intelligence :: Int
+    , armor        :: Int
     }
     deriving (Generic, Show, FromDhall, ToDhall)
 
@@ -60,17 +69,19 @@ dinoProject =
         researchDino = Agentic $ \name -> run (prompt >>> inject name >>> extract @Dino)
                         "Research this dinosaur"
 
-        drawPic :: Agentic m Dino (Dino, DinoPic)
-        drawPic = Agentic $ \dino -> do
-            pic <- run (prompt >>> inject dino.name >>> extract @DinoPic)
+        drawPic :: Agentic m Text DinoPic
+        drawPic = Agentic $ \name -> run (prompt >>> inject name >>> extract @DinoPic)
                         "Draw an ascii picture of this dinosaur, 10 lines high"
-            pure (dino, pic)
 
-        buildPoster :: Agentic m [(Dino, DinoPic)] Text
+        buildTrumpCard :: Agentic m Text DinoTrumpCard
+        buildTrumpCard = Agentic $ \name -> run (prompt >>> inject name >>> extract @DinoTrumpCard)
+                        "Output a trump card for this dinosaur"
+
+        buildPoster :: Agentic m [(Dino, (DinoPic, DinoTrumpCard))] Text
         buildPoster = Agentic $ \dinos -> run (prompt >>> inject dinos >>> extract @Text)
                         "Create the poster"
 
-    in (suggestDinos <<.>> (researchDino >>> drawPic)) >>> buildPoster
+    in (suggestDinos <<.>> (researchDino &&& drawPic &&& buildTrumpCard)) >>> buildPoster
 
 data TaskStatus = Todo | Failed { reason :: Text } | Completed { result :: Text }
     deriving (Generic, Show, FromDhall, ToDhall, Eq)
@@ -121,22 +132,6 @@ withTasks max' = Agentic $ \goal -> do
 
     pure final
 
-    -- completedTasks <-
-    --     mapM (\task -> do
-    --             liftIO $ putStrLn $ "  Working on " <> unpack task.title <> "..."
-    --             updatedTask <- run (prompt >>> inject task >>> extract @(Task, String)) "Work on this task, returning the result"
-    --             liftIO $ putStrLn $ unpack $ show updatedTask
-    --             pure updatedTask
-    --           ) tasks
-
-    -- reduced <- run (prompt >>> inject (goal, completedTasks) >>> extract @Text) "Complete the goal based on these completed tasks"
-
-    -- liftIO $ do
-    --     putStrLn $ "Reduced:"
-    --     putStrLn $ unpack reduced
-
-    -- pure reduced
-
 data Space = Blank | X | O
     deriving (Generic, Show, FromDhall, ToDhall)
 
@@ -170,20 +165,36 @@ increment :: AgenticRWS m => Agentic m Text Int
 increment = Agentic $ \input -> do
     run (prompt >>> inject input >>> extract @Int) "increment this"
 
--- extract :: forall s m. (FromDhall s, ToDhall s) => Agentic m Prompt s
--- extract = injectSchema @s >>> runLLM >>> parse @s >>> orFail
+data Tool
+    = ListFiles
+    | SearchWeb { q :: Text }
+    deriving (Generic, Show, FromDhall, ToDhall)
 
--- data Job s = Job
---     { instruction :: Text
---     , result      :: s
---     }
---     deriving (Generic, Show, FromDhall, ToDhall)
+data ToolUse s
+    = NoTool s
+    | UseTool Tool
+    deriving (Generic, Show, FromDhall, ToDhall)
 
--- synthesize :: forall i m. (FromDhall i, ToDhall i) => Agentic m Text Text
--- synthesize = Agentic $ \input -> do
---     job <- run (prompt >>> extract @(Job i)) $ "Complete the goal using whatever schema you like for field `result`: " <> input
---     complete <- run (prompt >>> inject job >>> extract @Text) "Using the input, convert the output to text"
---     pure complete
+data AfterToolCall s
+    = AfterToolCall { original :: s, toolResult :: ToolResult }
+    deriving (Generic, Show, FromDhall, ToDhall)
 
--- test :: IO Text
--- test = runIO synthesize "what is the date"
+data ToolResult
+    = Files { results :: [Text] }
+    | SearchResults { q :: Text, results :: [Text] }
+    deriving (Generic, Show, FromDhall, ToDhall)
+
+toolExample :: AgenticRWS m => Agentic m Text Text
+toolExample = Agentic $ \input -> do
+    response <- run (prompt >>> inject input >>> extractWithRetry @(ToolUse Text) >>> orFail) "Execute the query, but also consider the available tools available in the schema. If you respond with these, I will execute the tool for you and inject the results into the subsequent request."
+    case response of
+        NoTool s -> pure s
+        UseTool tool -> do
+            liftIO $ putStrLn $ "LLM requests to call tool => [" <> unpack (show tool) <> "]"
+
+            let result = case tool of
+                    ListFiles   -> Files { results = ["app", "CHANGELOG.md", "haskell-agentic.cabal", "README.md", "cabal.project", "dist-newstyle", "LICENSE"] }
+                    SearchWeb q -> SearchResults { q, results = [""] }
+
+            run (prompt >>> inject (AfterToolCall { original = input, toolResult = result }) >>> extract @Text)
+                "Results of your tool call are provided, now continue with the original query"
