@@ -17,6 +17,9 @@ WARNING: in progress ;)
 Marais ideas
 - [ ] Add static bits to System prompt part of LLM call (to allow caching from call to the next)
 
+Major pivots
+- [ ] Experiment with JSON Schema - maybe better internal LLM support!
+
 
 ## Strictly Typed LLM Inputs & Outputs
 
