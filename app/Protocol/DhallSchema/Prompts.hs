@@ -1,4 +1,4 @@
-module Prompts where
+module Protocol.DhallSchema.Prompts where
 
 import Data.Text
 import Text.Printf (printf)

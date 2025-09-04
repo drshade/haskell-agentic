@@ -57,7 +57,11 @@ executable haskell-agentic
     LLM.Client
     LLM.OpenAI.Client
     Progress
-    Prompts
+    Protocol.Class
+    Protocol.DhallSchema.Marshal
+    Protocol.DhallSchema.Prompts
+    Protocol.JSONSchema.Marshal
+    Protocol.JSONSchema.Prompts
     PureMockup
 
   -- LANGUAGE extensions used by modules in this package.
@@ -77,10 +81,12 @@ executable haskell-agentic
     PatternSynonyms
     TemplateHaskell
     TypeApplications
+    TypeFamilies
 
   -- Other library packages from which modules are imported.
   build-depends:
     aeson,
+    aeson-pretty,
     ansi-terminal,
     async,
     autodocodec,

@@ -5,6 +5,7 @@ module Examples where
 import           Agentic                (Agentic, AgenticRWS, extract,
                                          extractWithRetry, inject, orFail,
                                          pattern Agentic, prompt, run)
+import           Autodocodec
 import           Combinators            ((<<.>>))
 import           Control.Arrow          ((&&&), (>>>))
 import           Control.Monad.IO.Class (liftIO)
@@ -126,7 +127,8 @@ withTasks max' = Agentic $ \goal -> do
     liftIO $ putStrLn "Final goal:"
     liftIO $ printGoal completed
 
-    final <- run (prompt >>> inject completed >>> extract @Text) "Using all these tasks, complete the goal as described - i.e. produce the final result. Do not include any status or progress report, simply output what is required by the goal stated"
+    final <- run (prompt >>> inject completed >>> extract @Text)
+                "Using all these tasks, complete the goal as described - i.e. produce the final result. Do not include any status or progress report, simply output what is required by the goal stated"
 
     liftIO $ putStrLn $ unpack $ show final
 
@@ -168,6 +170,7 @@ increment = Agentic $ \input -> do
 data Tool
     = ListFiles
     | SearchWeb { q :: Text }
+    | SetVolume { vol :: Int }
     deriving (Generic, Show, FromDhall, ToDhall)
 
 data ToolUse s
@@ -182,11 +185,14 @@ data AfterToolCall s
 data ToolResult
     = Files { results :: [Text] }
     | SearchResults { q :: Text, results :: [Text] }
+    | Audio { vol :: Int }
     deriving (Generic, Show, FromDhall, ToDhall)
 
 toolExample :: AgenticRWS m => Agentic m Text Text
 toolExample = Agentic $ \input -> do
-    response <- run (prompt >>> inject input >>> extractWithRetry @(ToolUse Text) >>> orFail) "Execute the query, but also consider the available tools available in the schema. If you respond with these, I will execute the tool for you and inject the results into the subsequent request."
+    response <- run (prompt >>> inject input >>> extractWithRetry @(ToolUse Text) >>> orFail)
+                    "Execute the query, but also consider the available tools available in the schema. If you respond with these, I will execute the tool for you and inject the results into the subsequent request."
+
     case response of
         NoTool s -> pure s
         UseTool tool -> do
@@ -195,6 +201,24 @@ toolExample = Agentic $ \input -> do
             let result = case tool of
                     ListFiles   -> Files { results = ["app", "CHANGELOG.md", "haskell-agentic.cabal", "README.md", "cabal.project", "dist-newstyle", "LICENSE"] }
                     SearchWeb q -> SearchResults { q, results = [""] }
+                    SetVolume vol -> Audio vol
 
             run (prompt >>> inject (AfterToolCall { original = input, toolResult = result }) >>> extract @Text)
                 "Results of your tool call are provided, now continue with the original query"
+
+-----------------------
+-- JSON Schema examples...
+-----------------------
+
+instance HasCodec Joke where
+    codec :: JSONCodec Joke
+    codec = object "A simple joke structure"
+          $ Joke
+            <$> requiredFieldWith' "genre" validGenre .= (.genre)
+            <*> requiredField "setup" "The setup of the joke" .= (.setup)
+            <*> requiredField' "punchline" .= (.punchline)
+        where validGenre = stringConstCodec [ ("dad", "dad")
+                                            , ("pun", "pun")
+                                            , ("oneliner", "oneliner")
+                                            , ("knock-knock", "knock-knock")
+                                            ]

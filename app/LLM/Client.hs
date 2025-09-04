@@ -40,7 +40,7 @@ chat systemPrompt userPrompt = liftIO $ do
 
   response <- Anthropic.messages request
 
-  liftIO $ putStrLn $ "Got back " <> (show $ length response.content) <> " blocks!"
+  -- liftIO $ putStrLn $ "Got back " <> (show $ length response.content) <> " blocks!"
 
   -- Extract text from the first text content block
   case response.content of
