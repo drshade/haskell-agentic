@@ -8,6 +8,7 @@ import           Agentic                (Agentic, AgenticRWS, extract,
 import           Autodocodec
 import           Combinators            ((<<.>>))
 import           Control.Arrow          ((&&&), (>>>))
+import           Control.Monad          ((>=>))
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Loops    (iterateUntilM)
 import           Data.Text
@@ -205,6 +206,17 @@ toolExample = Agentic $ \input -> do
 
             run (prompt >>> inject (AfterToolCall { original = input, toolResult = result }) >>> extract @Text)
                 "Results of your tool call are provided, now continue with the original query"
+
+shoutingAgent :: Agentic m Text Text
+shoutingAgent = Agentic $ \input ->
+    run (prompt >>> inject input >>> extract @Text) "please uppercase this"
+
+jokeTellingAgent :: Agentic m a Text
+jokeTellingAgent = Agentic $ \_ ->
+    run (prompt >>> extract @Text) "Tell a short joke"
+
+loudJoker :: Agentic m a Text
+loudJoker = jokeTellingAgent >>> shoutingAgent
 
 -----------------------
 -- JSON Schema examples...

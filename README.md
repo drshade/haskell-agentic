@@ -17,6 +17,36 @@ The RWS structure allows for Agents to receive Environmental info (API keys, con
 type AgenticRWS m = (MonadIO m, MonadRWS Environment Events State m)
 ```
 
+So an Agent is as simple as:
+
+```haskell
+shoutingAgent :: Agentic m Text Text
+shoutingAgent = Agentic $ \input ->
+    run (prompt >>> inject input >>> extract @Text) "please uppercase this"
+```
+
+And because each Agent is a composable block you can click them together using any Arrow or Kleisli combinator:
+
+```haskell
+jokeTellingAgent :: Agentic m a Text
+jokeTellingAgent = Agentic $ \_ ->
+    run (prompt >>> extract @Text) "Tell a short joke"
+
+loudJoker :: Agentic m a Text
+loudJoker = jokeTellingAgent >>> shoutingAgent
+```
+
+And then run these agents in IO:
+
+```haskell
+runIO (uppercasingAgent) "hi"
+"HI"
+ghci> runIO jokeTellingAgent "hi!"
+"Why don't scientists trust atoms? Because they make up everything!"
+ghci> runIO loudJoker "hi!"
+"WHY DON'T SCIENTISTS TRUST ATOMS? BECAUSE THEY MAKE UP EVERYTHING!"
+```
+
 ## Roadmap
 
 - [x] Schema extract and parse
