@@ -39,7 +39,7 @@ loudJoker = jokeTellingAgent >>> shoutingAgent
 And then run these agents in IO:
 
 ```haskell
-runIO (uppercasingAgent) "hi"
+ghci> runIO uppercasingAgent "hi"
 "HI"
 ghci> runIO jokeTellingAgent "hi!"
 "Why don't scientists trust atoms? Because they make up everything!"
