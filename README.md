@@ -1,5 +1,7 @@
 # Agentic Haskell
 
+## Building type-safe and composable agents in haskell
+
 WARNING: in progress ;)
 
 ## Roadmap
@@ -7,19 +9,14 @@ WARNING: in progress ;)
 - [x] Schema extract and parse
 - [x] Type-safe prompting (`inject` & `extract`)
 - [x] Fanout combinator and example (`<<.>>`)
-- [x] Support for datetime (just works - `UTCTime`)
+- [x] Supporting JSON-Schema and Dhall Schema (and mix-able in a single agent composition)
 - [ ] Retry mechanism (when LLM fails to produce compliant schema - give her another chance)
 - [ ] Session management (something like `>>> withSession @...` ?) 
 - [ ] Re-think RWS (as State is inherently non-concurrent... do we even want it?)
 - [ ] Proper task based example
-- [ ] Tool use (something like `>>> injectTools [...]` and `>>> usedTool`)
-
-Marais ideas
-- [ ] Add static bits to System prompt part of LLM call (to allow caching from call to the next)
-
-Major pivots
-- [ ] Experiment with JSON Schema - maybe better internal LLM support!
-
+- [x] Tool use (something like `>>> injectTools [...]` and `>>> usedTool`)
+- [x] Add static bits to System prompt part of LLM call (to allow caching from call to the next)
+- [x] Experiment with JSON Schema - maybe better internal LLM support!
 
 ## Strictly Typed LLM Inputs & Outputs
 
@@ -396,7 +393,6 @@ Credits:
 Enjoy your mini Cretaceous poster!
 ```
 
-
 Typesafe prompt responses FTW!
 
 The system teaches the LLM Dhall syntax through examples and constrains outputs to match the expected schema, eliminating fragile string parsing and runtime type errors common in JSON-based approaches.
@@ -431,5 +427,4 @@ ghci> runIO (prompt >>> extract @Bool) "if its raining outside then we don't go 
 ghci> runIO (prompt >>> extract @Bool) "If it's busy, we need a reservation. If there's a rugby game tonight, the restaurant will be busy. The restaurant is always busy on the Friday & Saturday. The Springboks are playing tonight. Today is Wednesday. Do we need to book?"
 
 ghci> runIO (prompt >>> extract @(Maybe Bool)) "The barber is the 'one who shaves all those, and those only, who do not shave themselves'. The question is, does the barber shave himself?"
-
 ```
