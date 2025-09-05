@@ -98,8 +98,8 @@ runIO k input = do
 
     mapM_   (\(Prompt _system _user, _llmOutput) -> do
                 -- putStrLn $ "LLM System: \n[" <> unpack _system <> "]"
-                putStrLn $ "LLM Input:\n[" <> unpack _user <> "]"
-                putStrLn $ "LLM Output:\n[" <> unpack _llmOutput <> "]"
+                -- putStrLn $ "LLM Input:\n[" <> unpack _user <> "]"
+                -- putStrLn $ "LLM Output:\n[" <> unpack _llmOutput <> "]"
                 pure ()
             ) logs
 

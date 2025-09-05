@@ -37,30 +37,30 @@ class SchemaFormat fmt where
 
     injectObject :: SchemaConstraint fmt a => a -> Text -> Text
 
-data DhallSchema
-data JsonSchema
+data Dhall
+data Json
 
-instance SchemaFormat DhallSchema where
-  type SchemaConstraint DhallSchema a = (ToDhall a, FromDhall a)
+instance SchemaFormat Dhall where
+  type SchemaConstraint Dhall a = (ToDhall a, FromDhall a)
 
-  schemaOf :: forall a. SchemaConstraint DhallSchema a => Proxy a -> Text
+  schemaOf :: forall a. SchemaConstraint Dhall a => Proxy a -> Text
   schemaOf = dhallSchemaOf
 
-  parseWithSchema :: forall a m. MonadIO m => SchemaConstraint DhallSchema a => Proxy a -> Text -> m (Either Text a)
+  parseWithSchema :: forall a m. MonadIO m => SchemaConstraint Dhall a => Proxy a -> Text -> m (Either Text a)
   parseWithSchema _ input = do
     result <- liftIO $ try $ Dhall.input Dhall.auto input
     case result of
         Right value -> pure $ Right value
         Left (err :: SomeException) -> pure $ Left $ "Dhall parse error: " <> pack (show err) <> "\nInput was: " <> input
 
-  injectSchema :: forall a. SchemaConstraint DhallSchema a => Proxy a -> Text -> Text
+  injectSchema :: forall a. SchemaConstraint Dhall a => Proxy a -> Text -> Text
   injectSchema proxy prompt =
     prompt <> "\n\nPlease respond using this Dhall schema:\n" <> dhallSchemaOf proxy
 
-  systemPrompt :: forall a. SchemaConstraint DhallSchema a => Proxy a -> Text
+  systemPrompt :: forall a. SchemaConstraint Dhall a => Proxy a -> Text
   systemPrompt _ = Protocol.DhallSchema.Prompts.languageReference1
 
-  injectObject :: SchemaConstraint DhallSchema a => a -> Text -> Text
+  injectObject :: SchemaConstraint Dhall a => a -> Text -> Text
   injectObject obj prompt =
     let dhallValue = Dhall.Core.pretty $ Dhall.embed Dhall.inject obj
     in prompt <> "\n\nHere's the object:\n" <> dhallValue
@@ -70,24 +70,24 @@ dhallSchemaOf _ = case Dhall.expected (Dhall.auto @a) of
     Success result -> Dhall.Core.pretty result
     Failure err    -> error $ show err
 
-instance SchemaFormat JsonSchema where
-  type SchemaConstraint JsonSchema a = HasCodec a
+instance SchemaFormat Json where
+  type SchemaConstraint Json a = HasCodec a
 
-  schemaOf :: forall a. SchemaConstraint JsonSchema a => Proxy a -> Text
+  schemaOf :: forall a. SchemaConstraint Json a => Proxy a -> Text
   schemaOf = jsonSchemaOf
 
-  parseWithSchema :: forall a m. MonadIO m => SchemaConstraint JsonSchema a => Proxy a -> Text -> m (Either Text a)
+  parseWithSchema :: forall a m. MonadIO m => SchemaConstraint Json a => Proxy a -> Text -> m (Either Text a)
   parseWithSchema _ input =
     pure $ mapLeft pack $ eitherDecodeJSONViaCodec (LB.fromStrict $ encodeUtf8 input)
 
-  injectSchema :: forall a. SchemaConstraint JsonSchema a => Proxy a -> Text -> Text
+  injectSchema :: forall a. SchemaConstraint Json a => Proxy a -> Text -> Text
   injectSchema proxy prompt =
     prompt <> "\n\nPlease respond using this JSON schema:\n" <> jsonSchemaOf proxy
 
-  systemPrompt :: forall a. SchemaConstraint JsonSchema a => Proxy a -> Text
+  systemPrompt :: forall a. SchemaConstraint Json a => Proxy a -> Text
   systemPrompt _ = "You reply to all responses in JSON format only, do not include any markdown or any other lead-in syntax. Just output pure JSON as a bare string."
 
-  injectObject :: SchemaConstraint JsonSchema a => a -> Text -> Text
+  injectObject :: SchemaConstraint Json a => a -> Text -> Text
   injectObject obj prompt =
     let jsonValue = TL.toStrict $ TLE.decodeUtf8 $ encodeJSONViaCodec obj
     in prompt <> "\n\nHere's the object:\n" <> jsonValue
