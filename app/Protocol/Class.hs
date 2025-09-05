@@ -30,14 +30,11 @@ class SchemaFormat fmt where
 
     schemaOf :: forall a. SchemaConstraint fmt a => Proxy a -> Text
 
-    -- Parse text using schema
     parseWithSchema :: forall a m. MonadIO m => SchemaConstraint fmt a => Proxy a -> Text -> m (Either Text a)
 
-    -- Inject schema into prompt
     injectSchema :: forall a. SchemaConstraint fmt a => Proxy a -> Text -> Text
-    schemaSystemPrompt :: forall a. SchemaConstraint fmt a => Proxy a -> Text
+    systemPrompt :: forall a. SchemaConstraint fmt a => Proxy a -> Text
 
-    -- Inject object into prompt
     injectObject :: SchemaConstraint fmt a => a -> Text -> Text
 
 data DhallSchema
@@ -60,8 +57,8 @@ instance SchemaFormat DhallSchema where
   injectSchema proxy prompt =
     prompt <> "\n\nPlease respond using this Dhall schema:\n" <> dhallSchemaOf proxy
 
-  schemaSystemPrompt :: forall a. SchemaConstraint DhallSchema a => Proxy a -> Text
-  schemaSystemPrompt _ = Protocol.DhallSchema.Prompts.languageReference1
+  systemPrompt :: forall a. SchemaConstraint DhallSchema a => Proxy a -> Text
+  systemPrompt _ = Protocol.DhallSchema.Prompts.languageReference1
 
   injectObject :: SchemaConstraint DhallSchema a => a -> Text -> Text
   injectObject obj prompt =
@@ -87,8 +84,8 @@ instance SchemaFormat JsonSchema where
   injectSchema proxy prompt =
     prompt <> "\n\nPlease respond using this JSON schema:\n" <> jsonSchemaOf proxy
 
-  schemaSystemPrompt :: forall a. SchemaConstraint JsonSchema a => Proxy a -> Text
-  schemaSystemPrompt _ = "You reply to all responses in JSON format only, do not include any markdown or any other lead-in syntax. Just output pure JSON as a bare string."
+  systemPrompt :: forall a. SchemaConstraint JsonSchema a => Proxy a -> Text
+  systemPrompt _ = "You reply to all responses in JSON format only, do not include any markdown or any other lead-in syntax. Just output pure JSON as a bare string."
 
   injectObject :: SchemaConstraint JsonSchema a => a -> Text -> Text
   injectObject obj prompt =
@@ -103,7 +100,7 @@ extractWithProxy _ = injectSchemaStep >>> runLLM >>> parseStep >>> orFail
   where
     injectSchemaStep :: Agentic m Prompt Prompt
     injectSchemaStep = Agentic $ \(Prompt _system user) ->
-      pure $ Prompt (schemaSystemPrompt @fmt (Proxy @s)) $ injectSchema @fmt (Proxy @s) user
+      pure $ Prompt (systemPrompt @fmt (Proxy @s)) $ injectSchema @fmt (Proxy @s) user
 
     parseStep :: Agentic m Text (Either Text s)
     parseStep = Agentic $ \input -> parseWithSchema @fmt (Proxy @s) input
