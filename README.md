@@ -4,6 +4,19 @@
 
 WARNING: in progress ;)
 
+## Design Choices
+
+Using Kleisli Arrows as the fundamental composable unit, with RWS & IO being available to Agents.
+```haskell
+type Agentic m a b = AgenticRWS m => Kleisli m a b
+```
+
+The RWS structure allows for Agents to receive Environmental info (API keys, config, etc) as `Reader`, can write Events (observability) as `Writer` and track updates to an Agent's session through `State`. *This needs improvement*
+
+```haskell
+type AgenticRWS m = (MonadIO m, MonadRWS Environment Events State m)
+```
+
 ## Roadmap
 
 - [x] Schema extract and parse
@@ -22,7 +35,7 @@ WARNING: in progress ;)
 
 Its a real pain-in-the-ass trying to build "agentic" stuff, when the best tool you have is "pls respond in JSON". Its too weak, JSON doesn't support sum types, and nor does it have a standard schema. 
 
-This research explores using an alternative schema language called Dhall for strictly constraining inputs to and outputs from LLMs. By leveraging Dhall's type system and Haskell's type classes, we can get LLMs to generate responses that parse directly into strongly-typed Haskell values too - meaning we can simply compose smaller bits together to form agents.
+This research explores using an alternative schema language called Dhall for strictly constraining inputs to and outputs from LLMs. By leveraging Dhall's type system and Haskell's type classes, we can get LLMs to generate responses that parse directly into strongly-typed Haskell values too - meaning we can simply compose smaller bits together to form agents. JSON-Schema is another viable approach with different pros and cons - which is also supported by the library.
 
 ### Example
 
