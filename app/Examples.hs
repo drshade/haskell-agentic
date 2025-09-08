@@ -2,20 +2,22 @@
 module Examples where
 
 
-import           Agentic                (Agentic, AgenticRWS, extract,
-                                         extractWithRetry, inject, orFail,
-                                         pattern Agentic, prompt, run)
+import           Agentic                      (Agentic, AgenticRWS,
+                                               extractWithRetry, orFail,
+                                               pattern Agentic, prompt, run)
 import           Autodocodec
-import           Combinators            ((<<.>>))
-import           Control.Arrow          ((&&&), (>>>))
-import           Control.Monad          ((>=>))
-import           Control.Monad.IO.Class (liftIO)
-import           Control.Monad.Loops    (iterateUntilM)
+import           Combinators                  ((<<.>>))
+import           Control.Arrow                ((&&&), (>>>))
+import           Control.Monad.IO.Class       (liftIO)
+import           Control.Monad.Loops          (iterateUntilM)
 import           Data.Text
-import           Dhall                  (FromDhall, ToDhall)
-import           GHC.Generics           (Generic)
-import           Prelude                hiding (show)
-import           UnliftIO               (MonadUnliftIO)
+import           Dhall                        (FromDhall, ToDhall)
+import           GHC.Generics                 (Generic)
+import           Prelude                      hiding (show)
+import           Protocol.Class               (extractWith, injectWith)
+import           Protocol.DhallSchema.Marshal (Dhall)
+import           Protocol.JSONSchema.Marshal  (Json)
+import           UnliftIO                     (MonadUnliftIO)
 
 data Joke = Joke
     { genre     :: Text
@@ -64,23 +66,23 @@ data DinoTrumpCard = DinoTrumpCard
 dinoProject :: forall a m. (AgenticRWS m, MonadUnliftIO m) => Agentic m a Text
 dinoProject =
     let suggestDinos :: Agentic m a [Text]
-        suggestDinos = Agentic $ const $ run (prompt >>> extract @[Text])
+        suggestDinos = Agentic $ const $ run (prompt >>> extractWith @Dhall @[Text])
                         "Suggest 3 dinosaur names for my grade 5 project"
 
         researchDino :: Agentic m Text Dino
-        researchDino = Agentic $ \name -> run (prompt >>> inject name >>> extract @Dino)
+        researchDino = Agentic $ \name -> run (prompt >>> injectWith @Dhall name >>> extractWith @Dhall @Dino)
                         "Research this dinosaur"
 
         drawPic :: Agentic m Text DinoPic
-        drawPic = Agentic $ \name -> run (prompt >>> inject name >>> extract @DinoPic)
+        drawPic = Agentic $ \name -> run (prompt >>> injectWith @Dhall name >>> extractWith @Dhall @DinoPic)
                         "Draw an ascii picture of this dinosaur, 10 lines high"
 
         buildTrumpCard :: Agentic m Text DinoTrumpCard
-        buildTrumpCard = Agentic $ \name -> run (prompt >>> inject name >>> extract @DinoTrumpCard)
+        buildTrumpCard = Agentic $ \name -> run (prompt >>> injectWith @Dhall name >>> extractWith @Dhall @DinoTrumpCard)
                         "Output a trump card for this dinosaur"
 
         buildPoster :: Agentic m [(Dino, (DinoPic, DinoTrumpCard))] Text
-        buildPoster = Agentic $ \dinos -> run (prompt >>> inject dinos >>> extract @Text)
+        buildPoster = Agentic $ \dinos -> run (prompt >>> injectWith @Dhall dinos >>> extractWith @Dhall @Text)
                         "Create the poster"
 
     in (suggestDinos <<.>> (researchDino &&& drawPic &&& buildTrumpCard)) >>> buildPoster
@@ -106,7 +108,7 @@ withTasks max' = Agentic $ \goal -> do
             <> "\n\n" <> "Come up with a list of tasks to achieve the goal, set all tasks to Todo to start"
             <> "\n\n" <> "Do not use more than " <> show max' <> " tasks, but you are welcome to return less"
 
-    tasks <- run (prompt >>> extract @[Task]) instruction
+    tasks <- run (prompt >>> extractWith @Dhall @[Task]) instruction
 
     let printGoal (Goal goal' tasks') = do
                                 putStrLn $ "Goal: " <> unpack goal'
@@ -122,13 +124,13 @@ withTasks max' = Agentic $ \goal -> do
         )
         (\goal' -> do
             liftIO $ printGoal goal'
-            run (prompt >>> inject goal' >>> extract @Goal) "Work on the next task in the list, and set to to Completed (including the result in the field itself)")
+            run (prompt >>> injectWith @Dhall goal' >>> extractWith @Dhall @Goal) "Work on the next task in the list, and set to to Completed (including the result in the field itself)")
         (Goal goal tasks)
 
     liftIO $ putStrLn "Final goal:"
     liftIO $ printGoal completed
 
-    final <- run (prompt >>> inject completed >>> extract @Text)
+    final <- run (prompt >>> injectWith @Dhall completed >>> extractWith @Dhall @Text)
                 "Using all these tasks, complete the goal as described - i.e. produce the final result. Do not include any status or progress report, simply output what is required by the goal stated"
 
     liftIO $ putStrLn $ unpack $ show final
@@ -158,7 +160,7 @@ playTicTacToe = Agentic $ \_input -> do
         -- Ask the LLM to play the next move
         (\game -> do
             liftIO $ print game
-            run (prompt >>> inject game >>> extract @Game) "Play the next move!"
+            run (prompt >>> injectWith @Dhall game >>> extractWith @Dhall @Game) "Play the next move!"
         )
         -- The starting game state
         (Game (Board (Row Blank Blank Blank) (Row Blank Blank Blank) (Row Blank Blank Blank)) Playing)
@@ -166,7 +168,7 @@ playTicTacToe = Agentic $ \_input -> do
 
 increment :: AgenticRWS m => Agentic m Text Int
 increment = Agentic $ \input -> do
-    run (prompt >>> inject input >>> extract @Int) "increment this"
+    run (prompt >>> injectWith @Dhall input >>> extractWith @Dhall @Int) "increment this"
 
 data Tool
     = ListFiles
@@ -191,7 +193,7 @@ data ToolResult
 
 toolExample :: AgenticRWS m => Agentic m Text Text
 toolExample = Agentic $ \input -> do
-    response <- run (prompt >>> inject input >>> extractWithRetry @(ToolUse Text) >>> orFail)
+    response <- run (prompt >>> injectWith @Dhall input >>> extractWithRetry @(ToolUse Text) >>> orFail)
                     "Execute the query, but also consider the available tools available in the schema. If you respond with these, I will execute the tool for you and inject the results into the subsequent request."
 
     case response of
@@ -204,23 +206,12 @@ toolExample = Agentic $ \input -> do
                     SearchWeb q -> SearchResults { q, results = [""] }
                     SetVolume vol -> Audio vol
 
-            run (prompt >>> inject (AfterToolCall { original = input, toolResult = result }) >>> extract @Text)
+            run (prompt >>> injectWith @Dhall (AfterToolCall { original = input, toolResult = result }) >>> extractWith @Dhall @Text)
                 "Results of your tool call are provided, now continue with the original query"
 
-shoutingAgent :: Agentic m Text Text
-shoutingAgent = Agentic $ \input ->
-    run (prompt >>> inject input >>> extract @Text) "please uppercase this"
-
-jokeTellingAgent :: Agentic m a Text
-jokeTellingAgent = Agentic $ \_ ->
-    run (prompt >>> extract @Text) "Tell a short joke"
-
-loudJoker :: Agentic m a Text
-loudJoker = jokeTellingAgent >>> shoutingAgent
-
------------------------
--- JSON Schema examples...
------------------------
+--------------------------
+-- JSON Schema examples
+--------------------------
 
 instance HasCodec Joke where
     codec :: JSONCodec Joke
@@ -234,3 +225,19 @@ instance HasCodec Joke where
                                             , ("oneliner", "oneliner")
                                             , ("knock-knock", "knock-knock")
                                             ]
+
+jokeTellingAgent :: Agentic m a Text
+jokeTellingAgent = Agentic $ \_ ->
+    run (prompt >>> extractWith @Json @Text) "Tell a short joke"
+
+shoutingAgent :: Agentic m Text Text
+shoutingAgent = Agentic $ \input ->
+    run (prompt >>> injectWith @Json input >>> extractWith @Json @Text) "please uppercase this"
+
+repackagingAgent :: Agentic m Text Joke
+repackagingAgent = Agentic $ \input ->
+    run (prompt >>> injectWith @Json input >>> extractWith @Json @Joke) "repack into this structure"
+
+loudJokeTeller :: Agentic m a Joke
+loudJokeTeller = jokeTellingAgent >>> shoutingAgent >>> repackagingAgent
+
