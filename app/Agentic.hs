@@ -13,7 +13,6 @@ import           Dhall                        (FromDhall, ToDhall)
 import qualified Dhall
 import qualified Dhall.Core
 import qualified LLM.Client
-import qualified LLM.OpenAI.Client            (chat)
 import           Prelude
 import qualified Protocol.DhallSchema.Prompts
 import           UnliftIO                     (MonadUnliftIO (withRunInIO),

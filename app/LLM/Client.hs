@@ -4,20 +4,11 @@ import qualified LLM.Anthropic.Client   as Anthropic
 import           LLM.Anthropic.Types
 
 import           Control.Monad.IO.Class (MonadIO, liftIO)
-import           Data.Aeson             (Value (Array, Null, Object, String),
-                                         object, (.=))
 import qualified Data.Text              as Text
-import qualified Data.Vector            as Vector
 
 -- | Simple chat function that takes system and user prompts and returns the response text
 chat :: MonadIO m => Text.Text -> Text.Text -> m Text.Text
 chat systemPrompt userPrompt = liftIO $ do
-
-  let dummy :: Value = object
-        [ "type" .= String "object"
-        , "properties" .= Object mempty
-        , "required" .= Array mempty
-        ]
 
   let request = MessagesRequest
         { model = "claude-sonnet-4-20250514"
