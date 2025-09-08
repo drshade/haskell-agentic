@@ -2,15 +2,15 @@
 
 module Protocol.DhallSchema.Marshal where
 
-import           Agentic
-import           Control.Exception      (SomeException, try)
-import           Control.Monad.IO.Class (MonadIO, liftIO)
-import           Data.Either.Validation (Validation (Failure, Success))
-import           Data.Text              hiding (show)
-import           Dhall                  (FromDhall, ToDhall)
-import qualified Dhall
-import qualified Dhall.Core
-import           Protocol.Class
+-- import           Agentic
+-- import           Control.Exception      (SomeException, try)
+-- import           Control.Monad.IO.Class (MonadIO, liftIO)
+-- import           Data.Either.Validation (Validation (Failure, Success))
+-- import           Data.Text              hiding (show)
+-- import           Dhall                  (FromDhall, ToDhall)
+-- import qualified Dhall
+-- import qualified Dhall.Core
+-- import           Protocol.Class
 
 
 
