@@ -1,8 +1,10 @@
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE StandaloneDeriving    #-}
 
 module Examples where
 
 
-import           Agentic                      (Agentic, AgenticRWS,
+import           Agentic                      (Agentic, AgenticRWS, Prompt (..),
                                                extractWithRetry, orFail,
                                                pattern Agentic, prompt, run)
 import           Autodocodec
@@ -10,11 +12,14 @@ import           Combinators                  ((<<.>>))
 import           Control.Arrow                ((&&&), (>>>))
 import           Control.Monad.IO.Class       (liftIO)
 import           Control.Monad.Loops          (iterateUntilM)
+import           Data.Data                    (Proxy (Proxy))
 import           Data.Text
 import           Dhall                        (FromDhall, ToDhall)
 import           GHC.Generics                 (Generic)
 import           Prelude                      hiding (show)
-import           Protocol.Class               (extractWith, injectWith)
+import           Progress                     (runWithProgress)
+import           Protocol.Class               (extractWith, injectSchema,
+                                               injectWith, injectWithProxy)
 import           Protocol.DhallSchema.Marshal (Dhall)
 import           Protocol.JSONSchema.Marshal  (Json)
 import           UnliftIO                     (MonadUnliftIO)
@@ -102,8 +107,8 @@ data Goal = Goal { goal  :: Text
                  }
     deriving (Generic, Show, FromDhall, ToDhall)
 
-withTasks :: AgenticRWS m => Int -> Agentic m Text Text
-withTasks max' = Agentic $ \goal -> do
+withTasks :: AgenticRWS m => Int -> Agentic m Prompt Text
+withTasks max' = Agentic $ \(Prompt _system goal) -> do
     let instruction = "Goal: \n" <> goal
             <> "\n\n" <> "Come up with a list of tasks to achieve the goal, set all tasks to Todo to start"
             <> "\n\n" <> "Do not use more than " <> show max' <> " tasks, but you are welcome to return less"
@@ -176,13 +181,13 @@ data Tool
     | SetVolume { vol :: Int }
     deriving (Generic, Show, FromDhall, ToDhall)
 
-data ToolUse s
+data ToolUse t s
     = NoTool s
-    | UseTool Tool
+    | UseTool t
     deriving (Generic, Show, FromDhall, ToDhall)
 
-data AfterToolCall s
-    = AfterToolCall { original :: s, toolResult :: ToolResult }
+data AfterToolCall s r
+    = AfterToolCall { original :: s, toolResult :: r }
     deriving (Generic, Show, FromDhall, ToDhall)
 
 data ToolResult
@@ -191,23 +196,43 @@ data ToolResult
     | Audio { vol :: Int }
     deriving (Generic, Show, FromDhall, ToDhall)
 
-toolExample :: AgenticRWS m => Agentic m Text Text
-toolExample = Agentic $ \input -> do
-    response <- run (prompt >>> injectWith @Dhall input >>> extractWithRetry @(ToolUse Text) >>> orFail)
+withTools :: forall m t r. (FromDhall t, ToDhall t, Show t, ToDhall r, FromDhall r)
+                           => AgenticRWS m
+                           => (t -> m r) -> Agentic m Prompt Prompt
+withTools handler = Agentic $ \p@(Prompt _system user) -> do
+    response <- run (prompt >>> injectWith @Dhall user >>> extractWith @Dhall @(ToolUse t Text))
                     "Execute the query, but also consider the available tools available in the schema. If you respond with these, I will execute the tool for you and inject the results into the subsequent request."
 
     case response of
-        NoTool s -> pure s
+        NoTool a -> pure p
         UseTool tool -> do
             liftIO $ putStrLn $ "LLM requests to call tool => [" <> unpack (show tool) <> "]"
 
-            let result = case tool of
-                    ListFiles   -> Files { results = ["app", "CHANGELOG.md", "haskell-agentic.cabal", "README.md", "cabal.project", "dist-newstyle", "LICENSE"] }
-                    SearchWeb q -> SearchResults { q, results = [""] }
-                    SetVolume vol -> Audio vol
+            result <- handler tool
 
-            run (prompt >>> injectWith @Dhall (AfterToolCall { original = input, toolResult = result }) >>> extractWith @Dhall @Text)
+            run (prompt >>> injectWith @Dhall (AfterToolCall { original = user, toolResult = result }))
                 "Results of your tool call are provided, now continue with the original query"
+
+myTools :: (AgenticRWS m) => Tool -> m ToolResult
+myTools tool =
+    case tool of
+        ListFiles   -> pure $ Files { results = ["app", "CHANGELOG.md", "haskell-agentic.cabal", "README.md", "cabal.project", "dist-newstyle", "LICENSE"] }
+        SearchWeb q -> pure $ SearchResults { q, results = [""] }
+        SetVolume vol -> pure $ Audio vol
+
+example :: IO Text
+example = runWithProgress (prompt >>> withTools myTools >>> extractWith @Dhall @Text) "hello"
+
+--------------------------
+-- Better Tools
+--------------------------
+
+-- withTools :: forall m t r. (ToDhall t, FromDhall t) => (t -> m r) -> Agentic m Text Text
+-- withTools handler = Agentic $ \input -> do
+--     let input' = injectSchema @Dhall (Proxy @t) input
+--     x <- run (prompt >>> extractWith @Dhall @(ToolUse t)) input'
+--     pure _x
+
 
 --------------------------
 -- JSON Schema examples
@@ -240,4 +265,13 @@ repackagingAgent = Agentic $ \input ->
 
 loudJokeTeller :: Agentic m a Joke
 loudJokeTeller = jokeTellingAgent >>> shoutingAgent >>> repackagingAgent
+
+
+
+------------------------------
+-- Different tools - with capturing return types
+------------------------------
+
+
+
 

@@ -19,7 +19,7 @@ import           UnliftIO                     (MonadUnliftIO (withRunInIO),
                                                atomically, modifyTVar,
                                                newTVarIO, readTVarIO)
 
-type AgenticRWS m = (MonadIO m, MonadRWS Environment Events State m)
+type AgenticRWS m = (MonadUnliftIO m, MonadIO m, MonadRWS Environment Events State m)
 type Agentic m a b = AgenticRWS m => Kleisli m a b
 
 pattern Agentic :: (a -> m b) -> Kleisli m a b
@@ -81,7 +81,7 @@ extractWithRetry = Kleisli $ \prompt'@(Prompt system user) -> do
 extract :: forall s m. (FromDhall s, ToDhall s) => Agentic m Prompt s
 extract = injectSchema @s >>> runLLM >>> parse @s >>> orFail
 
-prompt :: Arrow a => a Text Prompt
+prompt :: Agentic m Text Prompt
 prompt = arr $ \user -> Prompt { system = "", user = user }
 
 run :: Kleisli m a b -> a -> m b
@@ -97,8 +97,8 @@ runIO k input = do
 
     mapM_   (\(Prompt _system _user, _llmOutput) -> do
                 -- putStrLn $ "LLM System: \n[" <> unpack _system <> "]"
-                -- putStrLn $ "LLM Input:\n[" <> unpack _user <> "]"
-                -- putStrLn $ "LLM Output:\n[" <> unpack _llmOutput <> "]"
+                putStrLn $ "LLM Input:\n[" <> unpack _user <> "]"
+                putStrLn $ "LLM Output:\n[" <> unpack _llmOutput <> "]"
                 pure ()
             ) logs
 
