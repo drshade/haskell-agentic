@@ -2,7 +2,6 @@ module Combinators where
 import           Agentic
 import           Control.Arrow  (Kleisli (..), (>>>))
 import           Dhall          (FromDhall, ToDhall)
-import           UnliftIO       (MonadUnliftIO)
 import           UnliftIO.Async (mapConcurrently)
 
 -- Glue two arrows together, injecting the schema of the type required as input to second arrow
@@ -11,7 +10,7 @@ import           UnliftIO.Async (mapConcurrently)
 (>...>) l r = l >>> extract @b >>> r
 
 -- Fanout
-(<<.>>) :: forall a b s m. (MonadUnliftIO m, FromDhall b, ToDhall b, FromDhall s, ToDhall s) => Agentic m a [s] -> Agentic m s b -> Agentic m a [b]
+(<<.>>) :: forall a b s m. AgenticRWS m => Agentic m a [s] -> Agentic m s b -> Agentic m a [b]
 (<<.>>) l r = Kleisli $ \input -> do
     tasks :: [s] <- run l input
     results :: [b] <- mapConcurrently (run r) tasks
