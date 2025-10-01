@@ -63,6 +63,7 @@ executable haskell-agentic
     Protocol.JSONSchema.Marshal
     Protocol.JSONSchema.Prompts
     PureMockup
+    Simple
 
   -- LANGUAGE extensions used by modules in this package.
   default-extensions:
