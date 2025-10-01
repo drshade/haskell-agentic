@@ -32,7 +32,7 @@ instance SchemaFormat Dhall where
     prompt <> "\n\nPlease respond using this Dhall schema:\n" <> dhallSchemaOf proxy
 
   systemPrompt :: forall a. SchemaConstraint Dhall a => Proxy a -> Text
-  systemPrompt _ = Protocol.DhallSchema.Prompts.languageReference1
+  systemPrompt _ = Protocol.DhallSchema.Prompts.languageReference1_no_functions
 
   injectObject :: SchemaConstraint Dhall a => a -> Text -> Text
   injectObject obj prompt =

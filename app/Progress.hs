@@ -90,8 +90,7 @@ stopProgress (SimpleProgress _ runningTVar _) progressAsync = do
   -- Don't print "Complete!" if we were interrupted - just clean up silently
 
 -- GHCI-friendly runner
-runWithProgress ::
-  Kleisli (RWST Environment Events State IO) Text b -> Text -> IO b
+runWithProgress :: Kleisli (RWST Environment Events State IO) Text b -> Text -> IO b
 runWithProgress agent input = do
   sp <- newSimpleProgress
 

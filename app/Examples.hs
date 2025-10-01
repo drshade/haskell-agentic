@@ -204,7 +204,7 @@ withTools handler = Agentic $ \p@(Prompt _system user) -> do
                     "Execute the query, but also consider the available tools available in the schema. If you respond with these, I will execute the tool for you and inject the results into the subsequent request."
 
     case response of
-        NoTool a -> pure p
+        NoTool a -> pure p -- This can't be right. We have a solution in a, but it's Text?
         UseTool tool -> do
             liftIO $ putStrLn $ "LLM requests to call tool => [" <> unpack (show tool) <> "]"
 
@@ -267,10 +267,6 @@ loudJokeTeller :: Agentic m a Joke
 loudJokeTeller = jokeTellingAgent >>> shoutingAgent >>> repackagingAgent
 
 
-
-------------------------------
--- Different tools - with capturing return types
-------------------------------
 
 
 

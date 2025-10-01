@@ -471,3 +471,28 @@ ghci> runIO (prompt >>> extract @Bool) "If it's busy, we need a reservation. If 
 
 ghci> runIO (prompt >>> extract @(Maybe Bool)) "The barber is the 'one who shaves all those, and those only, who do not shave themselves'. The question is, does the barber shave himself?"
 ```
+
+## v1 Readiness
+
+- [ ] **Convert to Library Structure**
+  - Currently structured as an executable - needs proper library architecture with exposed modules, hidden internals, and separate example executables.
+
+- [ ] **Refactor Progress.hs**
+  - Its lame and should ideally show multiple entries when requests run concurrently.
+
+- [ ] **Implement Error Handling & Retry Logic**
+  - The roadmap mentions missing retry mechanisms for LLM failures. Add proper error types, retry strategies, and graceful failure handling for production use.
+
+- [ ] **Generic LLM Provider Interface**
+  - Currently tightly coupled to Anthropic and OpenAI - needs a generic interface for selecting and configuring different LLM providers at runtime.
+  
+- [ ] **Complete Package Metadata**
+  - Missing essential cabal fields: synopsis, description, homepage, bug-reports, and category. Update CHANGELOG.md with proper versioning and release notes.
+
+- [ ] **Add Documentation**
+  - Create proper Haddock documentation for all public APIs, add tutorial documentation, and include getting-started examples in the docs.
+
+- [ ] **Add Test Suite & CI**
+  - No tests currently exist. Add property-based tests for core functionality, integration tests for LLM interactions, and CI pipeline for automated testing and publishing.
+
+
