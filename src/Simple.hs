@@ -1,6 +1,6 @@
 module Simple (prompt, extractWith, injectWith, extract, inject, Dhall, Json, run, Text, (>>>)) where
 
-import           Agentic                      hiding (extract, inject, run)
+import           Agentic                      hiding (run)
 import           Control.Arrow                (Kleisli, (>>>))
 import           Control.Monad.RWS            (RWST)
 import           Data.Text

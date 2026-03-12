@@ -1,13 +1,15 @@
 module Combinators where
 import           Agentic
-import           Control.Arrow  (Kleisli (..), (>>>))
-import           Dhall          (FromDhall, ToDhall)
-import           UnliftIO.Async (mapConcurrently)
+import           Control.Arrow                (Kleisli (..), (>>>))
+import           Dhall                        (FromDhall, ToDhall)
+import           Protocol.Class               (extractWith)
+import           Protocol.DhallSchema.Marshal (Dhall)
+import           UnliftIO.Async               (mapConcurrently)
 
 -- Glue two arrows together, injecting the schema of the type required as input to second arrow
 -- to the prompt given by the first (including parsing or failing of that type)
 (>...>) :: forall a b c m. (FromDhall b, ToDhall b) => Agentic m a Prompt -> Agentic m b c -> Agentic m a c
-(>...>) l r = l >>> extract @b >>> r
+(>...>) l r = l >>> extractWith @Dhall @b >>> r
 
 -- Fanout
 (<<.>>) :: forall a b s m. AgenticRWS m => Agentic m a [s] -> Agentic m s b -> Agentic m a [b]
