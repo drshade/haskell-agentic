@@ -42,31 +42,10 @@ extra-doc-files: CHANGELOG.md
 common warnings
   ghc-options: -Wall
 
-executable haskell-agentic
-  -- Import common warning flags.
+library
   import: warnings
-  -- .hs or .lhs file containing the Main module.
-  main-is: Main.hs
-  -- Modules included in this executable, other than Main.
-  other-modules:
-    Agentic
-    Combinators
-    Example2
-    Examples
-    LLM.Anthropic.Client
-    LLM.Anthropic.Types
-    LLM.Client
-    LLM.OpenAI.Client
-    Progress
-    Protocol.Class
-    Protocol.DhallSchema.Marshal
-    Protocol.DhallSchema.Prompts
-    Protocol.JSONSchema.Marshal
-    Protocol.JSONSchema.Prompts
-    PureMockup
-    Simple
-
-  -- LANGUAGE extensions used by modules in this package.
+  hs-source-dirs: src
+  default-language: GHC2024
   default-extensions:
     AllowAmbiguousTypes
     Arrows
@@ -84,8 +63,21 @@ executable haskell-agentic
     TemplateHaskell
     TypeApplications
     TypeFamilies
-
-  -- Other library packages from which modules are imported.
+  exposed-modules:
+    Agentic
+    Combinators
+    Progress
+    Protocol.Class
+    Protocol.DhallSchema.Marshal
+    Protocol.JSONSchema.Marshal
+    Simple
+  other-modules:
+    LLM.Anthropic.Client
+    LLM.Anthropic.Types
+    LLM.Client
+    LLM.OpenAI.Client
+    Protocol.DhallSchema.Prompts
+    Protocol.JSONSchema.Prompts
   build-depends:
     aeson,
     aeson-pretty,
@@ -98,18 +90,50 @@ executable haskell-agentic
     containers,
     dhall >=1.41 && <1.43,
     either,
-    free,
     http-conduit,
     monad-loops,
     mtl,
-    openai,
     stm,
     text,
     time,
     unliftio,
     vector,
 
-  -- Directories containing source files.
-  hs-source-dirs: src
-  -- Base language which the package is written in.
+executable haskell-agentic-examples
+  import: warnings
+  main-is: Main.hs
+  hs-source-dirs: app
   default-language: GHC2024
+  default-extensions:
+    AllowAmbiguousTypes
+    Arrows
+    DeriveAnyClass
+    DeriveGeneric
+    DerivingVia
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedLists
+    OverloadedRecordDot
+    OverloadedStrings
+    PatternSynonyms
+    TemplateHaskell
+    TypeApplications
+  other-modules:
+    Example2
+    Examples
+    PureMockup
+  build-depends:
+    aeson,
+    autodocodec,
+    autodocodec-schema,
+    base >=4.7 && <5,
+    bytestring,
+    containers,
+    dhall >=1.41 && <1.43,
+    free,
+    haskell-agentic,
+    monad-loops,
+    mtl,
+    text,
+    unliftio,
+    vector,

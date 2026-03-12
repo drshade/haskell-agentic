@@ -5,21 +5,18 @@ module Examples where
 
 
 import           Agentic                      (Agentic, AgenticRWS, Prompt (..),
-                                               extractWithRetry, orFail,
                                                pattern Agentic, prompt, run)
 import           Autodocodec
 import           Combinators                  ((<<.>>))
 import           Control.Arrow                ((&&&), (>>>))
 import           Control.Monad.IO.Class       (liftIO)
 import           Control.Monad.Loops          (iterateUntilM)
-import           Data.Data                    (Proxy (Proxy))
 import           Data.Text
 import           Dhall                        (FromDhall, ToDhall)
 import           GHC.Generics                 (Generic)
 import           Prelude                      hiding (show)
 import           Progress                     (runWithProgress)
-import           Protocol.Class               (extractWith, injectSchema,
-                                               injectWith, injectWithProxy)
+import           Protocol.Class               (extractWith, injectWith)
 import           Protocol.DhallSchema.Marshal (Dhall)
 import           Protocol.JSONSchema.Marshal  (Json)
 import           UnliftIO                     (MonadUnliftIO)
@@ -204,7 +201,7 @@ withTools handler = Agentic $ \p@(Prompt _system user) -> do
                     "Execute the query, but also consider the available tools available in the schema. If you respond with these, I will execute the tool for you and inject the results into the subsequent request."
 
     case response of
-        NoTool a -> pure p -- This can't be right. We have a solution in a, but it's Text?
+        NoTool _a -> pure p -- This can't be right. We have a solution in a, but it's Text?
         UseTool tool -> do
             liftIO $ putStrLn $ "LLM requests to call tool => [" <> unpack (show tool) <> "]"
 
