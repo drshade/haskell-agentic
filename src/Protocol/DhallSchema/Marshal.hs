@@ -3,8 +3,7 @@ module Protocol.DhallSchema.Marshal where
 import           Agentic                      (Agentic, AgenticRWS, Prompt (..),
                                                pattern Agentic, run, runLLM)
 import           Control.Exception            (SomeException, try)
-import           Control.Monad.IO.Class       (MonadIO)
-import           Control.Monad.RWS            (MonadIO (..))
+import           Control.Monad.IO.Class       (MonadIO (liftIO))
 import           Data.Data                    (Proxy)
 import           Data.Either.Validation       (Validation (Failure, Success))
 import           Data.Text                    hiding (show)
@@ -23,11 +22,7 @@ instance SchemaFormat Dhall where
   schemaOf = dhallSchemaOf
 
   parseWithSchema :: forall a m. MonadIO m => SchemaConstraint Dhall a => Proxy a -> Text -> m (Either Text a)
-  parseWithSchema _ input = do
-    result <- liftIO $ try $ Dhall.input Dhall.auto input
-    case result of
-        Right value -> pure $ Right value
-        Left (err :: SomeException) -> pure $ Left $ "Dhall parse error: " <> pack (show err) <> "\nInput was: " <> input
+  parseWithSchema _ input = parseDhall input
 
   injectSchema :: forall a. SchemaConstraint Dhall a => Proxy a -> Text -> Text
   injectSchema proxy prompt =

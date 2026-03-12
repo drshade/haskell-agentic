@@ -1,5 +1,21 @@
 
-module Agentic where
+module Agentic
+    ( -- * Core Types
+      Agentic
+    , AgenticRWS
+    , Environment(..)
+    , Events
+    , State(..)
+    , Prompt(..)
+      -- * Pattern
+    , pattern Agentic
+      -- * Functions
+    , orFail
+    , runLLM
+    , run
+    , runIO
+    , prompt
+    ) where
 
 import           Control.Arrow                (Arrow, Kleisli (..), arr)
 import           Control.Monad.IO.Class       (MonadIO, liftIO)
