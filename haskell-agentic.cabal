@@ -66,13 +66,13 @@ library
   exposed-modules:
     Agentic
     Combinators
-    Progress
     Protocol.Class
     Protocol.DhallSchema.Marshal
     Protocol.JSONSchema.Marshal
     Simple
   other-modules:
     LLM.Anthropic.Client
+    Progress
     LLM.Anthropic.Types
     LLM.Client
     LLM.OpenAI.Client

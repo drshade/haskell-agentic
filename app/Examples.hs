@@ -15,7 +15,7 @@ import           Data.Text
 import           Dhall                        (FromDhall, ToDhall)
 import           GHC.Generics                 (Generic)
 import           Prelude                      hiding (show)
-import           Progress                     (runWithProgress)
+import qualified Simple
 import           Protocol.Class               (extractWith, injectWith)
 import           Protocol.DhallSchema.Marshal (Dhall)
 import           Protocol.JSONSchema.Marshal  (Json)
@@ -218,7 +218,7 @@ myTools tool =
         SetVolume vol -> pure $ Audio vol
 
 example :: IO Text
-example = runWithProgress (prompt >>> withTools myTools >>> extractWith @Dhall @Text) "hello"
+example = Simple.run (prompt >>> withTools myTools >>> extractWith @Dhall @Text) "hello"
 
 --------------------------
 -- Better Tools
