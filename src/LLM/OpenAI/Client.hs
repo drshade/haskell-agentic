@@ -9,6 +9,7 @@ import qualified Data.Text                  as Text
 import qualified Data.Vector                as Vector (toList)
 import qualified System.Environment         as Environment
 
+{-
 chat :: MonadIO m => Text.Text -> Text.Text -> m Text.Text
 chat system user = liftIO $ do
     key <- Environment.getEnv "OPENAI_KEY"
@@ -29,5 +30,5 @@ chat system user = liftIO $ do
     let result = Text.intercalate "\n" $ Vector.toList $ (\Choice{ message } -> messageToContent message) <$> choices
 
     pure result
-
+-}
 

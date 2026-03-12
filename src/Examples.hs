@@ -267,7 +267,7 @@ loudJokeTeller :: Agentic m a Joke
 loudJokeTeller = jokeTellingAgent >>> shoutingAgent >>> repackagingAgent
 
 
-
-
+-- $> runWithProgress (prompt >>> extractWith @Dhall @Text) "Hello!" >>= putStrLn . unpack
+-- $> runWithProgress (dinoProject) "" >>= putStrLn . unpack
 
 
