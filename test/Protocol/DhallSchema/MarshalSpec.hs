@@ -28,6 +28,7 @@ tests = testGroup "Protocol.DhallSchema.Marshal"
         assertBool ("schema contains 'VariantB': " <> unpack schema) ("VariantB" `isInfixOf` schema)
 
     , testCase "parseDhall round-trips a record" $ do
+        -- Note: Dhall Integer literals require an explicit sign ('+30', not '30')
         let input = "{ name = \"Alice\", age = +30 }"
         result <- parseDhall @SimpleRecord input
         result @?= Right SimpleRecord { name = "Alice", age = 30 }
@@ -36,6 +37,13 @@ tests = testGroup "Protocol.DhallSchema.Marshal"
         let input = "not valid dhall !!!"
         result <- parseDhall @SimpleRecord input
         case result of
-            Left _  -> pure ()
-            Right _ -> fail "Expected parse failure"
+            Left msg -> assertBool ("error should mention 'Dhall parse error', got: " <> unpack msg)
+                                   ("Dhall parse error" `isInfixOf` msg)
+            Right _  -> fail "Expected parse failure"
+
+    , testCase "parseDhall round-trips a sum type" $ do
+        -- Dhall union type encoding: use let to define the type alias
+        let input = "let T = < VariantA : { x : Integer } | VariantB : { y : Text } > in T.VariantA { x = +5 }"
+        result <- parseDhall @SumType input
+        result @?= Right (VariantA { x = 5 })
     ]
