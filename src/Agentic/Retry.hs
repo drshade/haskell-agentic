@@ -1,3 +1,4 @@
+-- | Configurable retry logic for agent parse failures.
 module Agentic.Retry
     ( RetryConfig(..)
     , defaultRetry

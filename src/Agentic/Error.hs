@@ -1,3 +1,4 @@
+-- | Error types for the @haskell-agentic@ framework.
 module Agentic.Error
     ( AgenticError(..)
     ) where

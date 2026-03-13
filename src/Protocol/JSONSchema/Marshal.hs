@@ -1,3 +1,5 @@
+-- | JSON Schema backend for the 'Protocol.Class.SchemaFormat' typeclass,
+-- using @autodocodec@ for codec derivation.
 module Protocol.JSONSchema.Marshal where
 
 import           Agentic.Error           (AgenticError (..))
@@ -14,6 +16,8 @@ import qualified Data.Text.Lazy          as TL
 import qualified Data.Text.Lazy.Encoding as TLE
 import           Protocol.Class          (SchemaFormat (..))
 
+-- | Phantom type tag selecting the JSON Schema format.
+-- Use with @extractWith \@Json@ or @injectWith \@Json@.
 data Json
 
 instance SchemaFormat Json where
@@ -41,5 +45,6 @@ instance SchemaFormat Json where
     let jsonValue = TL.toStrict $ TLE.decodeUtf8 $ encodeJSONViaCodec obj
     in prompt <> "\n\nHere's the object:\n" <> jsonValue
 
+-- | Render the JSON Schema for type @a@ as text, using its 'HasCodec' instance.
 jsonSchemaOf :: forall a. HasCodec a => Proxy a -> Text
 jsonSchemaOf _ = TL.toStrict $ TLE.decodeUtf8 $ encode $ jsonSchemaViaCodec @a

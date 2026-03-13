@@ -1,3 +1,4 @@
+-- | Dhall schema backend for the 'Protocol.Class.SchemaFormat' typeclass.
 module Protocol.DhallSchema.Marshal where
 
 import           Agentic                      (Agentic, AgenticRWS, Prompt (..),
@@ -14,6 +15,8 @@ import qualified Dhall.Core
 import           Protocol.Class               (SchemaFormat (..))
 import qualified Protocol.DhallSchema.Prompts
 
+-- | Phantom type tag selecting the Dhall schema format.
+-- Use with @extractWith \@Dhall@ or @injectWith \@Dhall@.
 data Dhall
 
 instance SchemaFormat Dhall where
@@ -37,6 +40,7 @@ instance SchemaFormat Dhall where
     let dhallValue = Dhall.Core.pretty $ Dhall.embed Dhall.inject obj
     in prompt <> "\n\nHere's the object:\n" <> dhallValue
 
+-- | Render the Dhall schema for type @a@ as text.
 dhallSchemaOf :: forall a. (ToDhall a, FromDhall a) => Proxy a -> Text
 dhallSchemaOf _ = case Dhall.expected (Dhall.auto @a) of
     Success result -> Dhall.Core.pretty result

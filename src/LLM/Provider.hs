@@ -1,3 +1,4 @@
+-- | LLM provider configuration and defaults.
 module LLM.Provider
     ( LLMProvider(..)
     , LLMConfig(..)
