@@ -7,7 +7,6 @@ import           Control.Concurrent.Async
 import           Control.Concurrent.STM
 import           Control.Exception        (bracket)
 import           Control.Monad            (when)
-import           Control.Monad.IO.Class   (MonadIO, liftIO)
 import           Control.Monad.RWS        (RWST, runRWST)
 import           Data.Maybe               (fromMaybe)
 import           Data.Text                (Text, pack)
@@ -120,10 +119,3 @@ runWithProgress agent input = do
   putStrLn $ "(" <> show callCount <> " " <> callWord <> ")"
   return result
 
--- Helper to add progress updates to an agent (currently unused)
-withProgressUpdates :: (MonadIO m) => SimpleProgress -> Kleisli m a b -> Kleisli m a b
-withProgressUpdates sp (Kleisli f) = Kleisli $ \input -> do
-  liftIO $ updateSimpleProgress sp "Processing..." InProgress
-  result <- f input
-  liftIO $ updateSimpleProgress sp "Complete" Completed
-  return result
