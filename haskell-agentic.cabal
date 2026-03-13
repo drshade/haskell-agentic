@@ -20,9 +20,13 @@ name: haskell-agentic
 --                  | | | +--- code changes with no API change
 version: 0.1.0.0
 -- A short (one-line) description of the package.
--- synopsis:
+synopsis: Type-safe agentic programming via algebraic effects
 -- A longer description of the package.
--- description:
+description:
+  Compose LLM-backed agents using discrete algebraic effects (via effectful-core).
+  Dhall is the default schema format for structured output — derivable via Generic,
+  supports sum types and let bindings. JSON Schema is available as an alternative.
+  Provider interpreters are swappable: changing one line in main switches providers.
 -- The license under which the package is released.
 license: BSD-2-Clause
 -- The file containing the license text.
@@ -96,8 +100,13 @@ executable haskell-agentic-examples
   main-is: Main.hs
   hs-source-dirs: examples
   default-language: GHC2024
+  default-extensions:
+    DeriveAnyClass
+    DeriveGeneric
+    OverloadedStrings
+    TypeApplications
   build-depends:
-    base,
+    base >=4.7 && <5,
     dhall >=1.41 && <1.43,
     effectful-core,
     haskell-agentic,
