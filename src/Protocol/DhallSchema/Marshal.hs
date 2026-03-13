@@ -1,8 +1,6 @@
 -- | Dhall schema backend for the 'Protocol.Class.SchemaFormat' typeclass.
 module Protocol.DhallSchema.Marshal where
 
-import           Agentic                      (Agentic, AgenticRWS, Prompt (..),
-                                               pattern Agentic, run, runLLM)
 import           Agentic.Error                (AgenticError (..))
 import           Control.Exception            (SomeException, try)
 import           Control.Monad.IO.Class       (MonadIO (liftIO))
@@ -44,6 +42,9 @@ instance SchemaFormat Dhall where
 dhallSchemaOf :: forall a. (ToDhall a, FromDhall a) => Proxy a -> Text
 dhallSchemaOf _ = case Dhall.expected (Dhall.auto @a) of
     Success result -> Dhall.Core.pretty result
+    -- Note: Failure here indicates a malformed ToDhall instance, which is a
+    -- programming error. We use 'error' since 'SchemaFormat.schemaOf' returns
+    -- Text, not Either. This will be addressed in a future API revision.
     Failure err    -> error $ show err
 
 -- | Parse Dhall text into a Haskell value.
@@ -58,17 +59,3 @@ parseDhall input = do
                 , rawInput = input
                 }
 
--- | Like 'extractWith @Dhall' but retries once on parse failure.
-extractWithRetryDhall :: forall s m. (FromDhall s, ToDhall s, AgenticRWS m) => Agentic m Prompt (Either AgenticError s)
-extractWithRetryDhall = Agentic $ \prompt'@(Prompt system user) -> do
-    let attemptRaw input' = do
-            reply <- run runLLM input'
-            parsed <- parseDhall @s reply
-            pure (reply, parsed)
-    (reply, parsed) <- attemptRaw prompt'
-    case parsed of
-        Left err -> do
-            let instruction = Protocol.DhallSchema.Prompts.retryError err.message reply user
-            (_reply', parsed') <- attemptRaw $ Prompt system instruction
-            pure parsed'
-        Right result -> pure $ Right result

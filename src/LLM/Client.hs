@@ -4,6 +4,8 @@ import qualified LLM.Anthropic.Client   as Anthropic
 import           LLM.Anthropic.Types
 import           LLM.Provider           (LLMConfig (..), LLMProvider (..))
 
+import           Agentic.Error          (AgenticError (..))
+import           Control.Exception      (throwIO)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Text              as Text
 
@@ -14,4 +16,5 @@ chatWith config system user =
         Anthropic -> liftIO $ Anthropic.messages config system user >>= \response ->
             case response.content of
                 (ResponseTextContent txt : _) -> pure txt
-                _                             -> pure "Something else?"
+                _                             -> throwIO $ LLMError
+                    { message = "Unexpected response shape from LLM provider" }
