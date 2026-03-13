@@ -1,6 +1,6 @@
 module Progress where
 
-import           Agentic                  (Environment, Events, State, runIO)
+import           Agentic                  (Environment (..), Events, State (..))
 import           Control.Arrow            (Kleisli (..))
 import           Control.Concurrent       (threadDelay)
 import           Control.Concurrent.Async
@@ -8,10 +8,13 @@ import           Control.Concurrent.STM
 import           Control.Exception        (bracket)
 import           Control.Monad            (when)
 import           Control.Monad.IO.Class   (MonadIO, liftIO)
-import           Control.Monad.RWS        (RWST)
-import           Data.Text                (Text)
+import           Control.Monad.RWS        (RWST, runRWST)
+import           Data.Maybe               (fromMaybe)
+import           Data.Text                (Text, pack)
 import qualified Data.Text                as T
+import           LLM.Provider             (LLMConfig (..), defaultConfig)
 import           System.Console.ANSI
+import           System.Environment       (lookupEnv)
 import           System.IO                (hFlush, stdout)
 
 data Status = Started | InProgress | Completed | Failed Text
@@ -97,15 +100,24 @@ runWithProgress agent input = do
   -- Set initial status before starting display
   updateSimpleProgress sp "Processing request..." InProgress
 
+  -- Build the environment (same as runIO in Agentic.hs)
+  apiKey' <- fromMaybe "" <$> lookupEnv "ANTHROPIC_KEY"
+  let config      = defaultConfig { apiKey = pack apiKey' }
+      environment = Environment { llmConfig = config, initialInput = input }
+      state       = State ()
+
   -- Use bracket to ensure cleanup happens even on interrupts
-  result <- bracket
+  (result, logs) <- bracket
     (startProgressDisplay sp)  -- setup: start progress display
     (stopProgress sp)          -- cleanup: stop progress display
     (\_ -> do                  -- action: run the agent
-      runIO agent input)
+      (a, _finalState, evts) <- runRWST (runKleisli agent input) environment state
+      return (a, evts))
 
-  -- Only show success message if we completed normally
-  putStrLn "Complete"
+  -- Show completion with LLM call count
+  let callCount = length logs
+      callWord  = if callCount == 1 then "LLM call" else "LLM calls"
+  putStrLn $ "(" <> show callCount <> " " <> callWord <> ")"
   return result
 
 -- Helper to add progress updates to an agent (currently unused)
