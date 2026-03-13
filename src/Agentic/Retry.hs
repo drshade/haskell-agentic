@@ -18,13 +18,15 @@ defaultRetry :: RetryConfig
 defaultRetry = RetryConfig { maxAttempts = 2 }
 
 -- | Run an action, retrying on 'Left' up to 'maxAttempts' times total.
--- Returns the first 'Right', or 'Left' if all attempts fail.
+-- Returns the first 'Right', or the real last 'Left' if all attempts fail.
 withRetry :: RetryConfig -> IO (Either AgenticError a) -> IO (Either AgenticError a)
-withRetry config action = go config.maxAttempts
+withRetry config action = go 0
   where
-    go 0 = pure (Left $ ParseError "No attempts remaining" "")
-    go n = do
+    go attempt = do
         result <- action
         case result of
-            Right x -> pure (Right x)
-            Left _  -> go (n - 1)
+            Right x  -> pure (Right x)
+            Left err ->
+                if attempt + 1 < config.maxAttempts
+                    then go (attempt + 1)
+                    else pure (Left err)

@@ -31,16 +31,18 @@ tests = testGroup "Agentic.Retry"
         count <- readIORef callCount
         count @?= 3
 
-    , testCase "withRetry returns Left after exhausting all attempts" $ do
+    , testCase "withRetry returns last error after exhausting all attempts" $ do
         callCount <- newIORef (0 :: Int)
         let action = do
                 modifyIORef' callCount (+1)
-                pure (Left $ ParseError "always fails" "" :: Either AgenticError String)
+                pure (Left $ ParseError "always fails" "raw-input" :: Either AgenticError String)
         result <- withRetry (RetryConfig { maxAttempts = 3 }) action
         case result of
-            Left (ParseError msg _) -> msg @?= "No attempts remaining"
-            Left other              -> fail $ "Expected ParseError, got: " <> show other
-            Right _                 -> fail "Expected failure"
+            Left (ParseError msg raw) -> do
+                msg @?= "always fails"
+                raw @?= "raw-input"
+            Left other -> fail $ "Expected ParseError, got: " <> show other
+            Right _    -> fail "Expected failure"
         count <- readIORef callCount
         count @?= 3
 
