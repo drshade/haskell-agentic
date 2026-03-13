@@ -1,39 +1,28 @@
-module LLM.Client where
+module LLM.Client (chat, chatWith) where
 
 import qualified LLM.Anthropic.Client   as Anthropic
 import           LLM.Anthropic.Types
+import           LLM.Provider           (LLMConfig (..), LLMProvider (..),
+                                         defaultConfig)
 
 import           Control.Monad.IO.Class (MonadIO, liftIO)
+import           Data.Maybe             (fromMaybe)
 import qualified Data.Text              as Text
+import           System.Environment     (lookupEnv)
 
--- | Simple chat function that takes system and user prompts and returns the response text
+-- | Send a chat message using default config (reads API key from ANTHROPIC_KEY env var).
+-- Deprecated: use 'chatWith' with explicit config instead.
 chat :: MonadIO m => Text.Text -> Text.Text -> m Text.Text
-chat systemPrompt userPrompt = liftIO $ do
+chat system user = do
+    apiKey <- liftIO $ fromMaybe "" <$> lookupEnv "ANTHROPIC_KEY"
+    let config = defaultConfig { apiKey = apiKey }
+    chatWith config system user
 
-  let request = MessagesRequest
-        { model = "claude-sonnet-4-20250514"
-        , messages =
-            [ Message { role = "user", content = [TextContent { text = userPrompt }] }
-            ]
-        , maxTokens = 10240
-        , system = Just [ SystemPrompt { text = systemPrompt
-                                       , cacheControl = Just (CacheControl { cacheControlType = Ephemeral, ttl = Nothing })
-                                      --  , cacheControl = Nothing
-                                       }
-                        ]
-        , temperature = Nothing
-        , tools = Nothing -- Just [ Tool { name = "test_tool", description = Just "test description", inputSchema = dummy } ]
-        , toolChoice = Nothing
-        , stopSequences = Nothing
-        , stream = Nothing
-        , metadata = Nothing
-        }
-
-  response <- Anthropic.messages request
-
-  -- liftIO $ putStrLn $ "Got back " <> (show $ length response.content) <> " blocks!"
-
-  -- Extract text from the first text content block
-  case response.content of
-    (ResponseTextContent text : _) -> pure text
-    _                              -> pure "Something else?"
+-- | Send a chat message using the provided config.
+chatWith :: MonadIO m => LLMConfig -> Text.Text -> Text.Text -> m Text.Text
+chatWith config system user =
+    case config.provider of
+        Anthropic -> liftIO $ Anthropic.messages config system user >>= \response ->
+            case response.content of
+                (ResponseTextContent txt : _) -> pure txt
+                _                             -> pure "Something else?"

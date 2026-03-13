@@ -68,6 +68,7 @@ library
     Agentic.Error
     Agentic.Retry
     Combinators
+    LLM.Provider
     Protocol.Class
     Protocol.DhallSchema.Marshal
     Protocol.JSONSchema.Marshal
@@ -115,6 +116,7 @@ test-suite haskell-agentic-test
     TypeApplications
   other-modules:
     Agentic.RetrySpec
+    LLM.ProviderSpec
     Protocol.DhallSchema.MarshalSpec
     Protocol.JSONSchema.MarshalSpec
   build-depends:

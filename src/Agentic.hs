@@ -20,12 +20,15 @@ module Agentic
 import           Agentic.Error                (AgenticError)
 import           Control.Arrow                (Arrow, Kleisli (..), arr)
 import           Control.Monad.IO.Class       (MonadIO, liftIO)
-import           Control.Monad.RWS            (RWST (RWST), ask, get, runRWST,
-                                               tell)
+import           Control.Monad.RWS            (RWST (RWST), ask, asks, get,
+                                               runRWST, tell)
 import           Control.Monad.RWS.Class      (MonadRWS)
+import           Data.Maybe                   (fromMaybe)
 import           Data.Text                    (Text)
 import qualified LLM.Client
+import           LLM.Provider                 (LLMConfig (..), defaultConfig)
 import           Prelude
+import           System.Environment           (lookupEnv)
 import           UnliftIO                     (MonadUnliftIO (withRunInIO),
                                                atomically, modifyTVar,
                                                newTVarIO, readTVarIO)
@@ -36,7 +39,10 @@ type Agentic m a b = AgenticRWS m => Kleisli m a b
 pattern Agentic :: (a -> m b) -> Kleisli m a b
 pattern Agentic f = Kleisli f
 
-newtype Environment = Environment { prompt :: Text }
+data Environment = Environment
+    { llmConfig  :: LLMConfig
+    , userPrompt :: Text
+    }
 type Events = [(Prompt, Text)]
 newtype State = State ()
 
@@ -47,9 +53,8 @@ orFail = arr $ either (error . show) id
 
 runLLM :: Agentic m Prompt Text
 runLLM = Kleisli $ \prompt'@(Prompt system user) -> do
-    -- liftIO $ putStrLn $ "Calling LLM... [" <> take 20 (unpack user) <> "]"
-    reply <- liftIO $ LLM.Client.chat system user
-    -- liftIO $ putStrLn "Calling LLM done!"
+    config <- asks (.llmConfig)
+    reply  <- liftIO $ LLM.Client.chatWith config system user
     tell [(prompt', reply)]
     pure reply
 
@@ -61,18 +66,12 @@ run = runKleisli
 
 runIO :: Kleisli (RWST Environment Events State IO) Text a -> Text -> IO a
 runIO k input = do
-    -- Initial conditions for RWS
-    let environment = Environment { prompt = input }
-        state = State ()
+    apiKey' <- fromMaybe "" <$> lookupEnv "ANTHROPIC_KEY"
+    let config      = defaultConfig { apiKey = apiKey' }
+        environment = Environment { llmConfig = config, userPrompt = input }
+        state       = State ()
 
-    (a, _finalState, logs) <- runRWST (runKleisli k input) environment state
-
-    mapM_   (\(Prompt _system _user, _llmOutput) -> do
-                -- putStrLn $ "LLM System: \n[" <> unpack _system <> "]"
-                -- putStrLn $ "LLM Input:\n[" <> unpack _user <> "]"
-                -- putStrLn $ "LLM Output:\n[" <> unpack _llmOutput <> "]"
-                pure ()
-            ) logs
+    (a, _finalState, _logs) <- runRWST (runKleisli k input) environment state
 
     pure a
 
