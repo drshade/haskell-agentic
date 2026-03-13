@@ -8,9 +8,9 @@ import           LLM.Provider           (LLMConfig (..))
 
 import           Control.Exception      (throwIO)
 import           Data.Aeson             (decode, encode)
-import qualified Data.ByteString.Char8  as BS8
 import           Data.Text              (Text)
 import qualified Data.Text              as Text
+import           Data.Text.Encoding     (encodeUtf8)
 import           Network.HTTP.Simple
 
 -- | Send a message to the Anthropic API and get a response.
@@ -38,7 +38,7 @@ messages config systemPrompt userPrompt = do
   httpRequest <- parseRequest baseRequest
 
   let requestWithHeaders = setRequestHeaders
-        [ ("x-api-key", BS8.pack config.apiKey)
+        [ ("x-api-key", encodeUtf8 config.apiKey)
         , ("anthropic-version", "2023-06-01")
         , ("content-type", "application/json")
         ] httpRequest

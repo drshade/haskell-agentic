@@ -6,6 +6,8 @@ module LLM.Provider
     , providerModel
     ) where
 
+import Data.Text (Text)
+
 -- | Supported LLM providers.
 data LLMProvider = Anthropic
     deriving (Show, Eq)
@@ -15,7 +17,7 @@ data LLMConfig = LLMConfig
     { provider  :: LLMProvider
     , model     :: String
     , maxTokens :: Int
-    , apiKey    :: String  -- ^ Set at runtime from environment variable
+    , apiKey    :: Text  -- ^ Set at runtime from environment variable
     }
     deriving (Show, Eq)
 
@@ -33,5 +35,5 @@ defaultConfig = LLMConfig
     { provider  = Anthropic
     , model     = providerModel Anthropic
     , maxTokens = 10240
-    , apiKey    = ""
+    , apiKey    = ("" :: Text)
     }

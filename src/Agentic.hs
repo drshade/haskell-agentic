@@ -24,7 +24,7 @@ import           Control.Monad.RWS            (RWST (RWST), ask, asks, get,
                                                runRWST, tell)
 import           Control.Monad.RWS.Class      (MonadRWS)
 import           Data.Maybe                   (fromMaybe)
-import           Data.Text                    (Text)
+import           Data.Text                    (Text, pack)
 import qualified LLM.Client
 import           LLM.Provider                 (LLMConfig (..), defaultConfig)
 import           Prelude
@@ -40,8 +40,8 @@ pattern Agentic :: (a -> m b) -> Kleisli m a b
 pattern Agentic f = Kleisli f
 
 data Environment = Environment
-    { llmConfig  :: LLMConfig
-    , userPrompt :: Text
+    { llmConfig    :: LLMConfig
+    , initialInput :: Text
     }
 type Events = [(Prompt, Text)]
 newtype State = State ()
@@ -67,8 +67,8 @@ run = runKleisli
 runIO :: Kleisli (RWST Environment Events State IO) Text a -> Text -> IO a
 runIO k input = do
     apiKey' <- fromMaybe "" <$> lookupEnv "ANTHROPIC_KEY"
-    let config      = defaultConfig { apiKey = apiKey' }
-        environment = Environment { llmConfig = config, userPrompt = input }
+    let config      = defaultConfig { apiKey = pack apiKey' }
+        environment = Environment { llmConfig = config, initialInput = input }
         state       = State ()
 
     (a, _finalState, _logs) <- runRWST (runKleisli k input) environment state
