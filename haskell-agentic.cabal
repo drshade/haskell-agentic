@@ -42,74 +42,63 @@ extra-doc-files: CHANGELOG.md
 common warnings
   ghc-options: -Wall
 
-executable haskell-agentic
-  -- Import common warning flags.
+library
   import: warnings
-  -- .hs or .lhs file containing the Main module.
-  main-is: Main.hs
-  -- Modules included in this executable, other than Main.
-  other-modules:
+  exposed-modules:
     Agentic
-    Combinators
-    Example2
-    Examples
-    LLM.Anthropic.Client
-    LLM.Anthropic.Types
-    LLM.Client
-    LLM.OpenAI.Client
-    Progress
-    Protocol.Class
-    Protocol.DhallSchema.Marshal
-    Protocol.DhallSchema.Prompts
-    Protocol.JSONSchema.Marshal
-    Protocol.JSONSchema.Prompts
-    PureMockup
-    Simple
+    Agentic.Core
+    Agentic.Effects
+    Agentic.Schema
+    Agentic.Schema.Dhall
+    Agentic.Schema.Json
+    Agentic.Tools
+    Agentic.Prompt
+    Agentic.Retry
+    Agentic.Error
+    Agentic.Provider.Anthropic
 
-  -- LANGUAGE extensions used by modules in this package.
   default-extensions:
     AllowAmbiguousTypes
-    Arrows
-    ConstraintKinds
+    DataKinds
     DeriveAnyClass
     DeriveGeneric
     DerivingVia
     DuplicateRecordFields
-    MultilineStrings
+    LambdaCase
     NoFieldSelectors
-    OverloadedLists
     OverloadedRecordDot
     OverloadedStrings
-    PatternSynonyms
-    TemplateHaskell
     TypeApplications
     TypeFamilies
+    TemplateHaskell
 
-  -- Other library packages from which modules are imported.
   build-depends:
     aeson,
     aeson-pretty,
-    ansi-terminal,
-    async,
     autodocodec,
     autodocodec-schema,
     base >=4.7 && <5,
     bytestring,
     containers,
     dhall >=1.41 && <1.43,
-    either,
-    free,
+    effectful-core,
     http-conduit,
-    monad-loops,
-    mtl,
-    openai,
-    stm,
     text,
     time,
     unliftio,
     vector,
 
-  -- Directories containing source files.
   hs-source-dirs: src
-  -- Base language which the package is written in.
   default-language: GHC2024
+
+executable haskell-agentic-examples
+  import: warnings
+  main-is: Main.hs
+  hs-source-dirs: examples
+  default-language: GHC2024
+  build-depends:
+    base,
+    dhall >=1.41 && <1.43,
+    effectful-core,
+    haskell-agentic,
+    text,
