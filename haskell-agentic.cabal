@@ -66,6 +66,7 @@ library
   exposed-modules:
     Agentic
     Agentic.Error
+    Agentic.Retry
     Combinators
     Protocol.Class
     Protocol.DhallSchema.Marshal
@@ -113,6 +114,7 @@ test-suite haskell-agentic-test
     OverloadedStrings
     TypeApplications
   other-modules:
+    Agentic.RetrySpec
     Protocol.DhallSchema.MarshalSpec
     Protocol.JSONSchema.MarshalSpec
   build-depends:
