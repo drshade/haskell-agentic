@@ -17,12 +17,13 @@ module Agentic
     , prompt
     ) where
 
+import           Agentic.Error                (AgenticError)
 import           Control.Arrow                (Arrow, Kleisli (..), arr)
 import           Control.Monad.IO.Class       (MonadIO, liftIO)
 import           Control.Monad.RWS            (RWST (RWST), ask, get, runRWST,
                                                tell)
 import           Control.Monad.RWS.Class      (MonadRWS)
-import           Data.Text                    (Text, unpack)
+import           Data.Text                    (Text)
 import qualified LLM.Client
 import           Prelude
 import           UnliftIO                     (MonadUnliftIO (withRunInIO),
@@ -41,8 +42,8 @@ newtype State = State ()
 
 data Prompt = Prompt { system :: Text, user :: Text }
 
-orFail :: Arrow a => a (Either Text c) c
-orFail = arr $ either (error . unpack) id
+orFail :: Arrow a => a (Either AgenticError c) c
+orFail = arr $ either (error . show) id
 
 runLLM :: Agentic m Prompt Text
 runLLM = Kleisli $ \prompt'@(Prompt system user) -> do

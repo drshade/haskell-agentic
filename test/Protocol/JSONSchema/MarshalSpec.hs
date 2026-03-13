@@ -4,6 +4,7 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, assertBool, (@?=))
 import Data.Text (Text, isInfixOf, unpack)
 import Autodocodec (HasCodec(..), object, requiredField', (.=))
+import Agentic.Error (AgenticError(..))
 import Protocol.Class (SchemaFormat(schemaOf, parseWithSchema))
 import Protocol.JSONSchema.Marshal (Json)
 import Data.Data (Proxy(..))
@@ -34,6 +35,9 @@ tests = testGroup "Protocol.JSONSchema.Marshal"
         let json = "not valid json"
         result <- parseWithSchema @Json (Proxy @JRecord) json
         case result of
-            Left _  -> pure ()
-            Right _ -> fail "Expected parse failure"
+            Left (ParseError msg _) ->
+                assertBool ("error should mention 'JSON parse error', got: " <> unpack msg)
+                           ("JSON parse error" `isInfixOf` msg)
+            Left other  -> fail $ "Expected ParseError, got: " <> show other
+            Right _     -> fail "Expected parse failure"
     ]

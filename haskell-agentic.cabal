@@ -65,6 +65,7 @@ library
     TypeFamilies
   exposed-modules:
     Agentic
+    Agentic.Error
     Combinators
     Protocol.Class
     Protocol.DhallSchema.Marshal

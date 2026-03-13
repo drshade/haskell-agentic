@@ -2,6 +2,7 @@ module Protocol.DhallSchema.Marshal where
 
 import           Agentic                      (Agentic, AgenticRWS, Prompt (..),
                                                pattern Agentic, run, runLLM)
+import           Agentic.Error                (AgenticError (..))
 import           Control.Exception            (SomeException, try)
 import           Control.Monad.IO.Class       (MonadIO (liftIO))
 import           Data.Data                    (Proxy)
@@ -21,7 +22,7 @@ instance SchemaFormat Dhall where
   schemaOf :: forall a. SchemaConstraint Dhall a => Proxy a -> Text
   schemaOf = dhallSchemaOf
 
-  parseWithSchema :: forall a m. MonadIO m => SchemaConstraint Dhall a => Proxy a -> Text -> m (Either Text a)
+  parseWithSchema :: forall a m. MonadIO m => SchemaConstraint Dhall a => Proxy a -> Text -> m (Either AgenticError a)
   parseWithSchema _ input = parseDhall input
 
   injectSchema :: forall a. SchemaConstraint Dhall a => Proxy a -> Text -> Text
@@ -42,15 +43,19 @@ dhallSchemaOf _ = case Dhall.expected (Dhall.auto @a) of
     Failure err    -> error $ show err
 
 -- | Parse Dhall text into a Haskell value.
-parseDhall :: forall b m. (FromDhall b, MonadIO m) => Text -> m (Either Text b)
+parseDhall :: forall b m. (FromDhall b, MonadIO m) => Text -> m (Either AgenticError b)
 parseDhall input = do
     result <- liftIO $ try $ Dhall.input Dhall.auto input
     case result of
         Right value -> pure $ Right value
-        Left (err :: SomeException) -> pure $ Left $ "Dhall parse error: " <> pack (show err) <> "\nInput was: " <> input
+        Left (err :: SomeException) ->
+            pure $ Left $ ParseError
+                { message  = "Dhall parse error: " <> pack (show err)
+                , rawInput = input
+                }
 
 -- | Like 'extractWith @Dhall' but retries once on parse failure.
-extractWithRetryDhall :: forall s m. (FromDhall s, ToDhall s, AgenticRWS m) => Agentic m Prompt (Either Text s)
+extractWithRetryDhall :: forall s m. (FromDhall s, ToDhall s, AgenticRWS m) => Agentic m Prompt (Either AgenticError s)
 extractWithRetryDhall = Agentic $ \prompt'@(Prompt system user) -> do
     let attemptRaw input' = do
             reply <- run runLLM input'
@@ -59,7 +64,7 @@ extractWithRetryDhall = Agentic $ \prompt'@(Prompt system user) -> do
     (reply, parsed) <- attemptRaw prompt'
     case parsed of
         Left err -> do
-            let instruction = Protocol.DhallSchema.Prompts.retryError err reply user
+            let instruction = Protocol.DhallSchema.Prompts.retryError err.message reply user
             (_reply', parsed') <- attemptRaw $ Prompt system instruction
             pure parsed'
         Right result -> pure $ Right result

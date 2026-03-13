@@ -5,6 +5,7 @@ import Test.Tasty.HUnit (testCase, (@?=), assertBool)
 import Data.Text (Text, isInfixOf, unpack)
 import Dhall (FromDhall, ToDhall)
 import GHC.Generics (Generic)
+import Agentic.Error (AgenticError(..))
 import Protocol.DhallSchema.Marshal (parseDhall, Dhall)
 import Protocol.Class (SchemaFormat(schemaOf))
 import Data.Data (Proxy(..))
@@ -37,9 +38,11 @@ tests = testGroup "Protocol.DhallSchema.Marshal"
         let input = "not valid dhall !!!"
         result <- parseDhall @SimpleRecord input
         case result of
-            Left msg -> assertBool ("error should mention 'Dhall parse error', got: " <> unpack msg)
-                                   ("Dhall parse error" `isInfixOf` msg)
-            Right _  -> fail "Expected parse failure"
+            Left (ParseError msg _) ->
+                assertBool ("error should mention 'Dhall parse error', got: " <> unpack msg)
+                           ("Dhall parse error" `isInfixOf` msg)
+            Left other  -> fail $ "Expected ParseError, got: " <> show other
+            Right _     -> fail "Expected parse failure"
 
     , testCase "parseDhall round-trips a sum type" $ do
         -- Dhall union type encoding: use let to define the type alias

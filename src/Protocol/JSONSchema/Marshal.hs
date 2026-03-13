@@ -1,12 +1,12 @@
 module Protocol.JSONSchema.Marshal where
 
+import           Agentic.Error           (AgenticError (..))
 import           Autodocodec             (HasCodec, eitherDecodeJSONViaCodec,
                                           encodeJSONViaCodec)
 import           Autodocodec.Schema      (jsonSchemaViaCodec)
 import           Control.Monad.IO.Class  (MonadIO)
 import           Data.Aeson              (encode)
 import qualified Data.ByteString.Lazy    as LB (fromStrict)
-import           Data.Either.Combinators (mapLeft)
 import           Data.Proxy              (Proxy)
 import           Data.Text               hiding (show)
 import           Data.Text.Encoding      (encodeUtf8)
@@ -22,9 +22,12 @@ instance SchemaFormat Json where
   schemaOf :: forall a. SchemaConstraint Json a => Proxy a -> Text
   schemaOf = jsonSchemaOf
 
-  parseWithSchema :: forall a m. MonadIO m => SchemaConstraint Json a => Proxy a -> Text -> m (Either Text a)
+  parseWithSchema :: forall a m. MonadIO m => SchemaConstraint Json a => Proxy a -> Text -> m (Either AgenticError a)
   parseWithSchema _ input =
-    pure $ mapLeft pack $ eitherDecodeJSONViaCodec (LB.fromStrict $ encodeUtf8 input)
+    pure $ either
+        (\errMsg -> Left $ ParseError { message = "JSON parse error: " <> pack errMsg, rawInput = input })
+        Right
+        (eitherDecodeJSONViaCodec (LB.fromStrict $ encodeUtf8 input))
 
   injectSchema :: forall a. SchemaConstraint Json a => Proxy a -> Text -> Text
   injectSchema proxy prompt =
