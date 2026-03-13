@@ -8,7 +8,7 @@ module Agentic.Schema.Dhall
   ) where
 
 import Agentic.Error (SchemaError(..))
-import Control.Exception (SomeException, try)
+import Control.Exception (SomeAsyncException, SomeException, fromException, throwIO, try)
 import Data.Either.Validation (Validation(..))
 import Data.Proxy (Proxy(..))
 import Data.Text (Text, pack)
@@ -26,9 +26,11 @@ dhallSchemaOf _ = case Dhall.expected (Dhall.auto @a) of
 parseDhall :: forall a. FromDhall a => Text -> IO (Either SchemaError a)
 parseDhall input = do
   result <- try @SomeException $ Dhall.input Dhall.auto input
-  pure $ case result of
-    Right value -> Right value
-    Left err    -> Left $ DhallParseError $ pack $ show err
+  case result of
+    Right value -> pure $ Right value
+    Left err    -> case fromException @SomeAsyncException err of
+      Just async -> throwIO async
+      Nothing    -> pure $ Left $ DhallParseError $ pack $ show err
 
 -- | Inject the Dhall schema for @a@ into a user prompt.
 injectDhallSchema :: forall a. (FromDhall a, ToDhall a) => Proxy a -> Text -> Text
