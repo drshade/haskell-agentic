@@ -37,13 +37,14 @@ import Effectful.State.Static.Local (evalState, get, modify, put)
 import Effectful.TH (makeEffect)
 import GHC.Generics (Generic)
 import GHC.Natural (Natural)
+import System.IO (hPutStrLn, stderr)
 
 -- ---------------------------------------------------------------------------
 -- Request / Response types
 -- ---------------------------------------------------------------------------
 
 data LLMMessage = LLMMessage
-  { role    :: Text
+  { role    :: Text  -- ^ Valid values: "user", "assistant", "tool"
   , content :: Text
   } deriving (Show, Generic)
 
@@ -109,8 +110,15 @@ data Event
   = LLMCallStarted  LLMRequest
   | LLMCallCompleted LLMResponse
   | LLMCallFailed   LLMError
-  | SchemaExtractAttempt Natural SchemaFormatTag
-  | SchemaExtractSuccess SchemaFormatTag
+  | SchemaExtractAttempt
+      { attempt      :: Natural
+      , schemaFormat :: SchemaFormatTag
+      , targetType   :: Text
+      }
+  | SchemaExtractSuccess
+      { schemaFormat :: SchemaFormatTag
+      , targetType   :: Text
+      }
   | SchemaExtractFailed  SchemaError
   | ToolDispatched Text
   | ToolSucceeded  Text
@@ -136,7 +144,7 @@ runEventsNoop = interpret $ \_ (Emit _) -> pure ()
 
 runEventsStdout :: IOE :> es => Eff (AgentEvents : es) a -> Eff es a
 runEventsStdout = interpret $ \_ (Emit event) ->
-  liftIO $ putStrLn $ "[AgentEvent] " ++ show event
+  liftIO $ hPutStrLn stderr $ "[AgentEvent] " ++ show event
 
 runAgentConfig :: Maybe Text -> Text -> Eff (AgentConfig : es) a -> Eff es a
 runAgentConfig sysPrompt modelName = interpret $ \_ eff -> case eff of
