@@ -2,6 +2,7 @@ module Agentic.Error
     ( AgenticError(..)
     ) where
 
+import Control.Exception (Exception)
 import Data.Text (Text)
 
 -- | Errors that can occur during agent execution.
@@ -17,3 +18,5 @@ data AgenticError
         { message :: Text   -- ^ Error generating or applying a schema
         }
     deriving (Show, Eq)
+
+instance Exception AgenticError
