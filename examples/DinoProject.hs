@@ -2,13 +2,14 @@
 
 module DinoProject where
 
-import Agentic
-import Agentic.Provider.Anthropic (defaultAnthropicConfig, runAnthropic)
-import Control.Monad ((>=>))
-import Data.Text (Text)
-import Dhall (FromDhall, ToDhall)
-import Effectful.Error.Static (Error, runError)
-import GHC.Generics (Generic)
+import           Agentic
+import           Agentic.Provider.Anthropic (defaultAnthropicConfig,
+                                             runAnthropic)
+import           Control.Monad              ((>=>))
+import           Data.Text                  (Text, unpack)
+import           Dhall                      (FromDhall, ToDhall)
+import           Effectful.Error.Static     (Error, runError)
+import           GHC.Generics               (Generic)
 
 -- Types
 
@@ -34,8 +35,8 @@ data DinoTrumpCard = DinoTrumpCard
 
 -- Wrapper record for passing all three pieces to buildPoster
 data DinoEntry = DinoEntry
-  { dino     :: Dino
-  , pic      :: DinoPic
+  { dino      :: Dino
+  , pic       :: DinoPic
   , trumpCard :: DinoTrumpCard
   }
   deriving (Generic, Show, FromDhall, ToDhall)
@@ -96,4 +97,4 @@ runDinoProject = do
   case result of
     Left (_, llmErr)            -> putStrLn $ "LLM error: "    ++ show llmErr
     Right (Left (_, schemaErr)) -> putStrLn $ "Schema error: " ++ show schemaErr
-    Right (Right posterText)    -> putStrLn (show posterText)
+    Right (Right posterText)    -> putStrLn (unpack posterText)
