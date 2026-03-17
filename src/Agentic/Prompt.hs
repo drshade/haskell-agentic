@@ -9,7 +9,7 @@ module Agentic.Prompt
   ) where
 
 import Agentic.Effects
-  ( LLM, LLMMessage(..), LLMRequest(..)
+  ( LLM, LLMMessage(..), LLMRequest(..), LLMResponse(..)
   , AgentEvents
   , call
   )
@@ -44,7 +44,8 @@ prompt userMsg = do
         , systemPrompt = Nothing
         }
   resp <- call req
-  pure $ fromMaybe "" resp.content
+  let LLMResponse { llmContent } = resp
+  pure $ fromMaybe "" llmContent
 
 -- | Extract a typed Dhall value from an LLM response (default schema: Dhall).
 -- Retries up to 3 times on parse failure, feeding the error back to the LLM.

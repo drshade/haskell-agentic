@@ -1,3 +1,4 @@
+{-# LANGUAGE MultilineStrings #-}
 module Agentic.Schema.Dhall
   ( dhallSchemaOf
   , parseDhall

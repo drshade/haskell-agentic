@@ -39,7 +39,7 @@ withRetry maxAttempts initialReq fmtTag typeName parser =
       | otherwise = do
           emit $ SchemaExtractAttempt { attempt, schemaFormat = fmtTag, targetType = typeName }
           resp <- call req
-          case resp.content of
+          case resp.llmContent of
             Nothing -> do
               let err = DhallParseError "LLM returned no content"
               throwError err
