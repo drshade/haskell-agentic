@@ -49,6 +49,9 @@ module Agentic
   , (:>)
   , IOE
   , liftIO
+    -- * Concurrent effect
+  , Concurrent
+  , runConcurrent
   ) where
 
 import Agentic.Core (Agent, fanoutMap, sequential)
@@ -64,3 +67,4 @@ import Agentic.Prompt (prompt, extract, extractDhall, extractJson, extractWith, 
 import Agentic.Schema (SchemaFormat(..))
 import Agentic.Tools (Tool(..), ToolName(..), mkTool, dispatchTool)
 import Effectful (Eff, runEff, (:>), IOE, liftIO)
+import Effectful.Concurrent (Concurrent, runConcurrent)

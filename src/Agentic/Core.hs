@@ -6,13 +6,14 @@ module Agentic.Core
 
 import Control.Monad ((>=>))
 import Effectful (Eff, IOE, (:>))
-import UnliftIO.Async (mapConcurrently)
+import Effectful.Concurrent (Concurrent)
+import Effectful.Concurrent.Async (mapConcurrently)
 
 -- | An agent is a plain effectful function from input to output.
 type Agent es a b = a -> Eff es b
 
 -- | Map an agent over a list, running each element concurrently.
-fanoutMap :: IOE :> es => Agent es a b -> Agent es [a] [b]
+fanoutMap :: (IOE :> es, Concurrent :> es) => Agent es a b -> Agent es [a] [b]
 fanoutMap agent inputs = mapConcurrently agent inputs
 
 -- | Sequential composition: feed output of first agent into second.

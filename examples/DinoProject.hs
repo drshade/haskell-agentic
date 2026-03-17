@@ -45,6 +45,7 @@ data DinoEntry = DinoEntry
 type DinoEffects es =
   ( LLM :> es
   , IOE :> es
+  , Concurrent :> es
   , AgentEvents :> es
   , Error SchemaError :> es
   )
@@ -86,6 +87,7 @@ dinoProject = suggestDinos >=> fanoutMap researchOneDino >=> buildPoster
 runDinoProject :: IO ()
 runDinoProject = do
   result <- runEff
+    . runConcurrent
     . runAnthropic defaultAnthropicConfig
     . runEventsNoop
     . runError @LLMError
