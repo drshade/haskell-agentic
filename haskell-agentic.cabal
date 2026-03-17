@@ -66,6 +66,7 @@ library
     containers,
     dhall >=1.41 && <1.43,
     either,
+    effectful,
     effectful-core,
     effectful-th,
     http-client,
@@ -94,6 +95,7 @@ test-suite haskell-agentic-tests
   build-depends:
     base >=4.7 && <5,
     haskell-agentic,
+    effectful,
     effectful-core,
     dhall >=1.41 && <1.43,
     hspec,
@@ -115,6 +117,7 @@ executable haskell-agentic-examples
   build-depends:
     base >=4.7 && <5,
     dhall >=1.41 && <1.43,
+    effectful,
     effectful-core,
     haskell-agentic,
     text,
