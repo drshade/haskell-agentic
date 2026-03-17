@@ -8,7 +8,6 @@ import Agentic.Effects
   , call, emit
   )
 import Agentic.Error (SchemaError(..))
-import Agentic.Schema.Dhall (dhallRetryPrompt)
 import Data.Text (Text)
 import Effectful (Eff, (:>))
 import Effectful.Error.Static (Error, throwError)
@@ -26,9 +25,10 @@ withRetry
   -> LLMRequest                                   -- ^ Initial request
   -> SchemaFormatTag                              -- ^ For observability events
   -> Text                                         -- ^ Type name (for observability)
+  -> (Text -> Text -> Text -> Text)               -- ^ Retry prompt builder: err -> badReply -> originalInstruction -> retryMsg
   -> (Text -> Eff es (Either SchemaError a))      -- ^ Parser: responseText -> Either error value
   -> Eff es a
-withRetry maxAttempts initialReq fmtTag typeName parser =
+withRetry maxAttempts initialReq fmtTag typeName retryMsgBuilder parser =
   go 1 initialReq
   where
     go attempt req
@@ -51,15 +51,15 @@ withRetry maxAttempts initialReq fmtTag typeName parser =
                   pure value
                 Left err -> do
                   emit $ RetryAttempt { attempt, maxAttempts, reason = err }
-                  let retryReq = appendRetryContext req responseText err
+                  let retryReq = appendRetryContext retryMsgBuilder req responseText err
                   go (attempt + 1) retryReq
 
 -- | Append the error context to the conversation for the next retry attempt.
-appendRetryContext :: LLMRequest -> Text -> SchemaError -> LLMRequest
-appendRetryContext req badResponse err =
+appendRetryContext :: (Text -> Text -> Text -> Text) -> LLMRequest -> Text -> SchemaError -> LLMRequest
+appendRetryContext retryMsgBuilder req badResponse err =
   let originalInstruction = lastUserMsg req.messages
       errorText = renderSchemaError err
-      retryMsg = dhallRetryPrompt errorText badResponse originalInstruction
+      retryMsg = retryMsgBuilder errorText badResponse originalInstruction
   in req { messages = req.messages
              ++ [ LLMMessage { role = "assistant", content = badResponse }
                 , LLMMessage { role = "user",      content = retryMsg    }
