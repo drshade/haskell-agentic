@@ -1,11 +1,13 @@
 module Main where
 
-import Agentic
-import Agentic.Provider.Anthropic (runAnthropic, defaultAnthropicConfig)
-import Data.Text (Text)
-import Effectful.Error.Static (runError)
-import GHC.Generics (Generic)
-import Dhall (FromDhall, ToDhall)
+import           Agentic
+import           Agentic.Provider.Anthropic (defaultAnthropicConfig,
+                                             runAnthropic)
+import           Data.Text                  (Text)
+import           Dhall                      (FromDhall, ToDhall)
+import           DinoProject                (runDinoProject)
+import           Effectful.Error.Static     (runError)
+import           GHC.Generics               (Generic)
 
 data Joke = Joke
   { genre     :: Text
@@ -17,8 +19,8 @@ data Joke = Joke
 -- Note: runAgentConfig and runAgentSession are not needed here because
 -- 'extract' only requires LLM, IOE, AgentEvents, and Error SchemaError effects.
 -- Those effects are used for stateful multi-turn conversations (future feature).
-main :: IO ()
-main = do
+programmingJoke :: IO ()
+programmingJoke = do
   result <- runEff
     . runAnthropic defaultAnthropicConfig
     . runEventsNoop
@@ -33,3 +35,6 @@ main = do
       putStrLn $ "Genre: "     ++ show g
       putStrLn $ "Setup: "     ++ show s
       putStrLn $ "Punchline: " ++ show p
+
+main :: IO ()
+main = runDinoProject
