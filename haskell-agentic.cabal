@@ -61,6 +61,11 @@ library
     Agentic.Error
     Agentic.Provider.Anthropic
 
+  other-modules:
+    LLM.Anthropic.Client
+    LLM.Anthropic.Types
+    LLM.Client
+
   default-extensions:
     AllowAmbiguousTypes
     DataKinds

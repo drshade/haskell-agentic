@@ -1,6 +1,6 @@
 module Agentic.Effects
   ( -- * LLM effect
-    LLM
+    LLM(..)
   , LLMRequest(..)
   , LLMResponse(..)
   , LLMMessage(..)
