@@ -1,26 +1,66 @@
--- | Public re-export module for haskell-agentic.
--- Re-exports the core API from all Agentic.* sub-modules.
+-- | Public API for haskell-agentic.
+-- Import this module for everything you need to build agents.
 module Agentic
-  ( -- * Core agent type and combinators
-    module Agentic.Core
+  ( -- * Agent type
+    Agent
+  , fanoutMap
+  , sequential
+    -- * Core primitives
+  , prompt
+  , extract
+  , extractDhall
+  , extractJson
+  , extractWith
+  , inject
+  , injectJson
+    -- * Schema format
+  , SchemaFormat(..)
     -- * Effects
-  , module Agentic.Effects
-    -- * Error types
-  , module Agentic.Error
-    -- * Schema
-  , module Agentic.Schema
+  , LLM
+  , AgentEvents
+  , AgentConfig
+  , AgentSession
+    -- * LLM request/response types
+  , LLMRequest(..)
+  , LLMResponse(..)
+  , LLMMessage(..)
+    -- * Effect smart constructors
+  , call
+  , emit
+    -- * Event types
+  , Event(..)
+    -- * Effect interpreters
+  , runEventsNoop
+  , runEventsStdout
+  , runAgentConfig
+  , runAgentSession
+    -- * Errors
+  , SchemaError(..)
+  , LLMError(..)
+  , ToolError(..)
     -- * Tools
-  , module Agentic.Tools
-    -- * Prompt / extract API
-  , module Agentic.Prompt
-    -- * Retry logic
-  , module Agentic.Retry
+  , Tool(..)
+  , ToolName(..)
+  , mkTool
+  , dispatchTool
+    -- * Re-exports from effectful
+  , Eff
+  , runEff
+  , (:>)
+  , IOE
+  , liftIO
   ) where
 
-import Agentic.Core
+import Agentic.Core (Agent, fanoutMap, sequential)
 import Agentic.Effects
-import Agentic.Error
-import Agentic.Schema
-import Agentic.Tools
-import Agentic.Prompt
-import Agentic.Retry
+  ( LLM, AgentEvents, AgentConfig, AgentSession
+  , LLMRequest(..), LLMResponse(..), LLMMessage(..)
+  , call, emit
+  , Event(..)
+  , runEventsNoop, runEventsStdout, runAgentConfig, runAgentSession
+  )
+import Agentic.Error (SchemaError(..), LLMError(..), ToolError(..))
+import Agentic.Prompt (prompt, extract, extractDhall, extractJson, extractWith, inject, injectJson)
+import Agentic.Schema (SchemaFormat(..))
+import Agentic.Tools (Tool(..), ToolName(..), mkTool, dispatchTool)
+import Effectful (Eff, runEff, (:>), IOE, liftIO)
