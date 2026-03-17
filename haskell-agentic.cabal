@@ -107,9 +107,12 @@ library
 executable haskell-agentic-examples
   import: warnings
   main-is: Main.hs
+  other-modules:
+    DinoProject
   hs-source-dirs: examples
   default-language: GHC2024
   default-extensions:
+    ConstraintKinds
     DeriveAnyClass
     DeriveGeneric
     OverloadedStrings
