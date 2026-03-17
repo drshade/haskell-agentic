@@ -4,10 +4,14 @@ module Agentic.Provider.Anthropic
   , runAnthropic
   ) where
 
-import Agentic.Effects (LLM(..), LLMRequest(..), LLMResponse(..), LLMMessage(..), LLMUsage(..))
+import Agentic.Effects (LLM(..), LLMRequest(..), LLMResponse(..), LLMMessage(..), LLMUsage(..), ToolSchema(..), ToolCall(..))
 import Control.Exception (SomeException, try, throwIO)
+import Data.Aeson (object, (.=))
+import qualified Data.Aeson as Aeson
+import qualified Data.ByteString.Lazy as BSL
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Text.Encoding (decodeUtf8)
 import Effectful (Eff, IOE, (:>), liftIO)
 import Effectful.Dispatch.Dynamic (interpret)
 import qualified LLM.Anthropic.Client as Anthropic
@@ -55,7 +59,7 @@ toAnthropicRequest mdl req = AT.MessagesRequest
   , AT.maxTokens     = 10240
   , AT.system        = fmap (\txt -> [AT.SystemPrompt txt Nothing]) req.systemPrompt
   , AT.temperature   = Nothing
-  , AT.tools         = Nothing
+  , AT.tools         = toAnthropicTools req.tools
   , AT.toolChoice    = Nothing
   , AT.stopSequences = Nothing
   , AT.stream        = Nothing
@@ -68,6 +72,16 @@ toAnthropicMessage msg = AT.Message
   , AT.content = [AT.TextContent { AT.text = msg.content }]
   }
 
+toAnthropicTools :: [ToolSchema] -> Maybe [AT.Tool]
+toAnthropicTools [] = Nothing
+toAnthropicTools schemas = Just $ map convert schemas
+  where
+    convert ts = AT.Tool
+      { AT.name        = ts.name
+      , AT.description = Just ts.description
+      , AT.inputSchema = object ["type" .= ("object" :: Text), "description" .= ts.inputSchema]
+      }
+
 -- ---------------------------------------------------------------------------
 -- Translation: Anthropic → generic
 -- ---------------------------------------------------------------------------
@@ -75,7 +89,7 @@ toAnthropicMessage msg = AT.Message
 fromAnthropicResponse :: AT.MessagesResponse -> LLMResponse
 fromAnthropicResponse resp = LLMResponse
   { llmContent = extractText resp.content
-  , toolCalls  = []   -- wired in Task 13
+  , toolCalls  = extractToolCalls resp.content
   , usage      = Just (fromAnthropicUsage resp.usage)
   }
 
@@ -84,6 +98,16 @@ extractText blocks =
   case [t | AT.ResponseTextContent t <- blocks] of
     (t : _) -> Just t
     []      -> Nothing
+
+extractToolCalls :: [AT.ResponseContentBlock] -> [ToolCall]
+extractToolCalls blocks =
+  [ ToolCall
+      { callId = rcId
+      , name   = n
+      , input  = decodeUtf8 $ BSL.toStrict $ Aeson.encode inp
+      }
+  | AT.ResponseToolUseContent rcId n inp <- blocks
+  ]
 
 fromAnthropicUsage :: AT.Usage -> LLMUsage
 fromAnthropicUsage u = LLMUsage
