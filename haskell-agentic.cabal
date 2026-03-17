@@ -104,6 +104,27 @@ library
   hs-source-dirs: src
   default-language: GHC2024
 
+test-suite haskell-agentic-tests
+  import: warnings
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+    Test.MockLLM
+    Test.RetrySpec
+  hs-source-dirs: test
+  default-language: GHC2024
+  default-extensions:
+    OverloadedStrings
+    TypeApplications
+    ScopedTypeVariables
+  build-depends:
+    base >=4.7 && <5,
+    haskell-agentic,
+    effectful-core,
+    dhall >=1.41 && <1.43,
+    hspec,
+    text,
+
 executable haskell-agentic-examples
   import: warnings
   main-is: Main.hs
