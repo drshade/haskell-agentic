@@ -13,13 +13,10 @@ import           Control.Exception     (throwIO)
 import           Data.Aeson            (decode, encode)
 import qualified Data.ByteString.Char8 as BS8
 import           Network.HTTP.Simple
-import qualified System.Environment    as Environment
 
 -- | Send a message to the Anthropic API and get a response
-messages :: MessagesRequest -> IO MessagesResponse
-messages req = do
-  apiKey <- Environment.getEnv "ANTHROPIC_KEY"
-
+messages :: String -> MessagesRequest -> IO MessagesResponse
+messages apiKey req = do
   let baseRequest = "POST https://api.anthropic.com/v1/messages"
   request <- parseRequest baseRequest
 

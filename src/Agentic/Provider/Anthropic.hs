@@ -5,13 +5,14 @@ module Agentic.Provider.Anthropic
   ) where
 
 import Agentic.Effects (LLM(..), LLMRequest(..), LLMResponse(..), LLMMessage(..), LLMUsage(..))
+import Control.Exception (SomeException, try, throwIO)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Effectful (Eff, IOE, (:>), liftIO)
 import Effectful.Dispatch.Dynamic (interpret)
 import qualified LLM.Anthropic.Client as Anthropic
 import qualified LLM.Anthropic.Types as AT
-import System.Environment (setEnv)
+import System.Environment (getEnv)
 
 -- ---------------------------------------------------------------------------
 -- Configuration
@@ -33,16 +34,15 @@ defaultAnthropicConfig = AnthropicConfig
 -- ---------------------------------------------------------------------------
 
 runAnthropic :: (IOE :> es) => AnthropicConfig -> Eff (LLM : es) a -> Eff es a
-runAnthropic cfg = interpret $ \_ (Call req) -> liftIO $ do
-  -- If an API key is provided in config, set it in the environment so the
-  -- underlying client can pick it up (client always reads ANTHROPIC_KEY).
-  case cfg.apiKey of
-    Nothing  -> pure ()
-    Just key -> setEnv "ANTHROPIC_KEY" (T.unpack key)
-
+runAnthropic cfg = interpret $ \_ (Call req) -> do
+  key <- case cfg.apiKey of
+    Just k  -> pure (T.unpack k)
+    Nothing -> liftIO $ getEnv "ANTHROPIC_KEY"
   let anthropicReq = toAnthropicRequest cfg.model req
-  resp <- Anthropic.messages anthropicReq
-  pure (fromAnthropicResponse resp)
+  result <- liftIO $ try @SomeException $ Anthropic.messages key anthropicReq
+  case result of
+    Left ex   -> liftIO $ throwIO ex
+    Right resp -> pure (fromAnthropicResponse resp)
 
 -- ---------------------------------------------------------------------------
 -- Translation: generic → Anthropic

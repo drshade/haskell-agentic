@@ -5,6 +5,7 @@ import           LLM.Anthropic.Types
 
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Text              as Text
+import           System.Environment     (getEnv)
 
 -- | Simple chat function that takes system and user prompts and returns the response text
 chat :: MonadIO m => Text.Text -> Text.Text -> m Text.Text
@@ -29,7 +30,8 @@ chat systemPrompt userPrompt = liftIO $ do
         , metadata = Nothing
         }
 
-  response <- Anthropic.messages request
+  apiKey <- getEnv "ANTHROPIC_KEY"
+  response <- Anthropic.messages apiKey request
 
   -- liftIO $ putStrLn $ "Got back " <> (show $ length response.content) <> " blocks!"
 
