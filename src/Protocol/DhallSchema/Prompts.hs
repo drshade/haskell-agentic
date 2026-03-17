@@ -1,3 +1,4 @@
+{-# LANGUAGE MultilineStrings #-}
 module Protocol.DhallSchema.Prompts where
 
 import Data.Text

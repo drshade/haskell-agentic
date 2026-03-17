@@ -32,8 +32,8 @@ module Agentic.Effects
 import Agentic.Error (LLMError, SchemaError, ToolError)
 import Data.Text (Text)
 import Effectful (Eff, Effect, IOE, (:>), liftIO)
-import Effectful.Dispatch.Dynamic (interpret, reinterpret)
-import Effectful.State.Static.Local (evalState, get, modify, put)
+import Data.IORef (IORef, modifyIORef, newIORef, readIORef, writeIORef)
+import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.TH (makeEffect)
 import GHC.Generics (Generic)
 import GHC.Natural (Natural)
@@ -72,9 +72,9 @@ data LLMRequest = LLMRequest
   } deriving (Show, Generic)
 
 data LLMResponse = LLMResponse
-  { content   :: Maybe Text
-  , toolCalls :: [ToolCall]
-  , usage     :: Maybe LLMUsage
+  { llmContent :: Maybe Text
+  , toolCalls  :: [ToolCall]
+  , usage      :: Maybe LLMUsage
   } deriving (Show, Generic)
 
 -- ---------------------------------------------------------------------------
@@ -151,9 +151,11 @@ runAgentConfig sysPrompt modelName = interpret $ \_ eff -> case eff of
   GetSystemPrompt -> pure sysPrompt
   GetModel        -> pure modelName
 
-runAgentSession :: Eff (AgentSession : es) a -> Eff es a
-runAgentSession = evalState ([] :: [LLMMessage]) . reinterpret go
-  where
-    go _ GetMessages       = get
-    go _ (AppendMessage m) = modify (++ [m])
-    go _ ClearMessages     = put ([] :: [LLMMessage])
+runAgentSession :: IOE :> es => Eff (AgentSession : es) a -> Eff es a
+runAgentSession action = do
+  ref <- liftIO $ newIORef ([] :: [LLMMessage])
+  interpret (\_ eff -> case eff of
+    GetMessages       -> liftIO $ readIORef ref
+    AppendMessage m   -> liftIO $ modifyIORef ref (++ [m])
+    ClearMessages     -> liftIO $ writeIORef ref []
+    ) action
