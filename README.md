@@ -3,8 +3,10 @@
 Composable agentic workflows in Haskell: typed steps, mixing LLMs and
 [Jev](https://docs.typesafe.ai), that you can inspect before you run them.
 
-> **Status:** this README is the v2 design spec. Nothing below is implemented yet.
-> The examples are the target API, and they're what we build towards.
+> **Status:** v2 in progress. The core package (`agentic/`) implements the design
+> below and runs against scripted providers. The provider packages
+> (`agentic-anthropic`, `agentic-openai`, `agentic-jev`, `agentic-io`) aren't
+> written yet. `cabal run dino` runs the dino project against a mock.
 
 ## The idea
 
@@ -262,17 +264,18 @@ All of these are ordinary `Arrow` and `ArrowChoice` combinators.
 
 ```
 ghci> describe dinoProject
-draft   [Text]
+draft [Text]  "Suggest 3 dinosaurs for a grade 5 project"
 each
-├─ draft Dino
-│  ├─ tool search       act
-│  └─ tool is_reliable  judge yes/no
-├─ gate 0.9             judge yes/no "Is this suitable for a 10-year-old?"
-│  ├─ fail → draft Dino "rewrite this for a 10-year-old"
-│  └─ pass → returnA
-├─ draft DinoPic
-└─ draft TrumpCard
-draft   Poster
+├─ draft Dino  "Research this dinosaur. Cite a source for every claim."
+│  ├─ tool search  act
+│  └─ tool is_reliable  judge yes/no "Is this a reliable scientific source?"
+├─ gate 0.9  judge yes/no "Is this suitable for a 10-year-old?"
+├─ branch
+│  ├─ left → draft Dino  "Rewrite this for a 10-year-old"
+│  └─ right → pass
+├─ draft DinoPic  "Draw an ascii picture of this dinosaur, 10 lines high"
+└─ draft TrumpCard  "Make a trump card for this dinosaur"
+draft Poster  "Create a poster for these dinosaurs"
 ```
 
 `describe` returns a `Description`, a plain data type whose `Show` instance is the
@@ -283,19 +286,19 @@ for UIs and other agents. You can also walk it yourself:
 describe :: Agentic m i o -> Description
 
 data Description
-  = Leaf     StepInfo
-  | Sequence [Description]            -- a >>> b >>> c, flattened
-  | Together [Description]            -- a &&& b &&& c, flattened
-  | OnFirst  Description
-  | Branch   Description Description
-  | Each     Description
-  | Noted    Note Description
+  = Leaf      StepInfo
+  | Sequence  [Description]           -- a >>> b >>> c, flattened
+  | Together  [Description]           -- a &&& b &&& c, flattened
+  | OnFirst   Description
+  | Branch    Description Description
+  | ForEach   Description
+  | Annotated Note Description
 
 data StepInfo
   = Glue                              -- arr
   | Effect                            -- act
-  | Draft { instruction :: Instruction, input, output :: Schema, tools :: [ToolInfo] }
-  | Judge { state :: Schema, questions :: [QuestionSpec] }
+  | DraftInfo { draftInstruction :: Instruction, draftInput, draftOutput :: Schema, draftTools :: [ToolInfo] }
+  | JudgeInfo { judgeState :: Schema, judgeQuestions :: [QuestionSpec] }
 ```
 
 A `Description` is simplified rather than a literal copy of the flow: chains are

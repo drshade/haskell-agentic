@@ -1,0 +1,20 @@
+cabal-version:      3.0
+name:               agentic-examples
+version:            0.2.0.0
+synopsis:           The examples from the haskell-agentic README
+license:            MIT
+build-type:         Simple
+
+executable dino
+  default-language: GHC2021
+  default-extensions:
+    DeriveAnyClass
+    LambdaCase
+    OverloadedStrings
+  ghc-options:      -Wall
+  hs-source-dirs:   .
+  main-is:          Dino.hs
+  build-depends:
+    , agentic
+    , base
+    , text
