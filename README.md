@@ -364,10 +364,12 @@ for the model. A name is written for whoever is watching the flow.
 
 ## Tic-tac-toe
 
-Claude plays X against an opponent written in code. The board lives in an
-`IORef` and Claude's only tools are `look` and `play`. The draft step can't
-finish until Claude reports an `Outcome`, and a final `act` checks that claim
-against the real board.
+An OpenAI model plays X against an opponent written in code. The board lives in
+an `IORef` and the model's only tools are `look` and `play`. The draft step
+can't finish until the model reports an `Outcome`, and a final `act` checks that
+claim against the real board. It runs on OpenAI (`withSystemTwo (openai & effort
+Low)`) where the dino project runs on Claude; the flow code is the same either
+way.
 
 ```haskell
 game :: IORef Board -> Agentic IO () (Outcome, Outcome)
@@ -388,19 +390,19 @@ A `Move` is a row and a column, each a `Coordinate` whose contract says "From
 has no special machinery for this. `cabal run tictactoe` plays a game:
 
 ```
-play {"column":2,"row":2}
-O . .
-. X .
+play {"column":1,"row":1}
+X O .
+. . .
 . . .
 Your move.
 …
-play {"column":1,"row":3}
-O O X
-. X O
-X . X
+play {"column":1,"row":2}
+X O O
+X X .
+X . O
 Game over: you won.
 
-Claude says: Won. The board says: Won.
+The model says: Won. The board says: Won.
 ```
 
 ## Running flows

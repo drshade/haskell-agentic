@@ -52,7 +52,7 @@ executable tictactoe
   main-is:          TicTacToe.hs
   build-depends:
     , agentic
-    , agentic-anthropic
+    , agentic-openai
     , agentic-io
     , base
     , text

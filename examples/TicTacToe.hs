@@ -1,11 +1,11 @@
--- | Claude plays tic-tac-toe against code, using tools. The board lives in an
--- IORef; Claude's only tools are @look@ and @play@. The draft step can't end
--- until Claude reports an 'Outcome', and a final @act@ checks that claim
--- against the real board. Needs ANTHROPIC_API_KEY, in the environment or .env.
+-- | An OpenAI model plays tic-tac-toe against code, using tools. The board lives
+-- in an IORef; the model's only tools are @look@ and @play@. The draft step
+-- can't end until the model reports an 'Outcome', and a final @act@ checks that
+-- claim against the real board. Needs OPENAI_API_KEY, in the environment or .env.
 module Main (main) where
 
 import Agentic
-import Agentic.Anthropic (anthropic)
+import Agentic.OpenAI (openai)
 import Agentic.IO (loadDotEnv)
 import Data.IORef
 import Data.List (find, transpose)
@@ -52,7 +52,7 @@ render :: Board -> Text
 render b = T.intercalate "\n" [T.intercalate " " [maybe "." (T.pack . show) sq | sq <- row] | row <- b]
 
 -- ---------------------------------------------------------------------------
--- What Claude sees
+-- What the model sees
 
 -- | A square, from 1 to 3. The contract tells the model the range and checks it.
 newtype Coordinate = Coordinate Int
@@ -133,7 +133,7 @@ main = do
   board <- newIORef empty
   print $ describe (game board)
   rt <-
-    pure runtime >>= withSystemTwo (anthropic & effort Low)
+    pure runtime >>= withSystemTwo (openai & effort Low)
   let watched =
         observing
           ( \e -> case happened e of
@@ -143,4 +143,4 @@ main = do
           )
           rt
   (claimed, real) <- interpret watched (game board) ()
-  T.putStrLn ("\nClaude says: " <> T.pack (show claimed) <> ". The board says: " <> T.pack (show real) <> ".")
+  T.putStrLn ("\nThe model says: " <> T.pack (show claimed) <> ". The board says: " <> T.pack (show real) <> ".")
