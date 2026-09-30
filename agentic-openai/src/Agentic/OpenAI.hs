@@ -14,7 +14,7 @@ module Agentic.OpenAI
 
 import Agentic.Aeson (fromAeson)
 import Agentic.Core (Instruction (..))
-import Agentic.JsonSchema (objectSchema, unwrap)
+import Agentic.JsonSchema (objectSchema, schemaName, unwrap)
 import Agentic.Runtime
 import Agentic.Schema (Schema)
 import Agentic.Settings
@@ -146,7 +146,7 @@ requestBody cfg c =
                [ ( "format"
                  , A.Object
                      [ ("type", A.String "json_schema")
-                     , ("name", A.String "output")
+                     , ("name", A.String (schemaName (output c)))
                      , ("schema", objectSchema (output c))
                      , ("strict", A.Bool True)
                      ]

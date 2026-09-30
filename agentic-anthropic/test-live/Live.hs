@@ -20,6 +20,15 @@ data BetterJoke
   | KnockKnock {whosThere :: Text, punchline' :: Text}
   deriving (Generic, Show, Contract)
 
+data Square = Blank | X | O
+  deriving (Generic, Show, Eq, Contract)
+
+data Row = Row {left :: Square, centre :: Square, right :: Square}
+  deriving (Generic, Show, Contract)
+
+data Board = Board {top :: Row, middle :: Row, bottom :: Row}
+  deriving (Generic, Show, Contract)
+
 newtype Rating = Rating Int
   deriving (Show, Eq)
 
@@ -66,6 +75,11 @@ main = do
         rt <- withClaude
         Rating n <- interpret rt (draft @Rating "Rate this joke") (Joke "pun" "Why was the scarecrow promoted?" "He was outstanding in his field.")
         n `shouldSatisfy` (\x -> x >= 1 && x <= 10)
+
+      it "drafts a type whose schema shares repeated parts through $defs" $ do
+        rt <- withClaude
+        b <- interpret rt (draft @Board "An empty tic-tac-toe board with X in the centre") ()
+        b.middle.centre `shouldBe` X
 
       it "stands in as System One" $ do
         rt <- pure runtime >>= withSystemOne fast

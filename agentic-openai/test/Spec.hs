@@ -8,8 +8,18 @@ import qualified Data.Aeson as J
 import qualified Data.Aeson.KeyMap as KeyMap
 import Data.Maybe (fromJust)
 import Data.Text (Text)
+import GHC.Generics (Generic)
 import Test.Hspec hiding (describe)
 import qualified Test.Hspec
+
+data Square = Blank | X | O
+  deriving (Generic, Show, Contract)
+
+data Row = Row {left :: Square, centre :: Square, right :: Square}
+  deriving (Generic, Show, Contract)
+
+data Board = Board {top :: Row, middle :: Row, bottom :: Row}
+  deriving (Generic, Show, Contract)
 
 conversation :: Conversation
 conversation =
@@ -44,6 +54,13 @@ main = hspec $ Test.Hspec.describe "Agentic.OpenAI" $ do
             \\"properties\":{\"value\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},\
             \\"required\":[\"value\"],\"additionalProperties\":false}}"
         )
+
+  it "names the schema after its type, and shares repeated types through $defs" $ do
+    let format = at "format" (at "text" (body conversation {output = codecSchema (contract @Board)}))
+        schema = at "schema" format
+    at "name" format `shouldBe` J.String "Board"
+    at "top" (at "properties" schema) `shouldBe` fromJust (J.decode "{\"$ref\":\"#/$defs/Row\"}")
+    KeyMap.keys (case at "$defs" schema of J.Object o -> o; _ -> mempty) `shouldMatchList` ["Row", "Square"]
 
   it "stores nothing, and asks for reasoning it can send back" $ do
     at "store" (body conversation) `shouldBe` J.Bool False
