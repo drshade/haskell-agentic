@@ -7,7 +7,7 @@ module Main (main) where
 
 import Agentic
 import Agentic.Anthropic (anthropic)
-import Agentic.IO.DotEnv (loadDotEnv)
+import Agentic.IO (concurrently, loadDotEnv)
 import Agentic.Jev (jev)
 import Data.List (partition)
 import Data.Text (Text)
@@ -107,7 +107,7 @@ main :: IO ()
 main = do
   _ <- loadDotEnv
   print $ describe dinoProject
-  rt <- pure runtime 
+  rt <- pure (concurrently runtime)
               >>= withSystemOne jev 
               >>= withSystemTwo (anthropic & effort Low)
   poster <- interpret rt dinoProject ()

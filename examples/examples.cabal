@@ -39,3 +39,20 @@ executable review
     , agentic-jev
     , base
     , text
+
+executable tictactoe
+  default-language: GHC2021
+  default-extensions:
+    DeriveAnyClass
+    DerivingVia
+    LambdaCase
+    OverloadedStrings
+  ghc-options:      -Wall
+  hs-source-dirs:   .
+  main-is:          TicTacToe.hs
+  build-depends:
+    , agentic
+    , agentic-anthropic
+    , agentic-io
+    , base
+    , text

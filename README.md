@@ -6,8 +6,9 @@ Composable agentic workflows in Haskell: typed steps, mixing LLMs and
 > **Status:** v2 in progress. The core (`agentic/`) and three providers work,
 > each with live tests: Jev as System One (`agentic-jev`), and Claude
 > (`agentic-anthropic`) and OpenAI (`agentic-openai`) as System Two, or as System
-> One through `viaLLM`. Most of `agentic-io` isn't written yet.
-> `cabal run dino` runs the dino project with Claude and Jev.
+> One through `viaLLM`. `agentic-io` has `concurrently` and `loadDotEnv`;
+> recording and replay aren't written yet. `cabal run dino` and
+> `cabal run tictactoe` run the two examples with the real models.
 
 ## The idea
 
@@ -355,22 +356,44 @@ for the model. A name is written for whoever is watching the flow.
 
 ## Tic-tac-toe
 
-An agent plays against code. The board lives in an `IORef` and the only tools are
-`look` and `play`. The step can't finish until it returns an `Outcome`.
+Claude plays X against an opponent written in code. The board lives in an
+`IORef` and Claude's only tools are `look` and `play`. The draft step can't
+finish until Claude reports an `Outcome`, and a final `act` checks that claim
+against the real board.
 
 ```haskell
-data Outcome = Won | Lost | Draw deriving (Generic, Show, Contract)
-
-game :: IORef Board -> Agentic IO () Outcome
-game board = draftWith [look board, play board]
-  "You are X. Play tic-tac-toe until the game ends, then report the outcome."
+game :: IORef Board -> Agentic IO () (Outcome, Outcome)
+game board =
+  draftWith @Outcome
+    [look board, play board]
+    "You are X in a game of tic-tac-toe against O, and you move first. Look at the board, then play one move at a time until the game is over. Then report how it ended."
+    >>> (returnA &&& act (const (actual <$> readIORef board))) `named` "check the claim"
 
 play :: IORef Board -> Tool IO
-play board = tool "play" "Place an X; the opponent replies" (act (playAndReply board))
+play board = tool @Move @Text "play" "Place an X on an empty square. O replies straight away." $
+  act (playAndReply board)
 ```
 
-An illegal move is just a tool result that says so. The model reads it and tries
-again. The library has no special machinery for this.
+A `Move` is a row and a column, each a `Coordinate` whose contract says "From
+1 to 3" and checks it. An illegal move is just a tool result that says so
+("That square is taken"), and the model reads it and tries again. The library
+has no special machinery for this. `cabal run tictactoe` plays a game:
+
+```
+play {"column":2,"row":2}
+O . .
+. X .
+. . .
+Your move.
+…
+play {"column":1,"row":3}
+O O X
+. X O
+X . X
+Game over: you won.
+
+Claude says: Won. The board says: Won.
+```
 
 ## Running flows
 
@@ -460,7 +483,7 @@ Everything else is a function from `Runtime m` to `Runtime m`:
 
 | Modifier | What it does |
 |---|---|
-| `concurrently` | run independent work concurrently (IO) |
+| `concurrently` | run independent work at the same time (from `agentic-io`; the dino example takes about half as long) |
 | `observing f` | send every event to `f` |
 | `cached store` | reuse answers, keyed by note path and request |
 | `recording file`, `replaying file` | record calls in production, replay them in tests |
@@ -482,7 +505,7 @@ testRuntime = runtime { systemOne = answerAll (yes 0.95), systemTwo = scripted [
 | `agentic-anthropic` | `agentic`, http, aeson | Anthropic as System Two (and System One via the LLM adapter) |
 | `agentic-openai` | `agentic`, http, aeson | OpenAI as System Two (and System One), over the Responses API |
 | `agentic-jev` | `agentic`, http, aeson | Jev as System One |
-| `agentic-io` | base, directory | `loadDotEnv` today; `concurrently` (async), recording and replay, and logging to come |
+| `agentic-io` | `agentic`, async, directory | `concurrently` and `loadDotEnv`; recording and replay to come |
 | `examples` | all of the above | everything in this README |
 
 ## Design rules
