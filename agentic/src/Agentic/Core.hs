@@ -17,6 +17,7 @@ module Agentic.Core
   , tool
     -- * Structure
   , each
+  , repeatUntil
   , note
   , named
     -- * Judgement helpers
@@ -71,6 +72,7 @@ data Agentic m i o where
   First :: Agentic m a b -> Agentic m (a, c) (b, c)
   Choose :: Agentic m a c -> Agentic m b c -> Agentic m (Either a b) c
   Each :: Agentic m a b -> Agentic m [a] [b]
+  Repeat :: (a -> Bool) -> Agentic m a a -> Agentic m a a
   Noted :: Note -> Agentic m i o -> Agentic m i o
 
 -- | A named flow a model can call.
@@ -127,6 +129,15 @@ titledContract = c {codecSchema = titled (T.pack (show (typeRep (Proxy @a)))) (c
 -- | Map a flow over a list. The runtime may run the items concurrently.
 each :: Agentic m a b -> Agentic m [a] [b]
 each = Each
+
+-- | Run a flow again and again on its own output until the condition holds.
+-- The condition is checked first, so an input that already satisfies it is
+-- returned unchanged. The model decides how many rounds it takes; name the
+-- loop to say what it waits for:
+--
+-- > repeatUntil ended nextMove `named` "play until the game ends"
+repeatUntil :: (a -> Bool) -> Agentic m a a -> Agentic m a a
+repeatUntil = Repeat
 
 -- | Name and describe a sub-flow.
 note :: Text -> Text -> Agentic m i o -> Agentic m i o

@@ -364,55 +364,38 @@ for the model. A name is written for whoever is watching the flow.
 
 ## Tic-tac-toe
 
-An OpenAI model plays X against an opponent written in code. The board lives in
-an `IORef` and the model's only tools are `look` and `play`. The draft step
-can't finish until the model reports an `Outcome`, and a final `act` checks that
-claim against the real board. It runs on OpenAI (`withSystemTwo (openai & effort
-Low)`) where the dino project runs on Claude; the flow code is the same either
-way.
+The model plays both sides. Given the game so far, it plays the next move, and
+`repeatUntil` goes round again until the model says the game has ended.
 
 ```haskell
-game :: IORef Board -> Agentic IO () (Outcome, Outcome)
-game board =
-  draftWith @Outcome
-    [look board, play board]
-    "You are X in a game of tic-tac-toe against O, and you move first. Look at the board, then play one move at a time until the game is over. Then report how it ended."
-    >>> (returnA &&& act (const (actual <$> readIORef board))) `named` "check the claim"
+data Square = Blank | X | O
+data Row = Row {left :: Square, centre :: Square, right :: Square}
+data Board = Board {top :: Row, middle :: Row, bottom :: Row}
+data State = Playing | Ended
+data Game = Game {board :: Board, state :: State}   -- all deriving (Generic, Show, Contract)
 
-play :: IORef Board -> Tool IO
-play board = tool @Move @Text "play" "Place an X on an empty square. O replies straight away." $
-  act (playAndReply board)
+nextMove :: Agentic IO Game Game
+nextMove = draft @Game "Play the next move!"
+
+game :: Agentic IO Game Game
+game = repeatUntil ((== Ended) . state) (nextMove >>> act printBoard) `named` "play until the game ends"
 ```
 
-A `Move` is a row and a column, each a `Coordinate` whose contract says "From
-1 to 3" and checks it. An illegal move is just a tool result that says so
-("That square is taken"), and the model reads it and tries again. The library
-has no special machinery for this. `cabal run tictactoe` plays a game:
+The instruction doesn't explain the rules, because it doesn't need to. The
+types say there's a 3×3 board of `Blank`, `X` and `O`, and a game that's either
+`Playing` or `Ended`; the model knows the rest. `describe` shows the loop:
 
 ```
-play {"column":2,"row":2}
-You played row 2, column 2:
-X O .
-. X .
-. . .
-
-O played row 3, column 3:
-X O .
-. X .
-. . O
-
-Your move.
-…
-play {"column":1,"row":2}
-You played row 2, column 1:
-X O O
-X X .
-X . O
-
-Game over: you won.
-
-The model says: Won. The board says: Won.
+play until the game ends  repeat until done
+└─ draft Game  "Play the next move!"
 ```
+
+`repeatUntil` checks its condition before each round, so a game that has
+already ended is returned as it is. It's the only loop in the language, and it
+stays describable: the tree shows what repeats, and a name says what it waits
+for. `cabal run tictactoe` plays a game on OpenAI (`withSystemTwo (openai &
+effort Low)`), where the dino project runs on Claude; the flow code is the same
+either way.
 
 ## Running flows
 

@@ -31,6 +31,9 @@ interpret rt = go []
             _ -> error "Agentic.interpret: the runtime's parallel changed its results"
       Choose f g -> either (go path f) (go path g) x
       Each f -> parallel rt (map (go path f) x)
+      Repeat done f ->
+        let loop a = if done a then pure a else go path f a >>= loop
+         in loop x
       Noted n f -> go (path <> [n]) f x
 
     emit :: [Note] -> Happened -> m ()

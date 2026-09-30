@@ -2,6 +2,7 @@ module Main (main) where
 
 import Agentic
 import Agentic.Scripted
+import Agentic.Schema (Field (..), Schema (..))
 import Data.IORef
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -157,6 +158,8 @@ main = hspec $ do
       interpret rt (draft @Joke "a joke" >>> (returnA &&& draft @Rating "rate it")) () `shouldReturn` (joke, Rating 3)
       interpret rt (each (arr (* 2))) [1, 2, 3 :: Int] `shouldReturn` [2, 4, 6]
       interpret rt (arr (+ 1) *** arr (* 2)) (1, 5 :: Int) `shouldReturn` (2 :: Int, 10)
+      interpret rt (repeatUntil (>= 10) (arr (* 2))) (3 :: Int) `shouldReturn` 12
+      interpret rt (repeatUntil (>= 10) (arr (* 2))) (50 :: Int) `shouldReturn` 50
       interpret rt (second (arr show)) ('a', 7 :: Int) `shouldReturn` ('a', "7")
 
     it "fails clearly without a System One" $ do
@@ -183,6 +186,12 @@ main = hspec $ do
           flow = draft @Rating "rate it" *** arr genre
       T.lines (renderTree (Agentic.describe flow))
         `shouldBe` ["both halves", "├─ first → draft Rating  \"rate it\"", "└─ second → arr"]
+
+    it "shows a loop and what it runs" $ do
+      let flow :: Agentic IO Joke Joke
+          flow = repeatUntil ((== "kids") . genre) (draft @Joke "make it more kid-friendly") `named` "polish until it's for kids"
+      T.lines (renderTree (Agentic.describe flow))
+        `shouldBe` ["polish until it's for kids  repeat until done", "└─ draft Joke  \"make it more kid-friendly\""]
 
     it "expands a tool that calls itself only once" $ do
       let researcher :: Agentic IO Text Text

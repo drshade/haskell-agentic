@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Agentic
+import Agentic.Runtime (Conversation (..))
 import Agentic.Aeson (toAeson)
 import Agentic.Anthropic
 import qualified Data.Text as T

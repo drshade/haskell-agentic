@@ -29,6 +29,8 @@ data Description
   | OnFirst Description
   | Branch Description Description
   | ForEach Description
+  | Repeated Description
+    -- ^ @repeatUntil@: run again on its own output until a condition holds.
   | Annotated Note Description
 
 data StepInfo
@@ -67,6 +69,7 @@ describe = \case
   First f -> OnFirst (describe f)
   Choose f g -> Branch (describe f) (describe g)
   Each f -> ForEach (describe f)
+  Repeat _ f -> Repeated (describe f)
   Noted n f -> Annotated n (describe f)
   where
     sequenced = \case
@@ -129,6 +132,9 @@ trees seen = \case
     let (seen1, ls) = branch seen l
         (seen2, rs) = branch seen1 r
      in (seen2, [Node "branch" [labelled "left" ls, labelled "right" rs]])
+  Repeated d -> case branch seen d of
+    (seen', [Node "together" ts]) -> (seen', [Node "repeat until done" ts])
+    (seen', ts) -> (seen', [Node "repeat until done" ts])
   ForEach d -> case branch seen d of
     (seen', [Node "together" ts]) -> (seen', [Node "each" ts])
     (seen', ts) -> (seen', [Node "each" ts])
@@ -213,6 +219,7 @@ toValue = \case
   OnFirst d -> node "onFirst" [("step", toValue d)]
   Branch l r -> node "branch" [("left", toValue l), ("right", toValue r)]
   ForEach d -> node "each" [("step", toValue d)]
+  Repeated d -> node "repeat" [("step", toValue d)]
   Annotated n d ->
     node "note" $
       [("name", String (noteName n))]

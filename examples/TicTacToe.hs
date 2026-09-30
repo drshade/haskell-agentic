@@ -1,153 +1,54 @@
--- | An OpenAI model plays tic-tac-toe against code, using tools. The board lives
--- in an IORef; the model's only tools are @look@ and @play@. The draft step
--- can't end until the model reports an 'Outcome', and a final @act@ checks that
--- claim against the real board. Needs OPENAI_API_KEY, in the environment or .env.
+-- | A model plays tic-tac-toe against itself: given the game so far, it plays
+-- the next move, until it says the game has ended. Needs OPENAI_API_KEY, in the
+-- environment or .env.
 module Main (main) where
 
 import Agentic
-import Agentic.OpenAI (openai)
 import Agentic.IO (loadDotEnv)
-import Data.IORef
-import Data.List (find, transpose)
-import Data.Maybe (isJust, isNothing, listToMaybe)
+import Agentic.OpenAI (openai)
 import Data.Text (Text)
-import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import GHC.Generics (Generic)
 
--- ---------------------------------------------------------------------------
--- The game
+data Square = Blank | X | O
+  deriving (Generic, Show, Eq, Contract)
 
-data Player = X | O
-  deriving (Eq, Show)
+data Row = Row {left :: Square, centre :: Square, right :: Square}
+  deriving (Generic, Show, Contract)
 
--- | Rows of squares, top to bottom.
-type Board = [[Maybe Player]]
+data Board = Board {top :: Row, middle :: Row, bottom :: Row}
+  deriving (Generic, Show, Contract)
 
-empty :: Board
-empty = replicate 3 (replicate 3 Nothing)
+data State = Playing | Ended
+  deriving (Generic, Show, Eq, Contract)
 
-winner :: Board -> Maybe Player
-winner b = find (\p -> any (all (== Just p)) lines') [X, O]
-  where
-    lines' = b <> transpose b <> [[b !! i !! i | i <- [0 .. 2]], [b !! i !! (2 - i) | i <- [0 .. 2]]]
+data Game = Game {board :: Board, state :: State}
+  deriving (Generic, Show, Contract)
 
-full :: Board -> Bool
-full = all (all isJust)
+-- | One move, played by whichever player's turn it is.
+nextMove :: Agentic IO Game Game
+nextMove = draft @Game "Play the next move!"
 
-place :: Player -> (Int, Int) -> Board -> Board
-place p (r, c) b = [[if (i, j) == (r, c) then Just p else sq | (j, sq) <- zip [0 ..] row] | (i, row) <- zip [0 ..] b]
+game :: Agentic IO Game Game
+game = repeatUntil ((== Ended) . state) (nextMove >>> act printBoard) `named` "play until the game ends"
 
-free :: Board -> [(Int, Int)]
-free b = [(i, j) | (i, row) <- zip [0 ..] b, (j, sq) <- zip [0 ..] row, isNothing sq]
-
--- | The opponent: win if it can, block if it must, otherwise the first free
--- square. Nothing when the board is full.
-opponent :: Board -> Maybe (Int, Int)
-opponent b = listToMaybe (wins O <> wins X <> free b)
-  where
-    wins p = [sq | sq <- free b, winner (place p sq b) == Just p]
+printBoard :: Game -> IO Game
+printBoard g = T.putStrLn (render (board g) <> "\n") >> pure g
 
 render :: Board -> Text
-render b = T.intercalate "\n" [T.intercalate " " [maybe "." (T.pack . show) sq | sq <- row] | row <- b]
-
--- ---------------------------------------------------------------------------
--- What the model sees
-
--- | A square, from 1 to 3. The contract tells the model the range and checks it.
-newtype Coordinate = Coordinate Int
-  deriving (Show)
-
-instance Contract Coordinate where
-  contract = documented "From 1 to 3" (mapCodec Coordinate (\(Coordinate n) -> n) (between 1 3 contract))
-
-data Move = Move {row :: Coordinate, column :: Coordinate}
-  deriving (Generic, Show)
-
-instance Contract Move where
-  contract =
-    record "Where to place your X" $
-      Move
-        <$> required "row" "1 is the top row, 3 the bottom" row
-        <*> required "column" "1 is the left column, 3 the right" column
-
-data Outcome = Won | Lost | Draw
-  deriving (Generic, Show, Eq)
-
-instance Options Outcome where
-  options =
-    described
-      "How the game ended for you, playing X"
-      [option Won "You got three in a row", option Lost "O got three in a row", option Draw "The board filled up with no winner"]
-
-deriving via Enumeration Outcome instance Contract Outcome
-
--- ---------------------------------------------------------------------------
--- The flow
-
-game :: IORef Board -> Agentic IO () (Outcome, Outcome)
-game board =
-  draftWith @Outcome
-    [look board, play board]
-    "You are X in a game of tic-tac-toe against O, and you move first. Look at the board, then play one move at a time until the game is over. Then report how it ended."
-    >>> (returnA &&& act (const (actual <$> readIORef board))) `named` "check the claim"
-
-look :: IORef Board -> Tool IO
-look board =
-  tool @() @Text "look" "Show the board: rows top to bottom, X and O for pieces, . for empty squares" $
-    act (const (render <$> readIORef board))
-
--- | Place an X, then let O reply, showing the board after each. Illegal moves
--- are reported, not raised.
-play :: IORef Board -> Tool IO
-play board = tool @Move @Text "play" "Place an X on an empty square. O replies straight away." $ act $ \(Move (Coordinate r) (Coordinate c)) -> do
-  b <- readIORef board
-  let square = (r - 1, c - 1)
-  if gameOver b
-    then pure "The game is already over."
-    else
-      if square `notElem` free b
-        then pure ("That square is taken. The board is:\n" <> render b)
-        else do
-          let afterX = place X square b
-              reply = if gameOver afterX then Nothing else opponent afterX
-              afterO = maybe afterX (\sq -> place O sq afterX) reply
-          writeIORef board afterO
-          pure . T.intercalate "\n\n" $
-            ["You played " <> at square <> ":\n" <> render afterX]
-              <> maybe [] (\sq -> ["O played " <> at sq <> ":\n" <> render afterO]) reply
-              <> [status afterO]
+render (Board t m b) = mconcat [line r <> "\n" | r <- [t, m, b]]
   where
-    gameOver b = isJust (winner b) || full b
-    at (i, j) = "row " <> T.pack (show (i + 1)) <> ", column " <> T.pack (show (j + 1))
-    status b = case (winner b, full b) of
-      (Just X, _) -> "Game over: you won."
-      (Just O, _) -> "Game over: O won."
-      (Nothing, True) -> "Game over: a draw."
-      _ -> "Your move."
-
-actual :: Board -> Outcome
-actual b = case winner b of
-  Just X -> Won
-  Just O -> Lost
-  Nothing -> Draw
-
--- ---------------------------------------------------------------------------
+    line (Row l c r) = mconcat [square l, " ", square c, " ", square r]
+    square = \case
+      Blank -> "."
+      X -> "X"
+      O -> "O"
 
 main :: IO ()
 main = do
   _ <- loadDotEnv
-  board <- newIORef empty
-  print $ describe (game board)
-  rt <-
-    pure runtime >>= withSystemTwo (openai & effort Low)
-  let watched =
-        observing
-          ( \e -> case happened e of
-              ToolCalled call -> T.putStrLn ("\n" <> callName call <> " " <> renderJson (callInput call))
-              ToolReturned _ (ToolOk (String t)) -> T.putStrLn t
-              _ -> pure ()
-          )
-          rt
-  (claimed, real) <- interpret watched (game board) ()
-  T.putStrLn ("\nThe model says: " <> T.pack (show claimed) <> ". The board says: " <> T.pack (show real) <> ".")
+  print $ describe game
+  rt <- pure runtime >>= withSystemTwo (openai & effort Low)
+  let empty = Row Blank Blank Blank
+  _ <- interpret rt game (Game (Board empty empty empty) Playing)
+  pure ()
