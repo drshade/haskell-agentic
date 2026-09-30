@@ -390,16 +390,25 @@ A `Move` is a row and a column, each a `Coordinate` whose contract says "From
 has no special machinery for this. `cabal run tictactoe` plays a game:
 
 ```
-play {"column":1,"row":1}
+play {"column":2,"row":2}
+You played row 2, column 2:
 X O .
+. X .
 . . .
-. . .
+
+O played row 3, column 3:
+X O .
+. X .
+. . O
+
 Your move.
 …
 play {"column":1,"row":2}
+You played row 2, column 1:
 X O O
 X X .
 X . O
+
 Game over: you won.
 
 The model says: Won. The board says: Won.

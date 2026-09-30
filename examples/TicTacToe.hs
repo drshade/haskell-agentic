@@ -97,22 +97,29 @@ look board =
   tool @() @Text "look" "Show the board: rows top to bottom, X and O for pieces, . for empty squares" $
     act (const (render <$> readIORef board))
 
--- | Place an X, then let O reply. Illegal moves are reported, not raised.
+-- | Place an X, then let O reply, showing the board after each. Illegal moves
+-- are reported, not raised.
 play :: IORef Board -> Tool IO
 play board = tool @Move @Text "play" "Place an X on an empty square. O replies straight away." $ act $ \(Move (Coordinate r) (Coordinate c)) -> do
   b <- readIORef board
   let square = (r - 1, c - 1)
-  if isJust (winner b) || full b
+  if gameOver b
     then pure "The game is already over."
     else
       if square `notElem` free b
         then pure ("That square is taken. The board is:\n" <> render b)
         else do
           let afterX = place X square b
-              afterO = if isJust (winner afterX) then afterX else maybe afterX (\sq -> place O sq afterX) (opponent afterX)
+              reply = if gameOver afterX then Nothing else opponent afterX
+              afterO = maybe afterX (\sq -> place O sq afterX) reply
           writeIORef board afterO
-          pure (render afterO <> "\n" <> status afterO)
+          pure . T.intercalate "\n\n" $
+            ["You played " <> at square <> ":\n" <> render afterX]
+              <> maybe [] (\sq -> ["O played " <> at sq <> ":\n" <> render afterO]) reply
+              <> [status afterO]
   where
+    gameOver b = isJust (winner b) || full b
+    at (i, j) = "row " <> T.pack (show (i + 1)) <> ", column " <> T.pack (show (j + 1))
     status b = case (winner b, full b) of
       (Just X, _) -> "Game over: you won."
       (Just O, _) -> "Game over: O won."
