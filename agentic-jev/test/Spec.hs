@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Agentic
+import Agentic.Aeson (toAeson)
 import Agentic.Jev
 import qualified Data.Aeson as J
 import Data.Maybe (fromJust)
@@ -24,7 +25,7 @@ request =
 main :: IO ()
 main = hspec $ Test.Hspec.describe "Agentic.Jev" $ do
   it "builds Jev's request body" $
-    requestBody "jev-latest" request
+    toAeson (requestBody "jev-latest" request)
       `shouldBe` fromJust
         ( J.decode
             "{\"model\":\"jev-latest\",\

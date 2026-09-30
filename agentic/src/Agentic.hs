@@ -9,6 +9,7 @@ module Agentic
   , module Agentic.Describe
   , module Agentic.Value
   , module Agentic.Schema
+  , module Agentic.ViaLLM
   ) where
 
 import Agentic.Contract
@@ -19,3 +20,4 @@ import Agentic.Questions
 import Agentic.Runtime
 import Agentic.Schema
 import Agentic.Value
+import Agentic.ViaLLM

@@ -3,11 +3,11 @@
 Composable agentic workflows in Haskell: typed steps, mixing LLMs and
 [Jev](https://docs.typesafe.ai), that you can inspect before you run them.
 
-> **Status:** v2 in progress. The core package (`agentic/`) implements the design
-> below and runs against scripted providers. The provider packages
-> `agentic-jev` is written. `agentic-anthropic`, `agentic-openai` and `agentic-io`
-> aren't yet. `cabal run dino` runs the dino project against a mock, and
-> `cabal run review` asks Jev about a joke for real (it needs `JEV_TOKEN`).
+> **Status:** v2 in progress. The core (`agentic/`), Jev as System One
+> (`agentic-jev`) and Claude as System Two (`agentic-anthropic`) work, with live
+> tests. `agentic-openai` and most of `agentic-io` aren't written yet.
+> `cabal run dino` runs the dino project against mocks, and
+> `cabal run dino -- live` runs it with Claude and Jev.
 
 ## The idea
 

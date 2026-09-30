@@ -10,11 +10,11 @@ module Agentic.Jev
   , decodeResponse
   ) where
 
-import Agentic.Aeson (toAeson)
+import qualified Agentic.Value as A
 import Agentic.Questions
 import Agentic.Runtime (ProvidesSystemOne (..), SystemOne (..))
 import Control.Exception (Exception (..), throwIO)
-import Data.Aeson ((.:), (.=))
+import Data.Aeson ((.:))
 import qualified Data.Aeson as J
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.Types as J
@@ -49,7 +49,7 @@ jev =
 
 data JevError
   = MissingToken
-  | Rejected Int Text
+  | HttpError Int Text
     -- ^ Jev answered with a non-200 status, and this body.
   | UnexpectedResponse Text
   deriving (Show)
@@ -57,7 +57,7 @@ data JevError
 instance Exception JevError where
   displayException = \case
     MissingToken -> "Jev: no token. Set JEV_TOKEN, or jevToken in the config."
-    Rejected status body -> "Jev rejected the request (HTTP " <> show status <> "): " <> T.unpack body
+    HttpError status body -> "Jev rejected the request (HTTP " <> show status <> "): " <> T.unpack body
     UnexpectedResponse problem -> "Jev sent a response agentic can't read: " <> T.unpack problem
 
 instance ProvidesSystemOne Jev where
@@ -74,40 +74,41 @@ instance ProvidesSystemOne Jev where
                   [ ("Authorization", "Bearer " <> T.encodeUtf8 key)
                   , ("Content-Type", "application/json")
                   ]
-              , Http.requestBody = Http.RequestBodyLBS (J.encode (requestBody (jevModel cfg) request))
+              , Http.requestBody = Http.RequestBodyBS (T.encodeUtf8 (A.renderJson (requestBody (jevModel cfg) request)))
               , Http.responseTimeout = Http.responseTimeoutMicro (jevTimeoutSeconds cfg * 1000000)
               }
       response <- Http.httpLbs http manager
       let status = statusCode (Http.responseStatus response)
           body = Http.responseBody response
       if status /= 200
-        then throwIO (Rejected status (T.decodeUtf8Lenient (LBS.toStrict body)))
+        then throwIO (HttpError status (T.decodeUtf8Lenient (LBS.toStrict body)))
         else case J.eitherDecode body of
           Left problem -> throwIO (UnexpectedResponse (T.pack problem))
           Right value -> either (throwIO . UnexpectedResponse) pure (decodeResponse request value)
 
 -- | The request body: the state, and each question under an id (@q0@, @q1@, …).
-requestBody :: Text -> JudgeRequest -> J.Value
+-- It's the core's 'A.Value' so that options keep their order.
+requestBody :: Text -> JudgeRequest -> A.Value
 requestBody model request =
-  J.object
-    [ "model" .= model
-    , "state" .= toAeson (requestState request)
-    , "questions" .= J.object [Key.fromText qid .= question q | (qid, q) <- ided (requestQuestions request)]
+  A.Object
+    [ ("model", A.String model)
+    , ("state", requestState request)
+    , ("questions", A.Object [(qid, question q) | (qid, q) <- ided (requestQuestions request)])
     ]
   where
     question = \case
-      AskYesNo q -> J.object ["type" .= ("noul" :: Text), "instructions" .= q]
+      AskYesNo q -> A.Object [("type", A.String "noul"), ("instructions", A.String q)]
       AskChoice q opts ->
-        J.object
-          [ "type" .= ("choice" :: Text)
-          , "instructions" .= q
-          , "criteria" .= J.object [Key.fromText l .= d | (l, d) <- opts]
+        A.Object
+          [ ("type", A.String "choice")
+          , ("instructions", A.String q)
+          , ("criteria", A.Object [(l, maybe A.Null A.String d) | (l, d) <- opts])
           ]
       AskScore q levels ->
-        J.object
-          [ "type" .= ("score" :: Text)
-          , "instructions" .= q
-          , "criteria" .= [maybe l id d | (l, d) <- levels]
+        A.Object
+          [ ("type", A.String "score")
+          , ("instructions", A.String q)
+          , ("criteria", A.Array [A.String (maybe l id d) | (l, d) <- levels])
           ]
 
 -- | Read Jev's answers back, in question order.

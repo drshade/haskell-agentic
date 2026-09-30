@@ -16,6 +16,9 @@ executable dino
   main-is:          Dino.hs
   build-depends:
     , agentic
+    , agentic-anthropic
+    , agentic-io
+    , agentic-jev
     , base
     , text
 

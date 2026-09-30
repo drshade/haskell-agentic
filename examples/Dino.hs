@@ -1,9 +1,14 @@
--- | The dino project from the README, run against mock providers: it prints the
--- flow's description, then runs it with no network.
+-- | The dino project from the README. It prints the flow's description, then
+-- runs it against mock providers, or for real with @cabal run dino -- live@
+-- (Claude and Jev; needs ANTHROPIC_API_KEY and JEV_TOKEN).
 module Main (main) where
 
 import Agentic
+import Agentic.Anthropic (Anthropic (..), anthropic)
+import Agentic.IO.DotEnv (loadDotEnv)
+import Agentic.Jev (jev)
 import Agentic.Scripted (alwaysYes, callTools, replyingWith, respond)
+import System.Environment (getArgs)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -64,15 +69,24 @@ mockLLM c = case title (output c) of
 
 main :: IO ()
 main = do
+  live <- (== ["live"]) <$> getArgs
   T.putStrLn "The flow:\n"
   print (describe dinoProject)
+  providers <-
+    if live
+      then do
+        _ <- loadDotEnv
+        pure runtime >>= withSystemOne jev >>= withSystemTwo anthropic {anthropicEffort = Just "low"}
+      else pure runtime {systemOne = alwaysYes 0.95, systemTwo = replyingWith mockLLM}
   let rt =
         observing
-          (\e -> case happened e of
-              ToolCalled call -> T.putStrLn ("  tool call: " <> callName call)
-              Judged _ answers -> T.putStrLn ("  judged: " <> T.pack (show answers))
-              _ -> pure ())
-          runtime {systemOne = alwaysYes 0.95, systemTwo = replyingWith mockLLM}
-  T.putStrLn "\nRunning it against mock providers:\n"
+          ( \e -> case happened e of
+              Drafting c -> T.putStrLn ("  draft " <> maybe "?" id (title (output c)) <> "  " <> T.intercalate " / " (map noteName (path c)))
+              ToolCalled call -> T.putStrLn ("    tool call: " <> callName call <> " " <> renderJson (callInput call))
+              Judged _ answers -> T.putStrLn ("    judged: " <> T.pack (show answers))
+              _ -> pure ()
+          )
+          providers
+  T.putStrLn (if live then "\nRunning it with Claude and Jev:\n" else "\nRunning it against mock providers:\n")
   poster <- interpret rt dinoProject ()
-  T.putStrLn ("\n" <> T.pack (show poster))
+  T.putStrLn ("\n" <> heading poster <> "\n\n" <> body poster)

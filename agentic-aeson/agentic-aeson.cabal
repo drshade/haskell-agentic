@@ -8,10 +8,12 @@ build-type:         Simple
 
 library
   default-language: GHC2021
-  default-extensions: LambdaCase
+  default-extensions: LambdaCase OverloadedStrings
   ghc-options:      -Wall
   hs-source-dirs:   src
-  exposed-modules:  Agentic.Aeson
+  exposed-modules:
+    Agentic.Aeson
+    Agentic.JsonSchema
   build-depends:
     , agentic
     , aeson       >=2.1 && <2.3

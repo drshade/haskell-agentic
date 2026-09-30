@@ -1,6 +1,7 @@
 packages:
   agentic
   agentic-aeson
+  agentic-anthropic
   agentic-io
   agentic-jev
   examples
