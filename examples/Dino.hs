@@ -1,22 +1,18 @@
 -- | The dino project from the README. Claude suggests prehistoric creatures, Jev
 -- sorts the dinosaurs from the rest, and Claude makes a poster of them.
 --
--- It prints the flow's description, then runs it against mock providers, or
--- for real with @cabal run dino -- live@ (Claude and Jev; needs
--- ANTHROPIC_API_KEY and JEV_TOKEN).
+-- It prints the flow's description, then runs it with Claude and Jev. Needs
+-- ANTHROPIC_API_KEY and JEV_TOKEN, in the environment or .env.
 module Main (main) where
 
 import Agentic
 import Agentic.Anthropic (anthropic)
 import Agentic.IO.DotEnv (loadDotEnv)
 import Agentic.Jev (jev)
-import Agentic.Scripted (replyingWith, respond)
 import Data.List (partition)
 import Data.Text (Text)
-import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import GHC.Generics (Generic)
-import System.Environment (getArgs)
 
 -- ---------------------------------------------------------------------------
 -- Types
@@ -105,61 +101,11 @@ notADinosaur :: (Creature, Choice Kind) -> NotADinosaur
 notADinosaur (c, k) = NotADinosaur (name c) (chosen k)
 
 -- ---------------------------------------------------------------------------
--- Mock providers
-
--- | A pretend LLM: it answers according to the type the step asks for.
-mockLLM :: Conversation -> Action
-mockLLM c = case title (output c) of
-  Just "[Creature]" ->
-    respond
-      [ Creature "Tyrannosaurus rex" "A huge meat-eating dinosaur."
-      , Creature "Pteranodon" "A flying reptile with a long crest."
-      , Creature "Triceratops" "A plant-eating dinosaur with three horns."
-      , Creature "Plesiosaurus" "A long-necked reptile that swam in the sea."
-      , Creature "Woolly mammoth" "A hairy relative of the elephant."
-      ]
-  Just "DinoPic" -> respond (DinoPic "  /\\_/\\  roar")
-  Just "TrumpCard" -> respond (TrumpCard (Stat 7) (Stat 5) (Stat 6) (Stat 4))
-  Just "Poster" -> respond (Poster "Our Dinosaurs" "Two dinosaurs, and three creatures that weren't.")
-  _ -> respond ()
-
--- | A pretend Jev: it knows which of the mock creatures are dinosaurs.
-mockJev :: SystemOne IO
-mockJev = SystemOne $ \request ->
-  let text = renderJson (requestState request)
-      kind
-        | any (`T.isInfixOf` text) ["Tyrannosaurus", "Triceratops"] = "Dinosaur"
-        | "Pteranodon" `T.isInfixOf` text = "Pterosaur"
-        | "Plesiosaurus" `T.isInfixOf` text = "MarineReptile"
-        | otherwise = "Mammal"
-      labels = ["Dinosaur", "Pterosaur", "MarineReptile", "Fish", "Mammal", "Bird", "Other"]
-   in pure [ChoiceAnswer kind [(l, if l == kind then 0.9 else 0.1 / 6) | l <- labels] 0.8]
-
--- ---------------------------------------------------------------------------
 
 main :: IO ()
 main = do
-  live <- (== ["live"]) <$> getArgs
-  T.putStrLn "The flow:\n"
+  _ <- loadDotEnv
   print (describe dinoProject)
-  providers <-
-    if live
-      then do
-        _ <- loadDotEnv
-        pure runtime >>= withSystemOne jev >>= withSystemTwo (anthropic & effort Low)
-      else pure runtime {systemOne = mockJev, systemTwo = replyingWith mockLLM}
-  let rt =
-        observing
-          ( \e -> case happened e of
-              Judged request [ChoiceAnswer kind ps _] ->
-                T.putStrLn ("  " <> creatureName (requestState request) <> ": " <> kind <> " (" <> T.pack (show (maybe 0 probability (lookup kind ps))) <> ")")
-              _ -> pure ()
-          )
-          providers
-  T.putStrLn (if live then "\nRunning it with Claude and Jev:\n" else "\nRunning it against mock providers:\n")
+  rt <- pure runtime >>= withSystemOne jev >>= withSystemTwo (anthropic & effort Low)
   poster <- interpret rt dinoProject ()
   T.putStrLn ("\n" <> heading poster <> "\n\n" <> body poster)
-  where
-    creatureName = \case
-      Object kvs | Just (String n) <- lookup "name" kvs -> n
-      _ -> "?"

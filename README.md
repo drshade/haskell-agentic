@@ -6,8 +6,7 @@ Composable agentic workflows in Haskell: typed steps, mixing LLMs and
 > **Status:** v2 in progress. The core (`agentic/`), Jev as System One
 > (`agentic-jev`) and Claude as System Two (`agentic-anthropic`) work, with live
 > tests. `agentic-openai` and most of `agentic-io` aren't written yet.
-> `cabal run dino` runs the dino project against mocks, and
-> `cabal run dino -- live` runs it with Claude and Jev.
+> `cabal run dino` runs the dino project with Claude and Jev.
 
 ## The idea
 
@@ -279,9 +278,8 @@ means ("A flying reptile, such as Pteranodon. Not a dinosaur."). The trump card'
 stats are a `Stat` type whose contract says "From 1 (lowest) to 10 (highest)" and
 checks it, so every card uses the same scale. The poster is drafted from a named
 `Exhibit` record rather than a tuple, so Claude sees `dinosaurs` and
-`notDinosaurs`, not `_1` and `_2`. The whole example is in `examples/Dino.hs`:
-`cabal run dino` runs it against mocks, `cabal run dino -- live` with Claude and
-Jev.
+`notDinosaurs`, not `_1` and `_2`. The whole example is in `examples/Dino.hs`, and
+`cabal run dino` runs it with Claude and Jev.
 
 `each` maps a flow over a list, and the interpreter is free to run the items
 concurrently. `&&&` runs flows side by side on the same input, `***` runs one
