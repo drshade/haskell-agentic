@@ -378,7 +378,7 @@ nextMove :: Agentic IO Game Game
 nextMove = draft @Game "Play the next move!"
 
 game :: Agentic IO Game Game
-game = repeatUntil ((== Ended) . state) (nextMove >>> act printBoard) `named` "play until the game ends"
+game = repeatUntil ((== Ended) . state) (nextMove >>> act printBoard `named` "print the board") `named` "play until the game ends"
 ```
 
 The instruction doesn't explain the rules, because it doesn't need to. The
@@ -387,7 +387,8 @@ types say there's a 3×3 board of `Blank`, `X` and `O`, and a game that's either
 
 ```
 play until the game ends  repeat until done
-└─ draft Game  "Play the next move!"
+├─ draft Game  "Play the next move!"
+└─ print the board  act
 ```
 
 `repeatUntil` checks its condition before each round, so a game that has
