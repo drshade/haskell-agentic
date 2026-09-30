@@ -247,42 +247,59 @@ A few consequences:
 
 ## The dino project
 
-A grade 5 project. It suggests dinosaurs, researches each one with tools, checks
-the result is kid-friendly, draws it, and makes a poster.
+A grade 5 project, and a flow that mixes both kinds of model. Claude suggests ten
+prehistoric creatures. Jev sorts the dinosaurs from the rest; pterosaurs and
+plesiosaurs are the classic "not actually dinosaurs". Code keeps the clear
+dinosaurs. Claude draws each one and makes its trump card, then makes a poster
+with a corner for the creatures that weren't dinosaurs.
 
 ```haskell
 dinoProject :: Agentic IO () Poster
 dinoProject =
-      draft @[Text] "Suggest 3 dinosaurs for a grade 5 project"
-  >>> each ( (research >>> gate 0.9 kidSafe >>> (draft "rewrite this for a 10-year-old" ||| returnA))
-         &&& draft @DinoPic   "Draw an ascii picture of this dinosaur, 10 lines high"
-         &&& draft @TrumpCard "Make a trump card for this dinosaur" )
-  >>> draft @Poster "Create a poster for these dinosaurs"
+  draft @[Creature] "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
+    >>> each classify
+    >>> arr (partition (clearly Dinosaur 0.8))
+    >>> (each (arr fst >>> exhibit) *** arr (map notADinosaur))
+    >>> arr (uncurry Exhibit)
+    >>> draft @Poster "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
 
-kidSafe :: Questions YesNo
-kidSafe = yesNo "Is this suitable for a 10-year-old?"
+-- Jev decides what kind of animal each creature was.
+classify :: Agentic IO Creature (Creature, Choice Kind)
+classify = returnA &&& judge (choice "What kind of animal was this creature?") <?> "classify"
+
+exhibit :: Agentic IO Creature Entry
+exhibit =
+  (returnA &&& draft @DinoPic "Draw an ascii picture of this dinosaur, 10 lines high" &&& draft @TrumpCard "Make a trump card for this dinosaur")
+    >>> arr (\(c, (p, t)) -> Entry c p t)
+    <?> "exhibit"
 ```
 
+`Kind` is an `Options` type, and each option's description tells Jev what it
+means ("A flying reptile, such as Pteranodon. Not a dinosaur."). The trump card's
+stats are a `Stat` type whose contract says "From 1 (lowest) to 10 (highest)" and
+checks it, so every card uses the same scale. The poster is drafted from a named
+`Exhibit` record rather than a tuple, so Claude sees `dinosaurs` and
+`notDinosaurs`, not `_1` and `_2`. The whole example is in `examples/Dino.hs`:
+`cabal run dino` runs it against mocks, `cabal run dino -- live` with Claude and
+Jev.
+
 `each` maps a flow over a list, and the interpreter is free to run the items
-concurrently. `&&&` runs flows side by side on the same input. `|||` picks a branch.
-All of these are ordinary `Arrow` and `ArrowChoice` combinators.
+concurrently. `&&&` runs flows side by side on the same input, `***` runs one
+flow on each half of a pair, and `|||` picks a branch. All of these are ordinary
+`Arrow` and `ArrowChoice` combinators.
 
 ### Describe it before you run it
 
 ```
 ghci> describe dinoProject
-draft [Text]  "Suggest 3 dinosaurs for a grade 5 project"
+draft [Creature]  "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
 each
-├─ draft Dino  "Research this dinosaur. Cite a source for every claim."
-│  ├─ tool search  act
-│  └─ tool is_reliable  judge yes/no "Is this a reliable scientific source?"
-├─ gate 0.9  judge yes/no "Is this suitable for a 10-year-old?"
-├─ branch
-│  ├─ left → draft Dino  "Rewrite this for a 10-year-old"
-│  └─ right → pass
-├─ draft DinoPic  "Draw an ascii picture of this dinosaur, 10 lines high"
-└─ draft TrumpCard  "Make a trump card for this dinosaur"
-draft Poster  "Create a poster for these dinosaurs"
+└─ classify  judge choice of 7 "What kind of animal was this creature?"
+each
+└─ exhibit  together
+   ├─ draft DinoPic  "Draw an ascii picture of this dinosaur, 10 lines high"
+   └─ draft TrumpCard  "Make a trump card for this dinosaur"
+draft Poster  "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
 ```
 
 `describe` returns a `Description`, a plain data type whose `Show` instance is the
@@ -321,17 +338,17 @@ name it. You can also name and describe a whole sub-flow, borrowing parsec's
 `<?>`:
 
 ```haskell
-dinoProject =
-      suggest <?> "suggest"
-  >>> each (note "research" "Research one dinosaur and make it kid-safe" (research >>> makeKidSafe)
-            &&& draw &&& trumpCard)
-  >>> poster <?> "poster"
+classify = returnA &&& judge (choice "What kind of animal was this creature?") <?> "classify"
+
+exhibit =
+  note "exhibit" "Draw one dinosaur and make its trump card" $
+    (returnA &&& (drawIt <?> "picture") &&& (makeCard <?> "card"))
+      >>> arr (\(c, (p, t)) -> Entry c p t)
 ```
 
-Notes nest into paths like `dinoProject / research / kidSafe`. Tracing uses those
-paths, and they stay stable when you edit the flow around them, so they also work
+Notes nest into paths like `exhibit / picture`. Tracing uses those paths, and they stay stable when you edit the flow around them, so they also work
 as keys for caching and for comparing two runs. A runtime can choose to show the
-model where it is in the flow ("You're in step `research` of `dinoProject`"). An
+model where it is in the flow ("You're in step `exhibit`"). An
 instruction is written for the model. A note is written for whoever is watching
 the flow.
 

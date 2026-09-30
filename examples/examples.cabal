@@ -9,6 +9,7 @@ executable dino
   default-language: GHC2021
   default-extensions:
     DeriveAnyClass
+    DerivingVia
     LambdaCase
     OverloadedStrings
   ghc-options:      -Wall
@@ -26,6 +27,7 @@ executable review
   default-language: GHC2021
   default-extensions:
     DeriveAnyClass
+    DerivingVia
     LambdaCase
     OverloadedStrings
   ghc-options:      -Wall
