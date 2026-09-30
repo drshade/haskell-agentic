@@ -156,6 +156,8 @@ main = hspec $ do
       rt <- testRuntime [respond joke, respond (Rating 3)] 1
       interpret rt (draft @Joke "a joke" >>> (returnA &&& draft @Rating "rate it")) () `shouldReturn` (joke, Rating 3)
       interpret rt (each (arr (* 2))) [1, 2, 3 :: Int] `shouldReturn` [2, 4, 6]
+      interpret rt (arr (+ 1) *** arr (* 2)) (1, 5 :: Int) `shouldReturn` (2 :: Int, 10)
+      interpret rt (second (arr show)) ('a', 7 :: Int) `shouldReturn` ('a', "7")
 
     it "fails clearly without a System One" $ do
       interpret runtime (judge funny) joke `shouldThrow` (== NoSystemOne)
@@ -170,11 +172,17 @@ main = hspec $ do
       T.lines (renderTree (Agentic.describe flow))
         `shouldBe` [ "draft [Joke]  \"ten jokes please\""
                    , "keep 0.7  each"
-                   , "└─ judge yes/no \"Would a 10-year-old laugh at this joke?\""
+                   , "└─ judge yes/no \"Would a 10-year-old laugh at this joke?\"  (keeping its input)"
                    , "each"
                    , "└─ draft Joke  \"polish this joke\""
                    , "   └─ tool search  act"
                    ]
+
+    it "never hides a branch, even when it's only glue" $ do
+      let flow :: Agentic IO (Joke, Joke) (Rating, Text)
+          flow = draft @Rating "rate it" *** arr genre
+      T.lines (renderTree (Agentic.describe flow))
+        `shouldBe` ["both halves", "├─ first → draft Rating  \"rate it\"", "└─ second → arr"]
 
     it "expands a tool that calls itself only once" $ do
       let researcher :: Agentic IO Text Text

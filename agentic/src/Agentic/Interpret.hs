@@ -23,6 +23,12 @@ interpret rt = go []
           [Left b, Right c] -> pure (b, c)
           _ -> error "Agentic.interpret: the runtime's parallel changed its results"
       First f -> case x of (a, c) -> (\b -> (b, c)) <$> go path f a
+      Split f g -> case x of
+        (a, c) -> do
+          results <- parallel rt [Left <$> go path f a, Right <$> go path g c]
+          case results of
+            [Left b, Right d] -> pure (b, d)
+            _ -> error "Agentic.interpret: the runtime's parallel changed its results"
       Choose f g -> either (go path f) (go path g) x
       Each f -> parallel rt (map (go path f) x)
       Noted n f -> go (path <> [n]) f x
@@ -32,6 +38,7 @@ interpret rt = go []
 
     step :: forall a b. [Note] -> Step m a b -> a -> m b
     step path s x = case s of
+      Pass -> pure x
       Arr f -> pure (f x)
       Act f -> emit path Acted >> f x
       Judge input qs

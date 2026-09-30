@@ -24,13 +24,17 @@ data Description
     -- ^ @a >>> b >>> c@, flattened.
   | Together [Description]
     -- ^ @a &&& b &&& c@, flattened.
+  | Halves Description Description
+    -- ^ @a *** b@: one flow on each half of a pair.
   | OnFirst Description
   | Branch Description Description
   | ForEach Description
   | Annotated Note Description
 
 data StepInfo
-  = Glue
+  = Identity
+    -- ^ The input, unchanged ('returnA').
+  | Glue
     -- ^ @arr@: a pure function.
   | Effect
     -- ^ @act@: plain code with an effect.
@@ -59,6 +63,7 @@ describe = \case
   Step s -> Leaf (stepInfo s)
   Seq f g -> Sequence (sequenced (describe f) <> sequenced (describe g))
   Fanout f g -> Together (together (describe f) <> together (describe g))
+  Split f g -> Halves (describe f) (describe g)
   First f -> OnFirst (describe f)
   Choose f g -> Branch (describe f) (describe g)
   Each f -> ForEach (describe f)
@@ -73,6 +78,7 @@ describe = \case
 
 stepInfo :: Step m i o -> StepInfo
 stepInfo = \case
+  Pass -> Identity
   Arr _ -> Glue
   Act _ -> Effect
   Draft input out instruction tools ->
@@ -91,14 +97,17 @@ instance Show Description where
 
 data Tree = Node Text [Tree]
 
--- | The tree view. Unnamed glue is hidden, and each tool's body is expanded
--- the first time the tool appears.
+-- | The tree view. Each tool's body is expanded the first time the tool
+-- appears. Unnamed glue between steps is hidden, but a branch is never hidden:
+-- inside @&&&@, @***@ and @|||@ it shows as @arr@ (or @pass@ for 'returnA'), and
+-- a pass-through beside a step shows as "keeping its input".
 renderTree :: Description -> Text
 renderTree = T.intercalate "\n" . concatMap (draw "" "") . snd . trees []
 
 -- | Convert to trees, threading the names of tools already expanded.
 trees :: [Text] -> Description -> ([Text], [Tree])
 trees seen = \case
+  Leaf Identity -> (seen, [])
   Leaf Glue -> (seen, [])
   Leaf Effect -> (seen, [Node "act" []])
   Leaf (JudgeInfo _ qs) -> (seen, [Node (judgeText qs) []])
@@ -106,15 +115,21 @@ trees seen = \case
     let (seen', toolTrees) = mapAccumL toolTree seen tools
      in (seen', [Node ("draft " <> typeLabel out <> "  " <> quoted (instructionText instruction)) toolTrees])
   Sequence ds -> concat <$> mapAccumL trees seen ds
-  Together ds -> case concat <$> mapAccumL trees seen ds of
-    (seen', [t]) -> (seen', [t])
-    (seen', ts) -> (seen', [Node "together" ts])
-  OnFirst d -> fmap (\ts -> [Node "on first" ts]) (trees seen d)
+  Together ds ->
+    let keeping = if any passes ds then "  (keeping its input)" else ""
+     in case concat <$> mapAccumL branch seen (filter (not . passes) ds) of
+          (seen', [Node t cs]) -> (seen', [Node (t <> keeping) cs])
+          (seen', ts) -> (seen', [Node ("together" <> keeping) ts])
+  Halves l r ->
+    let (seen1, ls) = branch seen l
+        (seen2, rs) = branch seen1 r
+     in (seen2, [Node "both halves" [labelled "first" ls, labelled "second" rs]])
+  OnFirst d -> fmap (\ts -> [Node "on first" ts]) (branch seen d)
   Branch l r ->
-    let (seen1, ls) = trees seen l
-        (seen2, rs) = trees seen1 r
+    let (seen1, ls) = branch seen l
+        (seen2, rs) = branch seen1 r
      in (seen2, [Node "branch" [labelled "left" ls, labelled "right" rs]])
-  ForEach d -> case trees seen d of
+  ForEach d -> case branch seen d of
     (seen', [Node "together" ts]) -> (seen', [Node "each" ts])
     (seen', ts) -> (seen', [Node "each" ts])
   Annotated n d -> case trees seen d of
@@ -122,6 +137,10 @@ trees seen = \case
     (seen', []) -> (seen', [Node (noteName n) []])
     (seen', ts) -> (seen', [Node (noteName n) ts])
   where
+    -- A branch always shows, even when it's only glue.
+    branch s d = case trees s d of
+      (s', []) -> (s', [Node (if passes d then "pass" else "arr") []])
+      r -> r
     toolTree s t
       | infoName t `elem` s = (s, Node ("tool " <> infoName t <> "  (see above)") [])
       | otherwise = case trees (infoName t : s) (infoBody t) of
@@ -131,6 +150,14 @@ trees seen = \case
       [Node t cs] -> Node (l <> " → " <> t) cs
       [] -> Node (l <> " → pass") []
       ts -> Node l ts
+
+-- | Does this part of a flow only pass its input through?
+passes :: Description -> Bool
+passes = \case
+  Leaf Identity -> True
+  Sequence ds -> all passes ds
+  Annotated _ d -> passes d
+  _ -> False
 
 judgeText :: [QuestionSpec] -> Text
 judgeText = \case
@@ -182,6 +209,7 @@ toValue = \case
   Leaf info -> leaf info
   Sequence ds -> node "sequence" [("steps", Array (map toValue ds))]
   Together ds -> node "together" [("steps", Array (map toValue ds))]
+  Halves l r -> node "halves" [("first", toValue l), ("second", toValue r)]
   OnFirst d -> node "onFirst" [("step", toValue d)]
   Branch l r -> node "branch" [("left", toValue l), ("right", toValue r)]
   ForEach d -> node "each" [("step", toValue d)]
@@ -193,6 +221,7 @@ toValue = \case
   where
     node kind fields = Object (("kind", String kind) : fields)
     leaf = \case
+      Identity -> node "pass" []
       Glue -> node "arr" []
       Effect -> node "act" []
       DraftInfo instruction input out tools ->

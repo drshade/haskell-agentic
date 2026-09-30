@@ -259,8 +259,8 @@ dinoProject :: Agentic IO () Poster
 dinoProject =
   draft @[Creature] "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
     >>> each classify
-    >>> arr (partition (clearly Dinosaur 0.8)) `named` "keep the clear dinosaurs (≥ 0.8)"
-    >>> (each (arr fst >>> exhibit) *** arr (map notADinosaur))
+    >>> arr (partition (clearly Dinosaur 0.8)) `named` "split off the clear dinosaurs (≥ 0.8)"
+    >>> (each (arr fst >>> exhibit) *** arr (map notADinosaur) `named` "note what the others were")
     >>> arr (uncurry Exhibit)
     >>> draft @Poster "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
 
@@ -295,12 +295,14 @@ flow on each half of a pair, and `|||` picks a branch. All of these are ordinary
 ghci> describe dinoProject
 draft [Creature]  "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
 each
-└─ judge choice of 7 "What kind of animal was this creature?"
-keep the clear dinosaurs (≥ 0.8)
-each
-└─ exhibit  together
-   ├─ draft DinoPic  "Draw an ascii picture of this dinosaur, 10 lines high"
-   └─ draft TrumpCard  "Make a trump card for this dinosaur"
+└─ judge choice of 7 "What kind of animal was this creature?"  (keeping its input)
+split off the clear dinosaurs (≥ 0.8)
+both halves
+├─ first → each
+│  └─ exhibit  together  (keeping its input)
+│     ├─ draft DinoPic  "Draw an ascii picture of this dinosaur, 10 lines high"
+│     └─ draft TrumpCard  "Make a trump card for this dinosaur"
+└─ second → note what the others were
 draft Poster  "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
 ```
 
@@ -315,20 +317,25 @@ data Description
   = Leaf      StepInfo
   | Sequence  [Description]           -- a >>> b >>> c, flattened
   | Together  [Description]           -- a &&& b &&& c, flattened
+  | Halves    Description Description -- a *** b
   | OnFirst   Description
   | Branch    Description Description
   | ForEach   Description
   | Annotated Note Description
 
 data StepInfo
-  = Glue                              -- arr
+  = Identity                          -- returnA
+  | Glue                              -- arr
   | Effect                            -- act
   | DraftInfo { draftInstruction :: Instruction, draftInput, draftOutput :: Schema, draftTools :: [ToolInfo] }
   | JudgeInfo { judgeState :: Schema, judgeQuestions :: [QuestionSpec] }
 ```
 
-A `Description` is simplified rather than a literal copy of the flow: chains are
-flattened, `arr id` is dropped, and the tree view hides unnamed glue. Tool bodies
+A `Description` is simplified rather than a literal copy of the flow: chains
+are flattened, and the tree view hides unnamed glue between steps. It never
+hides a branch, though. Inside `&&&`, `***` and `|||` an unnamed `arr` shows as
+`arr`, so you can see it's there and name it, and a `returnA` beside a step
+shows as "keeping its input". Tool bodies
 are expanded the first time a tool appears and referenced by name after that, so
 a tool that can call itself still renders.
 
@@ -340,11 +347,12 @@ you name it with `named`. Written infix, `named` binds as tightly as function
 application, so it names exactly the expression before it:
 
 ```haskell
-    >>> arr (partition (clearly Dinosaur 0.8)) `named` "keep the clear dinosaurs (≥ 0.8)"
+    >>> arr (partition (clearly Dinosaur 0.8)) `named` "split off the clear dinosaurs (≥ 0.8)"
 ```
 
-Without that name, the tree would hide the filter as glue, and the step that
-decides which creatures go on the poster would be invisible. To name a larger
+Without that name, the tree would show nothing between classifying and building
+exhibits, and the step that decides which creatures become exhibits would be
+invisible. To name a larger
 sub-flow, bracket it, as `exhibit` does above. `note name description flow`
 names a flow and describes it too.
 

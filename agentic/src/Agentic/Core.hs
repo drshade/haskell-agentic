@@ -54,6 +54,8 @@ data Note = Note
 
 -- | The leaves of a flow: the steps that do the work.
 data Step m i o where
+  Pass :: Step m i i
+    -- ^ The input, unchanged: 'id' and 'returnA'.
   Arr :: (i -> o) -> Step m i o
   Act :: (i -> m o) -> Step m i o
   Draft :: Codec i -> Codec o -> Instruction -> [Tool m] -> Step m i o
@@ -65,6 +67,7 @@ data Agentic m i o where
   Step :: Step m i o -> Agentic m i o
   Seq :: Agentic m a b -> Agentic m b c -> Agentic m a c
   Fanout :: Agentic m a b -> Agentic m a c -> Agentic m a (b, c)
+  Split :: Agentic m a b -> Agentic m c d -> Agentic m (a, c) (b, d)
   First :: Agentic m a b -> Agentic m (a, c) (b, c)
   Choose :: Agentic m a c -> Agentic m b c -> Agentic m (Either a b) c
   Each :: Agentic m a b -> Agentic m [a] [b]
@@ -75,7 +78,7 @@ data Tool m where
   Tool :: {toolName :: Text, toolDescription :: Text, toolInput :: Codec i, toolOutput :: Codec o, toolBody :: Agentic m i o} -> Tool m
 
 instance Category.Category (Agentic m) where
-  id = Step (Arr id)
+  id = Step Pass
   g . f = Seq f g
 
 -- The overrides keep the structure visible to 'Agentic.Describe.describe'
@@ -83,8 +86,8 @@ instance Category.Category (Agentic m) where
 instance Arrow (Agentic m) where
   arr = Step . Arr
   first = First
-  second f = Fanout (arr fst) (arr snd >>> f)
-  f *** g = Fanout (arr fst >>> f) (arr snd >>> g)
+  second = Split (Step Pass)
+  (***) = Split
   f &&& g = Fanout f g
 
 instance ArrowChoice (Agentic m) where

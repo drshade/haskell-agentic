@@ -78,8 +78,8 @@ dinoProject :: Agentic IO () Poster
 dinoProject =
   draft @[Creature] "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
     >>> each classify
-    >>> arr (partition (clearly Dinosaur 0.8)) `named` "keep the clear dinosaurs (≥ 0.8)"
-    >>> (each (arr fst >>> exhibit) *** arr (map notADinosaur))
+    >>> arr (partition (clearly Dinosaur 0.8)) `named` "split off the clear dinosaurs (≥ 0.8)"
+    >>> (each (arr fst >>> exhibit) *** arr (map notADinosaur) `named` "note what the others were")
     >>> arr (uncurry Exhibit)
     >>> draft @Poster "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
 
