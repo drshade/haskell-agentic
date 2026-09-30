@@ -78,14 +78,14 @@ dinoProject :: Agentic IO () Poster
 dinoProject =
   draft @[Creature] "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
     >>> each classify
-    >>> arr (partition (clearly Dinosaur 0.8))
+    >>> arr (partition (clearly Dinosaur 0.8)) `named` "keep the clear dinosaurs (≥ 0.8)"
     >>> (each (arr fst >>> exhibit) *** arr (map notADinosaur))
     >>> arr (uncurry Exhibit)
     >>> draft @Poster "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
 
 -- | Jev decides what kind of animal each creature was.
 classify :: Agentic IO Creature (Creature, Choice Kind)
-classify = returnA &&& judge (choice "What kind of animal was this creature?") <?> "classify"
+classify = returnA &&& judge (choice "What kind of animal was this creature?")
 
 -- | Keep a creature when Jev chose this kind with at least probability @p@.
 clearly :: Kind -> Probability -> (Creature, Choice Kind) -> Bool
@@ -93,9 +93,10 @@ clearly kind p (_, c) = chosen c == kind && maybe False (>= p) (lookup kind (cho
 
 exhibit :: Agentic IO Creature Entry
 exhibit =
-  (returnA &&& draft @DinoPic "Draw an ascii picture of this dinosaur, 10 lines high" &&& draft @TrumpCard "Make a trump card for this dinosaur")
+  (returnA &&& draft @DinoPic "Draw an ascii picture of this dinosaur, 10 lines high" 
+           &&& draft @TrumpCard "Make a trump card for this dinosaur")
+    `named` "exhibit"
     >>> arr (\(c, (p, t)) -> Entry c p t)
-    <?> "exhibit"
 
 notADinosaur :: (Creature, Choice Kind) -> NotADinosaur
 notADinosaur (c, k) = NotADinosaur (name c) (chosen k)
@@ -105,7 +106,9 @@ notADinosaur (c, k) = NotADinosaur (name c) (chosen k)
 main :: IO ()
 main = do
   _ <- loadDotEnv
-  print (describe dinoProject)
-  rt <- pure runtime >>= withSystemOne jev >>= withSystemTwo (anthropic & effort Low)
+  print $ describe dinoProject
+  rt <- pure runtime 
+              >>= withSystemOne jev 
+              >>= withSystemTwo (anthropic & effort Low)
   poster <- interpret rt dinoProject ()
-  T.putStrLn ("\n" <> heading poster <> "\n\n" <> body poster)
+  T.putStrLn $ "\n" <> heading poster <> "\n\n" <> body poster

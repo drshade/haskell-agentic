@@ -257,20 +257,21 @@ dinoProject :: Agentic IO () Poster
 dinoProject =
   draft @[Creature] "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
     >>> each classify
-    >>> arr (partition (clearly Dinosaur 0.8))
+    >>> arr (partition (clearly Dinosaur 0.8)) `named` "keep the clear dinosaurs (≥ 0.8)"
     >>> (each (arr fst >>> exhibit) *** arr (map notADinosaur))
     >>> arr (uncurry Exhibit)
     >>> draft @Poster "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
 
 -- Jev decides what kind of animal each creature was.
 classify :: Agentic IO Creature (Creature, Choice Kind)
-classify = returnA &&& judge (choice "What kind of animal was this creature?") <?> "classify"
+classify = returnA &&& judge (choice "What kind of animal was this creature?")
 
 exhibit :: Agentic IO Creature Entry
 exhibit =
-  (returnA &&& draft @DinoPic "Draw an ascii picture of this dinosaur, 10 lines high" &&& draft @TrumpCard "Make a trump card for this dinosaur")
+  (returnA &&& draft @DinoPic "Draw an ascii picture of this dinosaur, 10 lines high"
+           &&& draft @TrumpCard "Make a trump card for this dinosaur")
+    `named` "exhibit"
     >>> arr (\(c, (p, t)) -> Entry c p t)
-    <?> "exhibit"
 ```
 
 `Kind` is an `Options` type, and each option's description tells Jev what it
@@ -292,7 +293,8 @@ flow on each half of a pair, and `|||` picks a branch. All of these are ordinary
 ghci> describe dinoProject
 draft [Creature]  "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
 each
-└─ classify  judge choice of 7 "What kind of animal was this creature?"
+└─ judge choice of 7 "What kind of animal was this creature?"
+keep the clear dinosaurs (≥ 0.8)
 each
 └─ exhibit  together
    ├─ draft DinoPic  "Draw an ascii picture of this dinosaur, 10 lines high"
@@ -331,24 +333,24 @@ a tool that can call itself still renders.
 ### Notes
 
 `describe` already knows each draft's instruction and tools, each judgement's
-questions, and every contract's schema. A pure `arr` or an `act` is opaque, so you
-name it. You can also name and describe a whole sub-flow, borrowing parsec's
-`<?>`:
+questions, and every contract's schema. A pure `arr` or an `act` is opaque, so
+you name it with `named`. Written infix, `named` binds as tightly as function
+application, so it names exactly the expression before it:
 
 ```haskell
-classify = returnA &&& judge (choice "What kind of animal was this creature?") <?> "classify"
-
-exhibit =
-  note "exhibit" "Draw one dinosaur and make its trump card" $
-    (returnA &&& (drawIt <?> "picture") &&& (makeCard <?> "card"))
-      >>> arr (\(c, (p, t)) -> Entry c p t)
+    >>> arr (partition (clearly Dinosaur 0.8)) `named` "keep the clear dinosaurs (≥ 0.8)"
 ```
 
-Notes nest into paths like `exhibit / picture`. Tracing uses those paths, and they stay stable when you edit the flow around them, so they also work
-as keys for caching and for comparing two runs. A runtime can choose to show the
-model where it is in the flow ("You're in step `exhibit`"). An
-instruction is written for the model. A note is written for whoever is watching
-the flow.
+Without that name, the tree would hide the filter as glue, and the step that
+decides which creatures go on the poster would be invisible. To name a larger
+sub-flow, bracket it, as `exhibit` does above. `note name description flow`
+names a flow and describes it too.
+
+Names nest into paths like `exhibit / picture`. Tracing uses those paths, and
+they stay stable when you edit the flow around them, so they also work as keys
+for caching and for comparing two runs. A runtime can choose to show the model
+where it is in the flow ("You're in step `exhibit`"). An instruction is written
+for the model. A name is written for whoever is watching the flow.
 
 ## Tic-tac-toe
 

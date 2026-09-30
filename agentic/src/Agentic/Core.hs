@@ -18,7 +18,7 @@ module Agentic.Core
     -- * Structure
   , each
   , note
-  , (<?>)
+  , named
     -- * Judgement helpers
   , keep
   , gate
@@ -101,11 +101,11 @@ draft = draftWith @o []
 
 -- | An LLM writes an @o@, calling the tools as often as it likes along the way.
 draftWith :: forall o i m. (Contract i, Contract o, Typeable i, Typeable o) => [Tool m] -> Instruction -> Agentic m i o
-draftWith tools instruction = Step (Draft (named @i) (named @o) instruction tools)
+draftWith tools instruction = Step (Draft (titledContract @i) (titledContract @o) instruction tools)
 
 -- | A System One model answers questions about the step's input.
 judge :: forall i o m. (Contract i, Typeable i) => Questions o -> Agentic m i o
-judge = Step . Judge (named @i)
+judge = Step . Judge (titledContract @i)
 
 -- | Plain code with an effect.
 act :: (i -> m o) -> Agentic m i o
@@ -113,11 +113,11 @@ act = Step . Act
 
 -- | A tool: a name and description for the model, and a flow to run.
 tool :: forall i o m. (Contract i, Contract o, Typeable i, Typeable o) => Text -> Text -> Agentic m i o -> Tool m
-tool name description = Tool name description (named @i) (named @o)
+tool name description = Tool name description (titledContract @i) (titledContract @o)
 
 -- | A type's contract, with its schema named after the type if it isn't already.
-named :: forall a. (Contract a, Typeable a) => Codec a
-named = c {codecSchema = titled (T.pack (show (typeRep (Proxy @a)))) (codecSchema c)}
+titledContract :: forall a. (Contract a, Typeable a) => Codec a
+titledContract = c {codecSchema = titled (T.pack (show (typeRep (Proxy @a)))) (codecSchema c)}
   where
     c = contract @a
 
@@ -129,23 +129,30 @@ each = Each
 note :: Text -> Text -> Agentic m i o -> Agentic m i o
 note name description = Noted (Note name (if T.null description then Nothing else Just description))
 
--- | Name a sub-flow, as in parsec.
-(<?>) :: Agentic m i o -> Text -> Agentic m i o
-f <?> name = Noted (Note name Nothing) f
+-- | Name a flow. Written infix, it names exactly the expression before it,
+-- because it binds as tightly as function application:
+--
+-- > draft @[Creature] "Name 10 prehistoric creatures"
+-- >   >>> arr (partition clearDinosaur) `named` "keep the clear dinosaurs"
+-- >   >>> ...
+--
+-- Bracket a larger sub-flow to name all of it.
+named :: Agentic m i o -> Text -> Agentic m i o
+f `named` name = Noted (Note name Nothing) f
 
-infixl 0 <?>
+infixl 9 `named`
 
 -- | Keep the items where the probability of yes is at least @p@.
 keep :: (Contract i, Typeable i) => Probability -> Questions YesNo -> Agentic m [i] [i]
 keep p q =
-  each (returnA &&& judge q)
-    >>> arr (map fst . filter ((>= p) . yes . snd))
-    <?> ("keep " <> T.pack (show p))
+  note ("keep " <> T.pack (show p)) "" $
+    each (returnA &&& judge q)
+      >>> arr (map fst . filter ((>= p) . yes . snd))
 
 -- | Send the input 'Right' if the probability of yes is at least @p@, and
 -- 'Left' otherwise.
 gate :: (Contract i, Typeable i) => Probability -> Questions YesNo -> Agentic m i (Either i i)
 gate p q =
-  (returnA &&& judge q)
-    >>> arr (\(x, a) -> if yes a >= p then Right x else Left x)
-    <?> ("gate " <> T.pack (show p))
+  note ("gate " <> T.pack (show p)) "" $
+    (returnA &&& judge q)
+      >>> arr (\(x, a) -> if yes a >= p then Right x else Left x)
