@@ -10,6 +10,7 @@ module Agentic
   , module Agentic.Value
   , module Agentic.Schema
   , module Agentic.ViaLLM
+  , module Agentic.Settings
   ) where
 
 import Agentic.Contract
@@ -21,3 +22,4 @@ import Agentic.Runtime
 import Agentic.Schema
 import Agentic.Value
 import Agentic.ViaLLM
+import Agentic.Settings

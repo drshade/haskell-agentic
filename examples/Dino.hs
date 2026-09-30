@@ -4,7 +4,7 @@
 module Main (main) where
 
 import Agentic
-import Agentic.Anthropic (Anthropic (..), anthropic)
+import Agentic.Anthropic (anthropic)
 import Agentic.IO.DotEnv (loadDotEnv)
 import Agentic.Jev (jev)
 import Agentic.Scripted (alwaysYes, callTools, replyingWith, respond)
@@ -76,7 +76,7 @@ main = do
     if live
       then do
         _ <- loadDotEnv
-        pure runtime >>= withSystemOne jev >>= withSystemTwo anthropic {anthropicEffort = Just "low"}
+        pure runtime >>= withSystemOne jev >>= withSystemTwo (anthropic & effort Low)
       else pure runtime {systemOne = alwaysYes 0.95, systemTwo = replyingWith mockLLM}
   let rt =
         observing

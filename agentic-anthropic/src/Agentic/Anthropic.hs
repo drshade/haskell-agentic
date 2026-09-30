@@ -1,9 +1,11 @@
 -- | Claude as a runtime's System Two (and, through 'viaLLM', System One).
 --
 -- > rt <- pure runtime >>= withSystemTwo anthropic
+-- > rt <- pure runtime >>= withSystemTwo (anthropic & model "claude-sonnet-5-5" & effort Low)
 module Agentic.Anthropic
   ( Anthropic (..)
   , anthropic
+  , fallbacks
   , AnthropicError (..)
     -- * Wire format
   , requestBody
@@ -15,6 +17,7 @@ import Agentic.Core (Instruction (..))
 import Agentic.JsonSchema (objectSchema, unwrap)
 import Agentic.Runtime
 import Agentic.Schema (Schema)
+import Agentic.Settings
 import qualified Agentic.Value as A
 import Agentic.ViaLLM (viaLLM)
 import Control.Exception (Exception (..), throwIO)
@@ -33,36 +36,58 @@ import Network.HTTP.Client.TLS (newTlsManager)
 import Network.HTTP.Types.Status (statusCode)
 import System.Environment (lookupEnv)
 
--- | Claude's settings. Start from 'anthropic' and override what you need:
---
--- > anthropic {anthropicModel = "claude-sonnet-5-5", anthropicEffort = Just "low"}
+-- | Claude's settings. Start from 'anthropic' and change them with the setters
+-- from "Agentic.Settings" ('model', 'system', 'effort', 'maxTokens', 'key',
+-- 'endpoint', 'timeout') and 'fallbacks'.
 data Anthropic = Anthropic
-  { anthropicModel :: Text
-  , anthropicSystem :: Maybe Text
+  { model :: Text
+  , system :: Maybe Text
     -- ^ A system prompt for every @draft@ in the runtime.
-  , anthropicMaxTokens :: Int
-  , anthropicEffort :: Maybe Text
-    -- ^ @low@, @medium@, @high@, @xhigh@ or @max@; the model's default if unset.
-  , anthropicFallbacks :: Bool
+  , maxTokens :: Int
+  , effort :: Maybe Effort
+    -- ^ The model's default if unset.
+  , fallbacks :: Bool
     -- ^ Let the API retry a refused request on a fallback model it picks.
-  , anthropicKey :: Maybe Text
+  , key :: Maybe Text
     -- ^ Defaults to the @ANTHROPIC_API_KEY@ environment variable.
-  , anthropicEndpoint :: String
-  , anthropicTimeoutSeconds :: Int
+  , endpoint :: String
+  , timeout :: Int
+    -- ^ Seconds.
   }
 
 anthropic :: Anthropic
 anthropic =
   Anthropic
-    { anthropicModel = "claude-opus-5-5"
-    , anthropicSystem = Nothing
-    , anthropicMaxTokens = 16000
-    , anthropicEffort = Nothing
-    , anthropicFallbacks = True
-    , anthropicKey = Nothing
-    , anthropicEndpoint = "https://api.anthropic.com/v1/messages"
-    , anthropicTimeoutSeconds = 600
+    { model = "claude-opus-5-5"
+    , system = Nothing
+    , maxTokens = 16000
+    , effort = Nothing
+    , fallbacks = True
+    , key = Nothing
+    , endpoint = "https://api.anthropic.com/v1/messages"
+    , timeout = 600
     }
+
+instance HasModel Anthropic where model m c = c {model = m}
+instance HasSystem Anthropic where system t c = c {system = Just t}
+instance HasMaxTokens Anthropic where maxTokens n c = c {maxTokens = n}
+instance HasEffort Anthropic where effort e c = c {effort = Just e}
+instance HasKey Anthropic where key k c = c {key = Just k}
+instance HasEndpoint Anthropic where endpoint e c = c {endpoint = e}
+instance HasTimeout Anthropic where timeout t c = c {timeout = t}
+
+-- | Whether the API may retry a refused request on a fallback model. On by
+-- default.
+fallbacks :: Bool -> Anthropic -> Anthropic
+fallbacks on c = c {fallbacks = on}
+
+effortName :: Effort -> Text
+effortName = \case
+  Low -> "low"
+  Medium -> "medium"
+  High -> "high"
+  XHigh -> "xhigh"
+  Max -> "max"
 
 data AnthropicError
   = MissingKey
@@ -78,30 +103,30 @@ data AnthropicError
 
 instance Exception AnthropicError where
   displayException = \case
-    MissingKey -> "Anthropic: no API key. Set ANTHROPIC_API_KEY, or anthropicKey in the config."
+    MissingKey -> "Anthropic: no API key. Set ANTHROPIC_API_KEY, or use (anthropic & key ...)."
     HttpError status body -> "Anthropic rejected the request (HTTP " <> show status <> "): " <> T.unpack body
     Refused category -> "Claude declined the request" <> maybe "" (\c -> " (" <> T.unpack c <> ")") category
-    Truncated -> "Claude's reply hit the token limit; raise anthropicMaxTokens"
+    Truncated -> "Claude's reply hit the token limit; raise it with (anthropic & maxTokens ...)"
     UnexpectedStop reason -> "Claude stopped for an unexpected reason: " <> T.unpack reason
     UnexpectedResponse problem -> "Anthropic sent a response agentic can't read: " <> T.unpack problem
 
 instance ProvidesSystemTwo Anthropic where
   toSystemTwo cfg = do
-    key <- maybe (fmap T.pack <$> lookupEnv "ANTHROPIC_API_KEY") (pure . Just) (anthropicKey cfg) >>= maybe (throwIO MissingKey) pure
+    key' <- maybe (fmap T.pack <$> lookupEnv "ANTHROPIC_API_KEY") (pure . Just) cfg.key >>= maybe (throwIO MissingKey) pure
     manager <- newTlsManager
-    base <- Http.parseRequest (anthropicEndpoint cfg)
+    base <- Http.parseRequest cfg.endpoint
     pure $ SystemTwo $ \conversation -> do
       let http =
             base
               { Http.method = "POST"
               , Http.requestHeaders =
-                  [ ("x-api-key", T.encodeUtf8 key)
+                  [ ("x-api-key", T.encodeUtf8 key')
                   , ("anthropic-version", "2023-06-01")
                   , ("content-type", "application/json")
                   ]
-                    <> [("anthropic-beta", "server-side-fallback-2026-07-01") | anthropicFallbacks cfg]
+                    <> [("anthropic-beta", "server-side-fallback-2026-07-01") | cfg.fallbacks]
               , Http.requestBody = Http.RequestBodyLBS (TL.encodeUtf8 (TL.fromStrict (A.renderJson (requestBody cfg conversation))))
-              , Http.responseTimeout = Http.responseTimeoutMicro (anthropicTimeoutSeconds cfg * 1000000)
+              , Http.responseTimeout = Http.responseTimeoutMicro (cfg.timeout * 1000000)
               }
       response <- Http.httpLbs http manager
       let status = statusCode (Http.responseStatus response)
@@ -121,21 +146,21 @@ instance ProvidesSystemOne Anthropic where
 requestBody :: Anthropic -> Conversation -> A.Value
 requestBody cfg c =
   A.Object $
-    [ ("model", A.String (anthropicModel cfg))
-    , ("max_tokens", A.Integer (toInteger (anthropicMaxTokens cfg)))
+    [ ("model", A.String cfg.model)
+    , ("max_tokens", A.Integer (toInteger cfg.maxTokens))
     ]
-      <> maybe [] (\s -> [("system", A.String s)]) (anthropicSystem cfg)
+      <> maybe [] (\s -> [("system", A.String s)]) cfg.system
       <> [("tools", A.Array (map tool (tools c))) | not (null (tools c))]
       <> [ ("messages", A.Array (task : concatMap exchange (history c)))
          , ( "output_config"
            , A.Object
                ( ("format", A.Object [("type", A.String "json_schema"), ("schema", objectSchema (output c))])
-                   : maybe [] (\e -> [("effort", A.String e)]) (anthropicEffort cfg)
+                   : maybe [] (\e -> [("effort", A.String (effortName e))]) cfg.effort
                )
            )
          , ("cache_control", A.Object [("type", A.String "ephemeral")])
          ]
-      <> [("fallbacks", A.String "default") | anthropicFallbacks cfg]
+      <> [("fallbacks", A.String "default") | cfg.fallbacks]
   where
     task = message "user" (A.String (instructionText (instruction c) <> input))
     input = case state c of

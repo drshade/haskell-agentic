@@ -1,7 +1,7 @@
 module Main (main) where
 
 import Agentic
-import Agentic.Anthropic (Anthropic (..), anthropic)
+import Agentic.Anthropic (anthropic)
 import Agentic.IO.DotEnv (loadDotEnv)
 import Data.IORef
 import Data.Text (Text)
@@ -33,13 +33,13 @@ main = do
   hspec $ Test.Hspec.describe "Anthropic, live" $ case key of
     Nothing -> it "needs ANTHROPIC_API_KEY" (pendingWith "set ANTHROPIC_API_KEY in .env to run the live tests")
     Just _ -> do
-      let fast = anthropic {anthropicEffort = Just "low"}
+      let fast = anthropic & effort Low
           withClaude = pure runtime >>= withSystemTwo fast
 
       it "drafts a record" $ do
         rt <- withClaude
         j <- interpret rt (draft @Joke "a joke please") ()
-        T.null (punchline j) `shouldBe` False
+        T.null j.punchline `shouldBe` False
 
       it "drafts a list, which has to be wrapped for structured outputs" $ do
         rt <- withClaude

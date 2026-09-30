@@ -32,6 +32,7 @@ library
     Agentic.Runtime
     Agentic.Schema
     Agentic.Scripted
+    Agentic.Settings
     Agentic.Value
     Agentic.ViaLLM
   build-depends:

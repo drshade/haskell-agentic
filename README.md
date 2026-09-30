@@ -365,14 +365,19 @@ main :: IO ()
 main = do
   rt <- pure runtime
     >>= withSystemOne jev
-    >>= withSystemTwo anthropic { anthropicModel = "claude-opus-5-5" }
+    >>= withSystemTwo (anthropic & model "claude-opus-5-5")
     <&> concurrently . observing logEvent
   poster <- interpret rt dinoProject ()
   print poster
 ```
 
-Provider configs are records with defaults (`jev`, `anthropic`, `openai`), with fields prefixed by the provider's name (`jevModel`, `anthropicModel`) so they don't clash. API keys come from the environment
-(`JEV_TOKEN`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) unless you set them. To keep
+Each provider has a default config (`jev`, `anthropic`, `openai`) that you
+adjust with setters: `anthropic & model "claude-sonnet-5-5" & effort Low`. The
+setters for settings providers share (`model`, `key`, `system`, `effort`,
+`maxTokens`, `endpoint`, `timeout`) work on any provider's config; the rest,
+like Anthropic's `fallbacks`, live in the provider's module. API keys come from
+the environment (`JEV_TOKEN`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) unless you
+set them with `key`. To keep
 keys in a file, copy `.env.example` to `.env` (git ignores it) and call
 `loadDotEnv` from `agentic-io` at startup. Variables already set in the
 environment win. `run`
@@ -383,8 +388,8 @@ providers can fill both roles. This runs everything on OpenAI, with no Jev token
 
 ```haskell
 rt <- pure runtime
-  >>= withSystemOne openai { openaiModel = "gpt-5" }
-  >>= withSystemTwo openai { openaiModel = "gpt-5" }
+  >>= withSystemOne (openai & model "gpt-5")
+  >>= withSystemTwo (openai & model "gpt-5")
 ```
 
 An LLM answering as System One gives probabilities, but they aren't calibrated
@@ -393,9 +398,9 @@ which provider answered it.
 
 ### Prompts and sessions
 
-LLM provider configs take an optional `system` prompt that applies to every
-`draft` in the runtime, e.g. `anthropic { anthropicModel = "claude-opus-5-5", anthropicSystem = "You write for primary school children." }`.
-A step's `Instruction` is its task. Text shared by several steps is just a Haskell
+LLM providers take an optional system prompt that applies to every `draft` in
+the runtime: `anthropic & system "You write for primary school children."`. A
+step's `Instruction` is its task. Text shared by several steps is just a Haskell
 string you reuse.
 
 The library doesn't tell the model how to format its reply. Output schemas and

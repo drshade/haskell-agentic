@@ -10,7 +10,10 @@ common shared
   default-language: GHC2021
   default-extensions:
     DeriveAnyClass
+    DuplicateRecordFields
     LambdaCase
+    NoFieldSelectors
+    OverloadedRecordDot
     OverloadedStrings
   ghc-options:      -Wall
 

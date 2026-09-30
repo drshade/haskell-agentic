@@ -1,6 +1,7 @@
 -- | Jev (TypeSafe's System One model) as a runtime's System One.
 --
 -- > rt <- pure runtime >>= withSystemOne jev
+-- > rt <- pure runtime >>= withSystemOne (jev & model "jev-1.13.0")
 module Agentic.Jev
   ( Jev (..)
   , jev
@@ -13,6 +14,7 @@ module Agentic.Jev
 import qualified Agentic.Value as A
 import Agentic.Questions
 import Agentic.Runtime (ProvidesSystemOne (..), SystemOne (..))
+import Agentic.Settings
 import Control.Exception (Exception (..), throwIO)
 import Data.Aeson ((.:))
 import qualified Data.Aeson as J
@@ -27,25 +29,30 @@ import Network.HTTP.Client.TLS (newTlsManager)
 import Network.HTTP.Types.Status (statusCode)
 import System.Environment (lookupEnv)
 
--- | Jev's settings. Start from 'jev' and override what you need:
---
--- > jev {jevModel = "jev-1.13.0"}
+-- | Jev's settings. Start from 'jev' and change them with the setters from
+-- "Agentic.Settings": 'model', 'key', 'endpoint' and 'timeout'.
 data Jev = Jev
-  { jevModel :: Text
-  , jevToken :: Maybe Text
+  { model :: Text
+  , key :: Maybe Text
     -- ^ Defaults to the @JEV_TOKEN@ environment variable.
-  , jevEndpoint :: String
-  , jevTimeoutSeconds :: Int
+  , endpoint :: String
+  , timeout :: Int
+    -- ^ Seconds.
   }
 
 jev :: Jev
 jev =
   Jev
-    { jevModel = "jev-latest"
-    , jevToken = Nothing
-    , jevEndpoint = "https://api.typesafe.ai/v1/systemone"
-    , jevTimeoutSeconds = 30
+    { model = "jev-latest"
+    , key = Nothing
+    , endpoint = "https://api.typesafe.ai/v1/systemone"
+    , timeout = 30
     }
+
+instance HasModel Jev where model m c = c {model = m}
+instance HasKey Jev where key k c = c {key = Just k}
+instance HasEndpoint Jev where endpoint e c = c {endpoint = e}
+instance HasTimeout Jev where timeout t c = c {timeout = t}
 
 data JevError
   = MissingToken
@@ -56,26 +63,26 @@ data JevError
 
 instance Exception JevError where
   displayException = \case
-    MissingToken -> "Jev: no token. Set JEV_TOKEN, or jevToken in the config."
+    MissingToken -> "Jev: no token. Set JEV_TOKEN, or use (jev & key ...)."
     HttpError status body -> "Jev rejected the request (HTTP " <> show status <> "): " <> T.unpack body
     UnexpectedResponse problem -> "Jev sent a response agentic can't read: " <> T.unpack problem
 
 instance ProvidesSystemOne Jev where
   toSystemOne cfg = do
-    token <- maybe (fmap T.pack <$> lookupEnv "JEV_TOKEN") (pure . Just) (jevToken cfg)
-    key <- maybe (throwIO MissingToken) pure token
+    token <- maybe (fmap T.pack <$> lookupEnv "JEV_TOKEN") (pure . Just) cfg.key
+    token' <- maybe (throwIO MissingToken) pure token
     manager <- newTlsManager
-    base <- Http.parseRequest (jevEndpoint cfg)
+    base <- Http.parseRequest cfg.endpoint
     pure $ SystemOne $ \request -> do
       let http =
             base
               { Http.method = "POST"
               , Http.requestHeaders =
-                  [ ("Authorization", "Bearer " <> T.encodeUtf8 key)
+                  [ ("Authorization", "Bearer " <> T.encodeUtf8 token')
                   , ("Content-Type", "application/json")
                   ]
-              , Http.requestBody = Http.RequestBodyBS (T.encodeUtf8 (A.renderJson (requestBody (jevModel cfg) request)))
-              , Http.responseTimeout = Http.responseTimeoutMicro (jevTimeoutSeconds cfg * 1000000)
+              , Http.requestBody = Http.RequestBodyBS (T.encodeUtf8 (A.renderJson (requestBody cfg.model request)))
+              , Http.responseTimeout = Http.responseTimeoutMicro (cfg.timeout * 1000000)
               }
       response <- Http.httpLbs http manager
       let status = statusCode (Http.responseStatus response)
@@ -89,9 +96,9 @@ instance ProvidesSystemOne Jev where
 -- | The request body: the state, and each question under an id (@q0@, @q1@, …).
 -- It's the core's 'A.Value' so that options keep their order.
 requestBody :: Text -> JudgeRequest -> A.Value
-requestBody model request =
+requestBody name request =
   A.Object
-    [ ("model", A.String model)
+    [ ("model", A.String name)
     , ("state", requestState request)
     , ("questions", A.Object [(qid, question q) | (qid, q) <- ided (requestQuestions request)])
     ]
