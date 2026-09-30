@@ -1,0 +1,21 @@
+cabal-version:      3.0
+name:               agentic-aeson
+version:            0.2.0.0
+synopsis:           Conversions between agentic's Value and aeson, for provider packages
+license:            MIT
+license-file:       ../LICENSE
+build-type:         Simple
+
+library
+  default-language: GHC2021
+  default-extensions: LambdaCase
+  ghc-options:      -Wall
+  hs-source-dirs:   src
+  exposed-modules:  Agentic.Aeson
+  build-depends:
+    , agentic
+    , aeson       >=2.1 && <2.3
+    , base        >=4.18 && <5
+    , scientific
+    , text
+    , vector

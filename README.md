@@ -5,8 +5,9 @@ Composable agentic workflows in Haskell: typed steps, mixing LLMs and
 
 > **Status:** v2 in progress. The core package (`agentic/`) implements the design
 > below and runs against scripted providers. The provider packages
-> (`agentic-anthropic`, `agentic-openai`, `agentic-jev`, `agentic-io`) aren't
-> written yet. `cabal run dino` runs the dino project against a mock.
+> `agentic-jev` is written. `agentic-anthropic`, `agentic-openai` and `agentic-io`
+> aren't yet. `cabal run dino` runs the dino project against a mock, and
+> `cabal run review` asks Jev about a joke for real (it needs `JEV_TOKEN`).
 
 ## The idea
 
@@ -116,6 +117,12 @@ So a reply that doesn't match the schema should never happen. Contracts can also
 carry checks the wire schemas can't express, like `between 1 10` or a length
 limit. Those are stated in the description and checked locally. A failed check
 goes back to the model and it tries again.
+
+The state's types are part of what the model reads. Field names carry meaning:
+a meeting note wrapped in a record with `setup` and `punchline` fields looks
+like a joke before the model reads a word. (Jev rated one 0.67 "a joke" that
+way, and 0.02 as plain text.) Give each step the state it should judge, and no
+more.
 
 For enumerations, the same descriptions reach Jev (see `Options` below). A type
 is described once, and both kinds of model see the same wording.
@@ -358,14 +365,17 @@ main :: IO ()
 main = do
   rt <- pure runtime
     >>= withSystemOne jev
-    >>= withSystemTwo anthropic { model = "claude-opus-5-5" }
+    >>= withSystemTwo anthropic { anthropicModel = "claude-opus-5-5" }
     <&> concurrently . observing logEvent
   poster <- interpret rt dinoProject ()
   print poster
 ```
 
-Provider configs are records with defaults. API keys come from the environment
-(`JEV_TOKEN`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) unless you set them. `run`
+Provider configs are records with defaults (`jev`, `anthropic`, `openai`), with fields prefixed by the provider's name (`jevModel`, `anthropicModel`) so they don't clash. API keys come from the environment
+(`JEV_TOKEN`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) unless you set them. To keep
+keys in a file, copy `.env.example` to `.env` (git ignores it) and call
+`loadDotEnv` from `agentic-io` at startup. Variables already set in the
+environment win. `run`
 in the examples above is `interpret` with a runtime built this way.
 
 Jev only provides System One, so `withSystemTwo jev` is a type error. The LLM
@@ -373,8 +383,8 @@ providers can fill both roles. This runs everything on OpenAI, with no Jev token
 
 ```haskell
 rt <- pure runtime
-  >>= withSystemOne openai { model = "gpt-5" }
-  >>= withSystemTwo openai { model = "gpt-5" }
+  >>= withSystemOne openai { openaiModel = "gpt-5" }
+  >>= withSystemTwo openai { openaiModel = "gpt-5" }
 ```
 
 An LLM answering as System One gives probabilities, but they aren't calibrated
@@ -384,7 +394,7 @@ which provider answered it.
 ### Prompts and sessions
 
 LLM provider configs take an optional `system` prompt that applies to every
-`draft` in the runtime, e.g. `anthropic { model = "claude-opus-5-5", system = "You write for primary school children." }`.
+`draft` in the runtime, e.g. `anthropic { anthropicModel = "claude-opus-5-5", anthropicSystem = "You write for primary school children." }`.
 A step's `Instruction` is its task. Text shared by several steps is just a Haskell
 string you reuse.
 
@@ -445,10 +455,11 @@ testRuntime = runtime { systemOne = answerAll (yes 0.95), systemTwo = scripted [
 | Package | Depends on | Contains |
 |---|---|---|
 | `agentic` | `base` | `Agentic`, steps, tools, combinators, `Contract`, `Questions`, `describe`, `interpret`, `Runtime`, pure modifiers, scripted providers |
+| `agentic-aeson` | `agentic`, aeson | conversions between the core's `Value` and aeson, for provider packages |
 | `agentic-anthropic` | `agentic`, http, aeson | Anthropic as System Two (and System One via the LLM adapter) |
 | `agentic-openai` | `agentic`, http, aeson | OpenAI as System Two (and System One) |
 | `agentic-jev` | `agentic`, http, aeson | Jev as System One |
-| `agentic-io` | `agentic`, async | `concurrently`, recording and replay, logging |
+| `agentic-io` | base, directory | `loadDotEnv` today; `concurrently` (async), recording and replay, and logging to come |
 | `examples` | all of the above | everything in this README |
 
 ## Design rules

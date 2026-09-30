@@ -1,0 +1,18 @@
+cabal-version:      3.0
+name:               agentic-io
+version:            0.2.0.0
+synopsis:           IO helpers for agentic runtimes
+license:            MIT
+license-file:       ../LICENSE
+build-type:         Simple
+
+library
+  default-language: GHC2021
+  default-extensions: LambdaCase
+  ghc-options:      -Wall
+  hs-source-dirs:   src
+  exposed-modules:  Agentic.IO.DotEnv
+  build-depends:
+    , base       >=4.18 && <5
+    , directory
+    , filepath

@@ -18,3 +18,19 @@ executable dino
     , agentic
     , base
     , text
+
+executable review
+  default-language: GHC2021
+  default-extensions:
+    DeriveAnyClass
+    LambdaCase
+    OverloadedStrings
+  ghc-options:      -Wall
+  hs-source-dirs:   .
+  main-is:          Review.hs
+  build-depends:
+    , agentic
+    , agentic-io
+    , agentic-jev
+    , base
+    , text
