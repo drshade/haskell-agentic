@@ -3,9 +3,10 @@
 Composable agentic workflows in Haskell: typed steps, mixing LLMs and
 [Jev](https://docs.typesafe.ai), that you can inspect before you run them.
 
-> **Status:** v2 in progress. The core (`agentic/`), Jev as System One
-> (`agentic-jev`) and Claude as System Two (`agentic-anthropic`) work, with live
-> tests. `agentic-openai` and most of `agentic-io` aren't written yet.
+> **Status:** v2 in progress. The core (`agentic/`) and three providers work,
+> each with live tests: Jev as System One (`agentic-jev`), and Claude
+> (`agentic-anthropic`) and OpenAI (`agentic-openai`) as System Two, or as System
+> One through `viaLLM`. Most of `agentic-io` isn't written yet.
 > `cabal run dino` runs the dino project with Claude and Jev.
 
 ## The idea
@@ -405,8 +406,8 @@ providers can fill both roles. This runs everything on OpenAI, with no Jev token
 
 ```haskell
 rt <- pure runtime
-  >>= withSystemOne (openai & model "gpt-5")
-  >>= withSystemTwo (openai & model "gpt-5")
+  >>= withSystemOne (openai & model "gpt-6-astra")
+  >>= withSystemTwo (openai & model "gpt-6-astra")
 ```
 
 An LLM answering as System One gives probabilities, but they aren't calibrated
@@ -479,7 +480,7 @@ testRuntime = runtime { systemOne = answerAll (yes 0.95), systemTwo = scripted [
 | `agentic` | `base` | `Agentic`, steps, tools, combinators, `Contract`, `Questions`, `describe`, `interpret`, `Runtime`, pure modifiers, scripted providers |
 | `agentic-aeson` | `agentic`, aeson | conversions between the core's `Value` and aeson, for provider packages |
 | `agentic-anthropic` | `agentic`, http, aeson | Anthropic as System Two (and System One via the LLM adapter) |
-| `agentic-openai` | `agentic`, http, aeson | OpenAI as System Two (and System One) |
+| `agentic-openai` | `agentic`, http, aeson | OpenAI as System Two (and System One), over the Responses API |
 | `agentic-jev` | `agentic`, http, aeson | Jev as System One |
 | `agentic-io` | base, directory | `loadDotEnv` today; `concurrently` (async), recording and replay, and logging to come |
 | `examples` | all of the above | everything in this README |

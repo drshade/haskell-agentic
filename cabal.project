@@ -6,4 +6,5 @@ packages:
   agentic-anthropic
   agentic-io
   agentic-jev
+  agentic-openai
   examples
