@@ -175,7 +175,7 @@ main = hspec $ do
       T.lines (renderTree (Agentic.describe flow))
         `shouldBe` [ "draft [Joke]  \"ten jokes please\""
                    , "keep 0.7  each"
-                   , "└─ judge yes/no \"Would a 10-year-old laugh at this joke?\"  (keeping its input)"
+                   , "└─ judge  yes/no \"Would a 10-year-old laugh at this joke?\"  (keeping its input)"
                    , "each"
                    , "└─ draft Joke  \"polish this joke\""
                    , "   └─ tool search  act"

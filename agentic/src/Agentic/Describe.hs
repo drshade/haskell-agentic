@@ -119,11 +119,7 @@ trees :: [Text] -> Description -> ([Text], [Tree])
 trees seen = \case
   Leaf Identity -> (seen, [])
   Leaf Glue -> (seen, [])
-  Leaf Effect -> (seen, [Node "act" []])
-  Leaf (JudgeInfo _ qs) -> (seen, [Node (judgeText qs) []])
-  Leaf (DraftInfo instruction _ out tools) ->
-    let (seen', toolTrees) = mapAccumL toolTree seen tools
-     in (seen', [Node ("draft " <> typeLabel out <> "  " <> quoted (instructionText instruction)) toolTrees])
+  Leaf info -> leaf Nothing info
   Sequence ds -> concat <$> mapAccumL trees seen ds
   Together ds ->
     let keeping = if any passes ds then "  (keeping its input)" else ""
@@ -145,11 +141,18 @@ trees seen = \case
   ForEach d -> case branch seen d of
     (seen', [Node "together" ts]) -> (seen', [Node "each" ts])
     (seen', ts) -> (seen', [Node "each" ts])
+  Annotated n (Leaf info) | not (passes (Leaf info)) -> leaf (Just (noteName n)) info
   Annotated n d -> case trees seen d of
     (seen', [Node t cs]) -> (seen', [Node (noteName n <> "  " <> t) cs])
     (seen', []) -> (seen', [Node (noteName n) []])
     (seen', ts) -> (seen', [Node (noteName n) ts])
   where
+    -- A step: what kind it is, then its name, then the details.
+    leaf name info =
+      let (seen', toolTrees) = case info of
+            DraftInfo _ _ _ tools -> mapAccumL toolTree seen tools
+            _ -> (seen, [])
+       in (seen', [Node (T.intercalate "  " (stepLines name info)) toolTrees])
     -- A branch always shows, even when it's only glue.
     branch s d = case trees s d of
       (s', []) -> (s', [Node (if passes d then "pass" else "arr") []])
@@ -171,11 +174,6 @@ passes = \case
   Sequence ds -> all passes ds
   Annotated _ d -> passes d
   _ -> False
-
-judgeText :: [QuestionSpec] -> Text
-judgeText = \case
-  [q] -> "judge " <> questionText q
-  qs -> "judge " <> T.intercalate "; " (map questionText qs)
 
 questionText :: QuestionSpec -> Text
 questionText = \case
@@ -323,7 +321,6 @@ build context from = \case
     let targets = if null entries then [b] else entries
     mapM_ (\(e, _) -> mapM_ (\t -> edge (Edge e t (Just "again") Again)) targets) exits
     pure exits
-  Annotated n (Leaf Glue) -> node from [noteName n]
   Annotated n (Leaf info) | not (passes (Leaf info)) -> step (Just (noteName n)) info
   Annotated n f -> snd <$> box (noteName n) (build InSequence from f)
   where
@@ -331,10 +328,9 @@ build context from = \case
     chain acc = \case
       [] -> pure acc
       x : xs -> build InSequence acc x >>= (`chain` xs)
-    -- A step's node, with its name (if it has one) above its label, and any
-    -- tools hanging off it.
+    -- A step's node, labelled by 'stepLines', with any tools hanging off it.
     step name info = do
-      exits <- node from (maybe [] pure name <> leafLines info)
+      exits <- node from (stepLines name info)
       case info of
         DraftInfo _ _ _ tools ->
           mapM_
@@ -347,14 +343,18 @@ build context from = \case
         _ -> pure ()
       pure exits
 
-leafLines :: StepInfo -> [Text]
-leafLines = \case
-  Identity -> ["pass"]
-  Glue -> ["arr"]
-  Effect -> ["act"]
-  DraftInfo instruction _ out _ -> ["draft " <> typeLabel out, quoted (instructionText instruction)]
-  JudgeInfo _ [q] -> [judgeText [q]]
-  JudgeInfo _ qs -> ("judge " <> T.pack (show (length qs)) <> " questions in one request") : map questionText qs
+-- | How a step is labelled, everywhere: what kind of step it is, then its name
+-- if it has one, then its details (an instruction, or questions).
+stepLines :: Maybe Text -> StepInfo -> [Text]
+stepLines name info = kind : maybe [] pure name <> details
+  where
+    (kind, details) = case info of
+      Identity -> ("pass", [])
+      Glue -> ("arr", [])
+      Effect -> ("act", [])
+      DraftInfo instruction _ out _ -> ("draft " <> typeLabel out, [quoted (instructionText instruction)])
+      JudgeInfo _ [q] -> ("judge", [questionText q])
+      JudgeInfo _ qs -> ("judge " <> T.pack (show (length qs)) <> " questions in one request", map questionText qs)
 
 -- | A Mermaid flowchart of the flow's graph.
 mermaid :: Description -> Text
