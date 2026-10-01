@@ -109,11 +109,40 @@ data Reply = Reply {recipient :: Text, subjectLine :: Subject, text :: Text}
 data Handled = Handled {ticket :: Ticket, reply :: Reply, logEntry :: Text}
   deriving (Generic, Show, Contract)
 
-data Day = Day {received :: Int, urgentTickets :: [Handled], routineTickets :: [Handled]}
-  deriving (Generic, Show, Contract)
+data Day = Day {received :: Int, spamDropped :: Int, urgentTickets :: [Handled], routineTickets :: [Handled]}
+  deriving (Generic, Show)
 
-data Report = Report {headline :: Text, summary :: Text}
-  deriving (Generic, Show, Contract)
+instance Contract Day where
+  contract =
+    record "A day of support email" $
+      Day
+        <$> required "received" "How many emails arrived, spam included" received
+        <*> required "spamDropped" "How many of them were spam, and dropped without a reply" spamDropped
+        <*> required "urgentTickets" "Tickets that needed an answer quickly" urgentTickets
+        <*> required "routineTickets" "Everything else" routineTickets
+
+-- | The day's report. Claude writes the content; code lays it out.
+data Report = Report {headline :: Text, urgent' :: [TicketSummary], routine :: [TicketSummary], forTheLead :: [Text]}
+  deriving (Generic, Show)
+
+instance Contract Report where
+  contract =
+    record "A report on the day's support email, for the support lead" $
+      Report
+        <$> required "headline" "One sentence on how the day went" headline
+        <*> required "urgent" "One entry per urgent ticket" urgent'
+        <*> required "routine" "One entry per routine ticket" routine
+        <*> required "forTheLead" "Things the support lead should do, most important first" forTheLead
+
+data TicketSummary = TicketSummary {who :: Text, gist :: Text}
+  deriving (Generic, Show)
+
+instance Contract TicketSummary where
+  contract =
+    record "A ticket, summarised" $
+      TicketSummary
+        <$> required "customer" "The customer's name, or their email address if there's no name" who
+        <*> required "gist" "What they wanted and what the reply did, in one or two sentences" gist
 
 -- ---------------------------------------------------------------------------
 -- The refund agent's tools
@@ -159,7 +188,7 @@ kitchenSink =
     >>> second (each triage)
     >>> second (arr (partition urgent) `named` "split off the urgent tickets")
     >>> second (each (handle >>> act page `named` "page the on-call team") *** each handle)
-    >>> arr (\(n, (u, r)) -> Day n u r)
+    >>> arr (\(n, (u, r)) -> Day n (n - length u - length r) u r)
     >>> draft @Report "Summarise the day's support email for the support lead."
 
 triage :: Agentic IO Email Ticket
@@ -218,4 +247,16 @@ main = do
       >>= withSystemTwo (anthropic & effort Low)
       >>= withStore ReplayOrRecord "kitchensink.jsonl"
   report <- interpret rt kitchenSink ()
-  T.putStrLn $ "\n" <> headline report <> "\n\n" <> summary report
+  T.putStrLn $ "\n" <> render report
+
+render :: Report -> Text
+render r =
+  T.unlines $
+    [headline r, ""]
+      <> section "Urgent" (map ticket' (urgent' r))
+      <> section "Routine" (map ticket' (routine r))
+      <> section "For the lead" [T.pack (show i) <> ". " <> a | (i, a) <- zip [1 :: Int ..] (forTheLead r)]
+  where
+    section _ [] = []
+    section title items = [title] <> map ("  " <>) items <> [""]
+    ticket' t = "- " <> who t <> ": " <> gist t
