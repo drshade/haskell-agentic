@@ -193,6 +193,12 @@ main = hspec $ do
       T.lines (renderTree (Agentic.describe flow))
         `shouldBe` ["polish until it's for kids  repeat until done", "└─ draft Joke  \"make it more kid-friendly\""]
 
+    it "draws a fork that joins again in mermaid" $ do
+      let flow :: Agentic IO Joke (Joke, Rating)
+          flow = returnA &&& draft @Rating "rate it"
+          edges = filter (T.isInfixOf "-->") (T.lines (mermaid (Agentic.describe flow)))
+      edges `shouldBe` ["  input --> n0", "  input --> output", "  n0 --> output"]
+
     it "expands a tool that calls itself only once" $ do
       let researcher :: Agentic IO Text Text
           researcher = draftWith @Text [tool "research" "Research deeper" researcher] "research this"

@@ -107,6 +107,7 @@ main :: IO ()
 main = do
   _ <- loadDotEnv
   print $ describe dinoProject
+  T.putStrLn $ "\n" <> mermaid (describe dinoProject)
   rt <- pure (concurrently runtime)
               >>= withSystemOne jev 
               >>= withSystemTwo (anthropic & effort Low)

@@ -306,9 +306,45 @@ both halves
 draft Poster  "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
 ```
 
+`mermaid` draws the same flow as a Mermaid flowchart of how data moves: steps
+in order, forks that join again (a pass-through is an edge straight to the
+join), boxes for `each`, `repeatUntil` and named sub-flows, and tools on dotted
+lines. `cabal run dino` prints both. Here's the dino project:
+
+```mermaid
+flowchart TD
+  input([input])
+  n0["draft [Creature]<br/>#quot;Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs.#quot;"]
+  input --> n0
+  subgraph n1["each"]
+  n2["judge choice of 7 #quot;What kind of animal was this creature?#quot;"]
+  n0 --> n2
+  end
+  n3["split off the clear dinosaurs (≥ 0.8)"]
+  n0 --> n3
+  n2 --> n3
+  subgraph n4["each"]
+  subgraph n5["exhibit"]
+  n6["draft DinoPic<br/>#quot;Draw an ascii picture of this dinosaur, 10 lines high#quot;"]
+  n3 -->|first| n6
+  n7["draft TrumpCard<br/>#quot;Make a trump card for this dinosaur#quot;"]
+  n3 -->|first| n7
+  end
+  end
+  n8["note what the others were"]
+  n3 -->|second| n8
+  n9["draft Poster<br/>#quot;Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were.#quot;"]
+  n3 -->|first| n9
+  n6 --> n9
+  n7 --> n9
+  n8 --> n9
+  output([output])
+  n9 --> output
+```
+
 `describe` returns a `Description`, a plain data type whose `Show` instance is the
-tree above. `mermaid` renders it as a flowchart, and `toValue` turns it into JSON
-for UIs and other agents. You can also walk it yourself:
+tree above. `mermaid` renders it as the flowchart, and `toValue` turns it into
+JSON for UIs and other agents. You can also walk it yourself:
 
 ```haskell
 describe :: Agentic m i o -> Description

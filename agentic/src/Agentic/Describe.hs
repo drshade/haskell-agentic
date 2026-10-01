@@ -189,22 +189,122 @@ draw lead childLead (Node t cs) = (lead <> t) : go cs
 -- ---------------------------------------------------------------------------
 -- Mermaid
 
--- | A Mermaid flowchart of the tree view.
+-- | A Mermaid flowchart of how data moves through the flow. Steps are joined
+-- in order; @&&&@, @***@ and @|||@ fork into their branches and join again at
+-- the next step, with a pass-through drawn as an edge straight to the join;
+-- @each@, @repeatUntil@ and named sub-flows are boxes; tools hang off their
+-- draft with dotted lines.
 mermaid :: Description -> Text
-mermaid d = T.unlines ("flowchart TD" : concatMap nodeLines numbered <> edges)
+mermaid d = T.unlines ("flowchart TD" : reverse (lines' final))
   where
-    numbered = snd (mapAccumL number (0 :: Int) (snd (trees [] d)))
-    number n (Node t cs) =
-      let (n', cs') = mapAccumL number (n + 1) cs
-       in (n', Numbered n t cs')
-    nodeLines (Numbered n t cs) = ("  n" <> tshow n <> "[\"" <> escape t <> "\"]") : concatMap nodeLines cs
-    edges = zipWith edge numbered (drop 1 numbered) <> concatMap childEdges numbered
-    childEdges parent@(Numbered _ _ cs) = map (edge parent) cs <> concatMap childEdges cs
-    edge (Numbered a _ _) (Numbered b _ _) = "  n" <> tshow a <> " --> n" <> tshow b
-    escape = T.replace "\"" "#quot;"
-    tshow = T.pack . show
+    (_, final) = runBuild flow (Graph 0 [])
+    flow = do
+      emit "  input([input])"
+      exits <- build InSequence [("input", Nothing)] d
+      emit "  output([output])"
+      connect exits "output"
 
-data Numbered = Numbered Int Text [Numbered]
+-- | Where a description sits: unnamed glue between steps is plumbing, but a
+-- branch that's only glue is still a branch.
+data Context = InSequence | InBranch
+
+-- | Nodes the next step connects from, each with an optional edge label.
+type From = [(Text, Maybe Text)]
+
+data Graph = Graph Int [Text]
+
+lines' :: Graph -> [Text]
+lines' (Graph _ ls) = ls
+
+newtype Build a = Build {runBuild :: Graph -> (a, Graph)}
+
+instance Functor Build where
+  fmap f (Build g) = Build (\s -> let (a, s') = g s in (f a, s'))
+
+instance Applicative Build where
+  pure a = Build (\s -> (a, s))
+  Build f <*> Build g = Build (\s -> let (h, s1) = f s; (a, s2) = g s1 in (h a, s2))
+
+instance Monad Build where
+  Build g >>= k = Build (\s -> let (a, s1) = g s in runBuild (k a) s1)
+
+fresh :: Build Text
+fresh = Build (\(Graph n ls) -> ("n" <> T.pack (show n), Graph (n + 1) ls))
+
+emit :: Text -> Build ()
+emit l = Build (\(Graph n ls) -> ((), Graph n (l : ls)))
+
+connect :: From -> Text -> Build ()
+connect from to = mapM_ (\(f, l) -> emit ("  " <> f <> " -->" <> maybe "" (\t -> "|" <> escape t <> "|") l <> " " <> to)) from
+
+node :: From -> Text -> Build From
+node from label = do
+  n <- fresh
+  emit ("  " <> n <> "[\"" <> escape label <> "\"]")
+  connect from n
+  pure [(n, Nothing)]
+
+box :: Text -> Build a -> Build (Text, a)
+box label inside = do
+  b <- fresh
+  emit ("  subgraph " <> b <> "[\"" <> escape label <> "\"]")
+  a <- inside
+  emit "  end"
+  pure (b, a)
+
+build :: Context -> From -> Description -> Build From
+build context from = \case
+  Leaf Identity -> pure from
+  Leaf Glue -> case context of
+    InSequence -> pure from
+    InBranch -> node from "arr"
+  Leaf info -> step Nothing info
+  Sequence ds -> foldlM' (build InSequence) from ds
+  Together ds -> concat <$> mapM (build InBranch from) ds
+  Halves l r -> (<>) <$> build InBranch (labelled "first") l <*> build InBranch (labelled "second") r
+  Branch l r -> (<>) <$> build InBranch (labelled "left") l <*> build InBranch (labelled "right") r
+  OnFirst f -> (<>) <$> build InBranch (labelled "first") f <*> pure (labelled "second")
+  ForEach f -> snd <$> box "each" (build InSequence from f)
+  Repeated f -> do
+    (b, exits) <- box "repeat until done" (build InSequence from f)
+    mapM_ (\(e, _) -> emit ("  " <> e <> " -.->|again| " <> b)) exits
+    pure exits
+  Annotated n (Leaf Glue) -> node from (noteName n)
+  Annotated n (Leaf info) | not (passes (Leaf info)) -> step (Just (noteName n)) info
+  Annotated n f -> snd <$> box (noteName n) (build InSequence from f)
+  where
+    labelled l = [(f, Just l) | (f, _) <- from]
+    foldlM' step = go
+      where
+        go acc = \case
+          [] -> pure acc
+          x : xs -> step acc x >>= (`go` xs)
+    -- A step's node, with its name (if it has one) in front of its label, and
+    -- any tools hanging off it.
+    step name info = do
+      exits <- node from (maybe "" (<> "<br/>") name <> leafText info)
+      case info of
+        DraftInfo _ _ _ tools ->
+          mapM_
+            ( \t -> do
+                n <- fresh
+                emit ("  " <> n <> "[/\"" <> escape ("tool " <> infoName t) <> "\"/]")
+                mapM_ (\(e, _) -> emit ("  " <> e <> " -.- " <> n)) exits
+            )
+            tools
+        _ -> pure ()
+      pure exits
+
+leafText :: StepInfo -> Text
+leafText = \case
+  Identity -> "pass"
+  Glue -> "arr"
+  Effect -> "act"
+  DraftInfo instruction _ out _ -> "draft " <> typeLabel out <> "<br/>" <> quoted (instructionText instruction)
+  JudgeInfo _ qs -> judgeText qs
+
+escape :: Text -> Text
+escape = T.replace "\"" "#quot;"
 
 -- ---------------------------------------------------------------------------
 -- JSON
