@@ -106,8 +106,8 @@ instance Contract BetterJoke where
 The schema and the decoder come from the same definition, so they can't disagree.
 Deriving (`deriving (Generic, Contract)`) builds the same thing without
 descriptions, and `genericContract & field "punchline" "..."` adds descriptions to
-a derived contract. Field names are checked against the real fields before the
-flow runs.
+a derived contract. Naming a field that doesn't exist is an error the first time
+the contract is used.
 
 Contracts compile to the providers' native mechanisms rather than to prompt text:
 
@@ -437,8 +437,7 @@ rt <- pure runtime
 ```
 
 An LLM answering as System One gives probabilities, but they aren't calibrated
-the way Jev's are, so a `gate 0.9` means less. Every judgement in a trace records
-which provider answered it.
+the way Jev's are, so a `gate 0.9` means less.
 
 ### Prompts and sessions
 
