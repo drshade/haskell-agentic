@@ -1,5 +1,8 @@
 # haskell-agentic
 
+[![Hackage](https://img.shields.io/hackage/v/agentic.svg)](https://hackage.haskell.org/package/agentic)
+[![CI](https://github.com/drshade/haskell-agentic/actions/workflows/haskell-ci.yml/badge.svg)](https://github.com/drshade/haskell-agentic/actions/workflows/haskell-ci.yml)
+
 I wrote the first version of this a while back, when the best tool we had for
 getting structured data out of an LLM was "pls respond in JSON". It worked -
 sort of. The model providers have since caught up (strict structured outputs
