@@ -274,6 +274,32 @@ uses the same scale. And the poster is drafted from a named `Exhibit` record
 rather than a tuple, so Claude sees `dinosaurs` and `notDinosaurs` instead of
 `_1` and `_2`. The whole thing is in `examples/Dino.hs`.
 
+You could also write `exhibit` with `proc` notation, since `Agentic` is an
+`Arrow`:
+
+```haskell
+exhibit :: Agentic IO Creature Entry
+exhibit = proc creature -> do
+  pic   <- draft @DinoPic "Draw an ascii picture of this dinosaur, 10 lines high" -< creature
+  stats <- draft @TrumpCard "Make a trump card for this dinosaur" -< creature
+  returnA -< Entry creature pic stats
+```
+
+It reads nicely, but GHC turns `proc` into a chain of `first`s, never `&&&`. So
+the picture and the trump card run one after the other instead of side by side,
+and `describe` shows GHC's plumbing rather than the shape of the flow:
+
+```
+both halves
+├─ first → draft @DinoPic  "Draw an ascii picture of this dinosaur, 10 lines high"
+└─ second → pass
+both halves
+├─ first → draft @TrumpCard  "Make a trump card for this dinosaur"
+└─ second → pass
+```
+
+So for steps that don't depend on each other, stick with `&&&`.
+
 ### Describe it before you run it
 
 ```
