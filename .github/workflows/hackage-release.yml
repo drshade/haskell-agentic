@@ -1,0 +1,150 @@
+# Publish all six packages to Hackage when a version tag is pushed, or upload
+# them as candidates when run by hand.
+#
+# Pushing a v* tag IS the release: the packages and their documentation are
+# published directly. Hackage versions cannot be deleted afterwards, only
+# deprecated, so the guards below refuse to run unless the tag, every cabal
+# version and a dated CHANGELOG entry in every package all agree. Running the
+# workflow by hand (Actions -> Hackage release -> Run workflow) uploads
+# candidates instead, which can be previewed and deleted or promoted on Hackage.
+# See RELEASING.md for the full procedure.
+#
+# Requires the HACKAGE_AUTH_TOKEN repository secret: a Hackage API token
+# generated on https://hackage.haskell.org/users/account-management.
+name: Hackage release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # In dependency order: each package is uploaded after the ones it needs.
+  PACKAGES: agentic agentic-aeson agentic-io agentic-jev agentic-anthropic agentic-openai
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Work out the version, and check every package agrees
+        run: |
+          version="$(sed -n 's/^version:[[:space:]]*//p' agentic/agentic.cabal)"
+          for p in $PACKAGES; do
+            v="$(sed -n 's/^version:[[:space:]]*//p' "$p/$p.cabal")"
+            if [ "$v" != "$version" ]; then
+              echo "::error::$p is at version $v, but agentic is at $version"
+              exit 1
+            fi
+          done
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#v}"
+            if [ "$tag" != "$version" ]; then
+              echo "::error::tag v$tag does not match version $version in the cabal files"
+              exit 1
+            fi
+            echo "PUBLISH=--publish" >> "$GITHUB_ENV"
+            echo "Releasing $version"
+          else
+            echo "PUBLISH=" >> "$GITHUB_ENV"
+            echo "Uploading $version as candidates"
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Check every CHANGELOG entry is dated
+        if: github.ref_type == 'tag'
+        run: |
+          for p in $PACKAGES; do
+            if ! grep -Eq "^## ${VERSION} - [0-9]{4}-[0-9]{2}-[0-9]{2}$" "$p/CHANGELOG.md"; then
+              echo "::error::$p/CHANGELOG.md has no dated '## ${VERSION} - YYYY-MM-DD' entry (still '???'?)"
+              exit 1
+            fi
+          done
+
+      - uses: haskell-actions/setup@v2
+        id: setup
+        with:
+          ghc-version: '9.14.1'
+          cabal-version: 'latest'
+
+      - name: Resolve dependencies
+        run: cabal build $PACKAGES --enable-tests --dry-run
+
+      - name: Cache cabal store
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: hackage-release-${{ runner.os }}-ghc-9.14.1-${{ hashFiles('dist-newstyle/cache/plan.json') }}
+          restore-keys: hackage-release-${{ runner.os }}-ghc-9.14.1-
+
+      - name: cabal check
+        run: |
+          for p in $PACKAGES; do
+            (cd "$p" && cabal check)
+          done
+
+      - name: Source distributions
+        run: cabal sdist $PACKAGES --output-directory "$RUNNER_TEMP/packages"
+
+      - name: Build and test from the source distributions
+        # What Hackage receives is the sdists, not the working tree: unpack
+        # them somewhere clean and make sure they build and pass on their own.
+        run: |
+          mkdir -p "$RUNNER_TEMP/sdist-check"
+          for p in $PACKAGES; do
+            tar -xzf "$RUNNER_TEMP/packages/$p-${VERSION}.tar.gz" -C "$RUNNER_TEMP/sdist-check"
+          done
+          cd "$RUNNER_TEMP/sdist-check"
+          {
+            echo "with-compiler: ghc-9.14.1"
+            echo "packages:"
+            for p in $PACKAGES; do echo "  $p-${VERSION}"; done
+          } > cabal.project
+          cat cabal.project
+          cabal update
+          cabal build all --enable-tests
+          # The offline suites only; the *-live suites call real models.
+          for t in agentic-test agentic-io-test agentic-jev-test agentic-anthropic-test agentic-openai-test; do
+            cabal test "$t"
+          done
+
+      - name: Documentation tarballs
+        # The docs tarballs must be produced by --haddock-for-hackage or Hackage
+        # will reject them.
+        run: |
+          cabal haddock $PACKAGES --haddock-for-hackage --enable-doc
+          mkdir -p "$RUNNER_TEMP/docs"
+          for p in $PACKAGES; do
+            mv "dist-newstyle/$p-${VERSION}-docs.tar.gz" "$RUNNER_TEMP/docs/"
+          done
+
+      - name: Upload packages
+        # Re-running this for an already-published version fails here,
+        # harmlessly: Hackage rejects duplicate uploads.
+        run: |
+          for p in $PACKAGES; do
+            cabal upload $PUBLISH --token "$HACKAGE_AUTH_TOKEN" "$RUNNER_TEMP/packages/$p-${VERSION}.tar.gz"
+          done
+        env:
+          HACKAGE_AUTH_TOKEN: ${{ secrets.HACKAGE_AUTH_TOKEN }}
+
+      - name: Upload documentation
+        run: |
+          for p in $PACKAGES; do
+            cabal upload $PUBLISH --token "$HACKAGE_AUTH_TOKEN" --documentation "$RUNNER_TEMP/docs/$p-${VERSION}-docs.tar.gz"
+          done
+        env:
+          HACKAGE_AUTH_TOKEN: ${{ secrets.HACKAGE_AUTH_TOKEN }}
+
+      - name: Done
+        run: |
+          if [ -n "$PUBLISH" ]; then where=""; else where="/candidate"; fi
+          for p in $PACKAGES; do
+            echo "https://hackage.haskell.org/package/$p-${VERSION}${where}"
+          done
