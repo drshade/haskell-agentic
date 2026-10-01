@@ -36,8 +36,9 @@ import Network.HTTP.Types.Status (statusCode)
 import System.Environment (lookupEnv)
 
 -- | OpenAI's settings. Start from 'openai' and change them with the setters
--- from "Agentic.Settings": 'model', 'system', 'effort', 'maxTokens', 'key',
--- 'endpoint' and 'timeout'.
+-- from "Agentic.Settings": 'Agentic.Settings.model', 'Agentic.Settings.system',
+-- 'Agentic.Settings.effort', 'Agentic.Settings.maxTokens', 'Agentic.Settings.key',
+-- 'Agentic.Settings.endpoint' and 'Agentic.Settings.timeout'.
 data OpenAI = OpenAI
   { model :: Text
   , system :: Maybe Text
@@ -80,6 +81,7 @@ effortName = \case
   XHigh -> "xhigh"
   Max -> "max"
 
+-- | What can go wrong talking to the Responses API. Thrown in IO.
 data OpenAIError
   = MissingKey
   | HttpError Int Text

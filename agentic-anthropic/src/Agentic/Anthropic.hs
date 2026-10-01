@@ -37,8 +37,9 @@ import Network.HTTP.Types.Status (statusCode)
 import System.Environment (lookupEnv)
 
 -- | Claude's settings. Start from 'anthropic' and change them with the setters
--- from "Agentic.Settings" ('model', 'system', 'effort', 'maxTokens', 'key',
--- 'endpoint', 'timeout') and 'fallbacks'.
+-- from "Agentic.Settings" ('Agentic.Settings.model', 'Agentic.Settings.system',
+-- 'Agentic.Settings.effort', 'Agentic.Settings.maxTokens', 'Agentic.Settings.key',
+-- 'Agentic.Settings.endpoint', 'Agentic.Settings.timeout') and @fallbacks@.
 data Anthropic = Anthropic
   { model :: Text
   , system :: Maybe Text
@@ -89,6 +90,7 @@ effortName = \case
   XHigh -> "xhigh"
   Max -> "max"
 
+-- | What can go wrong talking to the Messages API. Thrown in IO.
 data AnthropicError
   = MissingKey
   | HttpError Int Text

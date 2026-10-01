@@ -59,7 +59,7 @@ data Step m i o where
     -- ^ The input, unchanged: 'id' and 'returnA'.
   Wrap :: (i -> o) -> Step m i o
     -- ^ The input re-wrapped without changing it ('Left', 'Right'), so that
-    -- 'describe' can show it as a pass-through.
+    -- 'Agentic.Describe.describe' can show it as a pass-through.
   Arr :: (i -> o) -> Step m i o
   Act :: (i -> m o) -> Step m i o
   Draft :: Codec i -> Codec o -> Instruction -> [Tool m] -> Step m i o

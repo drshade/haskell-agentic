@@ -1,4 +1,4 @@
--- | Lowering the core's 'Schema' to the strict JSON Schema that providers'
+-- | Lowering the core's t'Schema' to the strict JSON Schema that providers'
 -- structured outputs and strict tools accept.
 --
 -- The result is the core's 'Value', not aeson's, because order matters: a
@@ -138,7 +138,7 @@ schemaName s = case T.intercalate "_" (filter (not . T.null) (T.split (not . val
   where
     valid c = isAlphaNum c || c == '_' || c == '-'
 
--- | Undo 'objectSchema''s wrapping on a value from the provider.
+-- | Undo the wrapping 'objectSchema' adds, on a value from the provider.
 unwrap :: Schema -> Value -> Value
 unwrap s v
   | wrap s, Object kvs <- v, Just inner <- lookup "value" kvs = inner

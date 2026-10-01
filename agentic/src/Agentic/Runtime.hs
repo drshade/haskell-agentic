@@ -132,11 +132,13 @@ newtype SystemOne m = SystemOne {askSystemOne :: JudgeRequest -> m [Answer]}
 -- | One LLM turn.
 newtype SystemTwo m = SystemTwo {askSystemTwo :: Conversation -> m Turn}
 
+-- | Everything a flow needs from the outside world: its two kinds of model,
+-- how to run independent work, where events go, and how to raise errors.
 data Runtime m = Runtime
   { systemOne :: SystemOne m
   , systemTwo :: SystemTwo m
   , parallel :: forall a. [m a] -> m [a]
-    -- ^ Runs independent work: 'Agentic.Core.each', '&&&', parallel tool calls.
+    -- ^ Runs independent work: 'Agentic.Core.each', 'Control.Arrow.&&&', parallel tool calls.
   , observe :: Event -> m ()
   , failure :: forall a. FlowError -> m a
   }

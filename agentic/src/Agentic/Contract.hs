@@ -25,7 +25,10 @@ module Agentic.Contract
   , between
     -- * Generic deriving
   , genericContract
-  , GContract
+  , GContract (..)
+  , GCases (..)
+  , GCase (..)
+  , GFields (..)
     -- * Enumerations
   , Options (..)
   , OptionSet (..)
@@ -34,8 +37,8 @@ module Agentic.Contract
   , described
   , Enumeration (..)
   , enumeration
-  , GEnum
-  , GConName
+  , GEnum (..)
+  , GConName (..)
   ) where
 
 import Agentic.Schema

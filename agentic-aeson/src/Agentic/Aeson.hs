@@ -1,4 +1,4 @@
--- | Conversions between the core's 'Value' and aeson's.
+-- | Conversions between the core's 'Agentic.Value.Value' and aeson's.
 module Agentic.Aeson
   ( toAeson
   , fromAeson
@@ -11,6 +11,7 @@ import qualified Data.Aeson.KeyMap as KeyMap
 import Data.Scientific (floatingOrInteger)
 import qualified Data.Vector as Vector
 
+-- | The core's value as aeson's. Object keys keep no order once in aeson.
 toAeson :: A.Value -> J.Value
 toAeson = \case
   A.Null -> J.Null
@@ -21,6 +22,7 @@ toAeson = \case
   A.Array vs -> J.Array (Vector.fromList (map toAeson vs))
   A.Object kvs -> J.Object (KeyMap.fromList [(Key.fromText k, toAeson v) | (k, v) <- kvs])
 
+-- | Aeson's value as the core's. Whole numbers become integers.
 fromAeson :: J.Value -> A.Value
 fromAeson = \case
   J.Null -> A.Null

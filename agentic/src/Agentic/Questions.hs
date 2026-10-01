@@ -1,7 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
 -- | Questions for a System One model such as Jev. Following Jev's terms, a step
--- asks 'Questions' about its input, the /state/.
+-- asks t'Questions' about its input, the /state/.
 module Agentic.Questions
   ( -- * Questions
     Questions (..)

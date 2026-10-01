@@ -2,7 +2,7 @@
 -- models such as Jev, that you can inspect before you run them.
 --
 -- This module is for writing and running flows. The fields of the types that
--- providers work with ('Conversation', 'Schema' and 'Field'), and the
+-- providers work with (t'Conversation', t'Schema' and t'Field'), and the
 -- constructors of 'Format', aren't exported here, so they don't clash with your
 -- own types; provider code imports "Agentic.Runtime" and "Agentic.Schema"
 -- directly.

@@ -2,8 +2,8 @@
 --
 -- > rt <- pure runtime >>= withSystemOne jev >>= withSystemTwo anthropic >>= withStore ReplayOrRecord "dino.jsonl"
 --
--- Every System One and System Two call is a request: a 'Conversation' or a
--- 'JudgeRequest'. The store keys each answer by its whole request, so an answer
+-- Every System One and System Two call is a request: a t'Conversation' or a
+-- t'JudgeRequest'. The store keys each answer by its whole request, so an answer
 -- is replayed exactly when the model would be asked exactly the same thing.
 -- Change an instruction or a threshold upstream and only the calls it affects
 -- go to the model again.
@@ -40,7 +40,7 @@ data Mode
   = Record
     -- ^ Call the models and record every answer, starting the file afresh.
   | Replay
-    -- ^ Answer only from the file. A request that isn't there is a 'StoreMiss'.
+    -- ^ Answer only from the file. A request that isn't there is a t'StoreMiss'.
   | ReplayOrRecord
     -- ^ Answer from the file when it can, and call the models (and record the
     -- answer) when it can't.

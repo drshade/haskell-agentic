@@ -30,7 +30,8 @@ import Network.HTTP.Types.Status (statusCode)
 import System.Environment (lookupEnv)
 
 -- | Jev's settings. Start from 'jev' and change them with the setters from
--- "Agentic.Settings": 'model', 'key', 'endpoint' and 'timeout'.
+-- "Agentic.Settings": 'Agentic.Settings.model', 'Agentic.Settings.key',
+-- 'Agentic.Settings.endpoint' and 'Agentic.Settings.timeout'.
 data Jev = Jev
   { model :: Text
   , key :: Maybe Text
@@ -54,6 +55,7 @@ instance HasKey Jev where key k c = c {key = Just k}
 instance HasEndpoint Jev where endpoint e c = c {endpoint = e}
 instance HasTimeout Jev where timeout t c = c {timeout = t}
 
+-- | What can go wrong talking to Jev. Thrown in IO.
 data JevError
   = MissingToken
   | HttpError Int Text
