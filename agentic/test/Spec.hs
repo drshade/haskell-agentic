@@ -161,6 +161,8 @@ main = hspec $ do
       interpret rt (repeatUntil (>= 10) (arr (* 2))) (3 :: Int) `shouldReturn` 12
       interpret rt (repeatUntil (>= 10) (arr (* 2))) (50 :: Int) `shouldReturn` 50
       interpret rt (second (arr show)) ('a', 7 :: Int) `shouldReturn` ('a', "7")
+      interpret rt (left (arr (+ 1))) (Left 1 :: Either Int Char) `shouldReturn` Left (2 :: Int)
+      interpret rt (left (arr (+ 1))) (Right 'x' :: Either Int Char) `shouldReturn` (Right 'x' :: Either Int Char)
 
     it "fails clearly without a System One" $ do
       interpret runtime (judge funny) joke `shouldThrow` (== NoSystemOne)
@@ -186,6 +188,14 @@ main = hspec $ do
           flow = draft @Rating "rate it" *** arr genre
       T.lines (renderTree (Agentic.describe flow))
         `shouldBe` ["both halves", "├─ first → draft @Rating  \"rate it\"", "└─ second → arr"]
+
+    it "draws first and second alike, and left and right alike" $ do
+      let d = draft @Rating "rate it"
+          tree :: Agentic IO i o -> [Text]
+          tree = T.lines . renderTree . Agentic.describe
+      tree (first d :: Agentic IO (Joke, Int) (Rating, Int)) `shouldBe` ["both halves", "├─ first → draft @Rating  \"rate it\"", "└─ second → pass"]
+      tree (second d :: Agentic IO (Int, Joke) (Int, Rating)) `shouldBe` ["both halves", "├─ first → pass", "└─ second → draft @Rating  \"rate it\""]
+      tree (left d :: Agentic IO (Either Joke Int) (Either Rating Int)) `shouldBe` ["branch", "├─ left → draft @Rating  \"rate it\"", "└─ right → pass"]
 
     it "shows a loop and what it runs" $ do
       let flow :: Agentic IO Joke Joke

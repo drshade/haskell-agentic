@@ -57,6 +57,9 @@ data Note = Note
 data Step m i o where
   Pass :: Step m i i
     -- ^ The input, unchanged: 'id' and 'returnA'.
+  Wrap :: (i -> o) -> Step m i o
+    -- ^ The input re-wrapped without changing it ('Left', 'Right'), so that
+    -- 'describe' can show it as a pass-through.
   Arr :: (i -> o) -> Step m i o
   Act :: (i -> m o) -> Step m i o
   Draft :: Codec i -> Codec o -> Instruction -> [Tool m] -> Step m i o
@@ -93,9 +96,9 @@ instance Arrow (Agentic m) where
   f &&& g = Fanout f g
 
 instance ArrowChoice (Agentic m) where
-  left f = Choose (f >>> arr Left) (arr Right)
-  right f = Choose (arr Left) (f >>> arr Right)
-  f +++ g = Choose (f >>> arr Left) (g >>> arr Right)
+  left f = Choose (f >>> Step (Wrap Left)) (Step (Wrap Right))
+  right f = Choose (Step (Wrap Left)) (f >>> Step (Wrap Right))
+  f +++ g = Choose (f >>> Step (Wrap Left)) (g >>> Step (Wrap Right))
   f ||| g = Choose f g
 
 -- | An LLM writes an @o@ from the step's input.

@@ -33,7 +33,6 @@ data Description
     -- ^ @a &&& b &&& c@, flattened.
   | Halves Description Description
     -- ^ @a *** b@: one flow on each half of a pair.
-  | OnFirst Description
   | Branch Description Description
   | ForEach Description
   | Repeated Description
@@ -73,7 +72,7 @@ describe = \case
   Seq f g -> Sequence (sequenced (describe f) <> sequenced (describe g))
   Fanout f g -> Together (together (describe f) <> together (describe g))
   Split f g -> Halves (describe f) (describe g)
-  First f -> OnFirst (describe f)
+  First f -> Halves (describe f) (Leaf Identity)
   Choose f g -> Branch (describe f) (describe g)
   Each f -> ForEach (describe f)
   Repeat _ f -> Repeated (describe f)
@@ -89,6 +88,7 @@ describe = \case
 stepInfo :: Step m i o -> StepInfo
 stepInfo = \case
   Pass -> Identity
+  Wrap _ -> Identity
   Arr _ -> Glue
   Act _ -> Effect
   Draft input out instruction tools ->
@@ -130,7 +130,6 @@ trees seen = \case
     let (seen1, ls) = branch seen l
         (seen2, rs) = branch seen1 r
      in (seen2, [Node "both halves" [labelled "first" ls, labelled "second" rs]])
-  OnFirst d -> fmap (\ts -> [Node "on first" ts]) (branch seen d)
   Branch l r ->
     let (seen1, ls) = branch seen l
         (seen2, rs) = branch seen1 r
@@ -310,7 +309,6 @@ build context from = \case
   Together ds -> concat <$> mapM (build InBranch from) ds
   Halves l r -> (<>) <$> build InBranch (labelled "first") l <*> build InBranch (labelled "second") r
   Branch l r -> (<>) <$> build InBranch (labelled "left") l <*> build InBranch (labelled "right") r
-  OnFirst f -> (<>) <$> build InBranch (labelled "first") f <*> pure (labelled "second")
   ForEach f -> snd <$> box "each" (build InSequence from f)
   -- "Again" goes back to where the body starts: the steps the loop's input
   -- flows into. If the body has none, it goes to the box.
@@ -448,7 +446,6 @@ toValue = \case
   Sequence ds -> node "sequence" [("steps", Array (map toValue ds))]
   Together ds -> node "together" [("steps", Array (map toValue ds))]
   Halves l r -> node "halves" [("first", toValue l), ("second", toValue r)]
-  OnFirst d -> node "onFirst" [("step", toValue d)]
   Branch l r -> node "branch" [("left", toValue l), ("right", toValue r)]
   ForEach d -> node "each" [("step", toValue d)]
   Repeated d -> node "repeat" [("step", toValue d)]

@@ -357,7 +357,6 @@ data Description
   | Sequence  [Description]           -- a >>> b >>> c, flattened
   | Together  [Description]           -- a &&& b &&& c, flattened
   | Halves    Description Description -- a *** b
-  | OnFirst   Description
   | Branch    Description Description
   | ForEach   Description
   | Annotated Note Description
