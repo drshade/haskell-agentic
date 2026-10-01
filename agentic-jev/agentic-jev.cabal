@@ -14,7 +14,7 @@ homepage:           https://github.com/drshade/haskell-agentic
 bug-reports:        https://github.com/drshade/haskell-agentic/issues
 build-type:         Simple
 extra-doc-files:    CHANGELOG.md
-tested-with:        GHC ==9.14.1
+tested-with:        GHC ==9.6.7 || ==9.8.4 || ==9.10.3 || ==9.12.2 || ==9.14.1
 
 source-repository head
   type:     git
@@ -38,7 +38,6 @@ library
   exposed-modules:  Agentic.Jev
   build-depends:
     , agentic          ==0.2.*
-    , agentic-aeson    ==0.2.*
     , aeson            >=2.1 && <2.3
     , base             >=4.18 && <5
     , bytestring       >=0.11 && <0.13
@@ -58,7 +57,6 @@ test-suite agentic-jev-test
     , aeson            >=2.1 && <2.3
     , base             >=4.18 && <5
     , hspec            >=2.10 && <3
-    , text             >=2.0 && <2.2
 -- Calls the real Jev. Pending unless JEV_TOKEN is set (in the environment or .env).
 test-suite agentic-jev-live
   import:           shared

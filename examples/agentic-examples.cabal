@@ -2,8 +2,16 @@ cabal-version:      3.0
 name:               agentic-examples
 version:            0.2.0.0
 synopsis:           The examples from the haskell-agentic README
+description:
+  Runnable examples for the agentic packages: the dino project, tic-tac-toe,
+  a review with Jev, and the kitchen sink. Not published to Hackage.
 license:            BSD-2-Clause
+author:             Tom Wells
+maintainer:         drshade@gmail.com
+copyright:          2026 Tom Wells
+category:           AI
 build-type:         Simple
+tested-with:        GHC ==9.6.7 || ==9.8.4 || ==9.10.3 || ==9.12.2 || ==9.14.1
 
 executable dino
   default-language: GHC2021
@@ -16,13 +24,12 @@ executable dino
   hs-source-dirs:   .
   main-is:          Dino.hs
   build-depends:
-    , agentic
-    , agentic-anthropic
-    , agentic-io
-    , agentic-jev
-    , base
-    , text
-
+    , agentic           ==0.2.*
+    , agentic-anthropic ==0.2.*
+    , agentic-io        ==0.2.*
+    , agentic-jev       ==0.2.*
+    , base              >=4.18 && <5
+    , text              >=2.0 && <2.2
 executable review
   default-language: GHC2021
   default-extensions:
@@ -34,12 +41,11 @@ executable review
   hs-source-dirs:   .
   main-is:          Review.hs
   build-depends:
-    , agentic
-    , agentic-io
-    , agentic-jev
-    , base
-    , text
-
+    , agentic           ==0.2.*
+    , agentic-io        ==0.2.*
+    , agentic-jev       ==0.2.*
+    , base              >=4.18 && <5
+    , text              >=2.0 && <2.2
 executable tictactoe
   default-language: GHC2021
   default-extensions:
@@ -51,12 +57,11 @@ executable tictactoe
   hs-source-dirs:   .
   main-is:          TicTacToe.hs
   build-depends:
-    , agentic
-    , agentic-openai
-    , agentic-io
-    , base
-    , text
-
+    , agentic           ==0.2.*
+    , agentic-openai    ==0.2.*
+    , agentic-io        ==0.2.*
+    , base              >=4.18 && <5
+    , text              >=2.0 && <2.2
 executable kitchensink
   default-language: GHC2021
   default-extensions:
@@ -68,9 +73,9 @@ executable kitchensink
   hs-source-dirs:   .
   main-is:          KitchenSink.hs
   build-depends:
-    , agentic
-    , agentic-anthropic
-    , agentic-io
-    , agentic-jev
-    , base
-    , text
+    , agentic           ==0.2.*
+    , agentic-anthropic ==0.2.*
+    , agentic-io        ==0.2.*
+    , agentic-jev       ==0.2.*
+    , base              >=4.18 && <5
+    , text              >=2.0 && <2.2
