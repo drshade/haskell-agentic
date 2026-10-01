@@ -5,6 +5,7 @@ import Agentic
 import Agentic.IO.DotEnv (loadDotEnv)
 import Agentic.Jev (jev)
 import Data.Text (Text)
+import qualified Data.Text.IO as T
 import GHC.Generics (Generic)
 
 data Joke = Joke {setup :: Text, punchline :: Text}
@@ -35,7 +36,9 @@ review =
 main :: IO ()
 main = do
   _ <- loadDotEnv
-  print (describe review)
+  print $ describe review
+  T.putStrLn $ "\n" <> mermaid (describe review)
+  T.putStrLn $ dot (describe review)
   rt <- pure runtime >>= withSystemOne jev
   result <- interpret rt review (Joke "Why was the scarecrow promoted?" "He was outstanding in his field.")
   print result

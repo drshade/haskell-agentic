@@ -48,6 +48,8 @@ main :: IO ()
 main = do
   _ <- loadDotEnv
   print $ describe game
+  T.putStrLn $ "\n" <> mermaid (describe game)
+  T.putStrLn $ dot (describe game)
   rt <- pure runtime >>= withSystemTwo (openai & effort Low)
   let empty = Row Blank Blank Blank
   _ <- interpret rt game (Game (Board empty empty empty) Playing)

@@ -176,11 +176,12 @@ judgeText :: [QuestionSpec] -> Text
 judgeText = \case
   [q] -> "judge " <> questionText q
   qs -> "judge " <> T.intercalate "; " (map questionText qs)
-  where
-    questionText = \case
-      AskYesNo q -> "yes/no " <> quoted q
-      AskChoice q opts -> "choice of " <> T.pack (show (length opts)) <> " " <> quoted q
-      AskScore q levels -> "score on " <> T.pack (show (length levels)) <> " levels " <> quoted q
+
+questionText :: QuestionSpec -> Text
+questionText = \case
+  AskYesNo q -> "yes/no " <> quoted q
+  AskChoice q opts -> "choice of " <> T.pack (show (length opts)) <> " " <> quoted q
+  AskScore q levels -> "score on " <> T.pack (show (length levels)) <> " levels " <> quoted q
 
 quoted :: Text -> Text
 quoted t = "\"" <> t <> "\""
@@ -336,7 +337,8 @@ leafLines = \case
   Glue -> ["arr"]
   Effect -> ["act"]
   DraftInfo instruction _ out _ -> ["draft " <> typeLabel out, quoted (instructionText instruction)]
-  JudgeInfo _ qs -> [judgeText qs]
+  JudgeInfo _ [q] -> [judgeText [q]]
+  JudgeInfo _ qs -> ("judge " <> T.pack (show (length qs)) <> " questions in one request") : map questionText qs
 
 -- | A Mermaid flowchart of the flow's graph.
 mermaid :: Description -> Text
