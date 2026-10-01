@@ -352,7 +352,7 @@ stepLines name info = kind : maybe [] pure name <> details
       Identity -> ("pass", [])
       Glue -> ("arr", [])
       Effect -> ("act", [])
-      DraftInfo instruction _ out _ -> ("draft " <> typeLabel out, [quoted (instructionText instruction)])
+      DraftInfo instruction _ out _ -> ("draft @" <> typeLabel out, [quoted (instructionText instruction)])
       JudgeInfo _ [q] -> ("judge", [questionText q])
       JudgeInfo _ qs -> ("judge " <> T.pack (show (length qs)) <> " questions in one request", map questionText qs)
 

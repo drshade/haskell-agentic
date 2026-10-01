@@ -293,17 +293,17 @@ flow on each half of a pair, and `|||` picks a branch. All of these are ordinary
 
 ```
 ghci> describe dinoProject
-draft [Creature]  "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
+draft @[Creature]  "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
 each
 └─ judge  choice of 7 "What kind of animal was this creature?"  (keeping its input)
 arr  split off the clear dinosaurs (≥ 0.8)
 both halves
 ├─ first → each
 │  └─ exhibit  together  (keeping its input)
-│     ├─ draft DinoPic  "Draw an ascii picture of this dinosaur, 10 lines high"
-│     └─ draft TrumpCard  "Make a trump card for this dinosaur"
+│     ├─ draft @DinoPic  "Draw an ascii picture of this dinosaur, 10 lines high"
+│     └─ draft @TrumpCard  "Make a trump card for this dinosaur"
 └─ second → arr  note what the others were
-draft Poster  "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
+draft @Poster  "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
 ```
 
 `mermaid` and `dot` draw the same flow as a diagram of how data moves: steps
@@ -317,19 +317,19 @@ from one graph, `flowGraph`, so they always agree, and you can walk it yourself.
 ```mermaid
 flowchart TD
   input(["input"])
-  n0["draft [Creature]<br/>#quot;Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs.#quot;"]
+  n0["draft @[Creature]<br/>#quot;Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs.#quot;"]
   subgraph n1["each"]
     n2["judge<br/>choice of 7 #quot;What kind of animal was this creature?#quot;"]
   end
   n3["arr<br/>split off the clear dinosaurs (≥ 0.8)"]
   subgraph n4["each"]
     subgraph n5["exhibit"]
-      n6["draft DinoPic<br/>#quot;Draw an ascii picture of this dinosaur, 10 lines high#quot;"]
-      n7["draft TrumpCard<br/>#quot;Make a trump card for this dinosaur#quot;"]
+      n6["draft @DinoPic<br/>#quot;Draw an ascii picture of this dinosaur, 10 lines high#quot;"]
+      n7["draft @TrumpCard<br/>#quot;Make a trump card for this dinosaur#quot;"]
     end
   end
   n8["arr<br/>note what the others were"]
-  n9["draft Poster<br/>#quot;Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were.#quot;"]
+  n9["draft @Poster<br/>#quot;Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were.#quot;"]
   output(["output"])
   input --> n0
   n0 --> n2
@@ -426,7 +426,7 @@ types say there's a 3×3 board of `Blank`, `X` and `O`, and a game that's either
 
 ```
 play until the game ends  repeat until done
-├─ draft Game  "Play the next move!"
+├─ draft @Game  "Play the next move!"
 └─ act  print the board
 ```
 

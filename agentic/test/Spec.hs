@@ -173,11 +173,11 @@ main = hspec $ do
               >>> keep 0.7 funny
               >>> each (draftWith @Joke [tool @Text @Text "search" "Search" (act pure)] "polish this joke")
       T.lines (renderTree (Agentic.describe flow))
-        `shouldBe` [ "draft [Joke]  \"ten jokes please\""
+        `shouldBe` [ "draft @[Joke]  \"ten jokes please\""
                    , "keep 0.7  each"
                    , "└─ judge  yes/no \"Would a 10-year-old laugh at this joke?\"  (keeping its input)"
                    , "each"
-                   , "└─ draft Joke  \"polish this joke\""
+                   , "└─ draft @Joke  \"polish this joke\""
                    , "   └─ tool search  act"
                    ]
 
@@ -185,13 +185,13 @@ main = hspec $ do
       let flow :: Agentic IO (Joke, Joke) (Rating, Text)
           flow = draft @Rating "rate it" *** arr genre
       T.lines (renderTree (Agentic.describe flow))
-        `shouldBe` ["both halves", "├─ first → draft Rating  \"rate it\"", "└─ second → arr"]
+        `shouldBe` ["both halves", "├─ first → draft @Rating  \"rate it\"", "└─ second → arr"]
 
     it "shows a loop and what it runs" $ do
       let flow :: Agentic IO Joke Joke
           flow = repeatUntil ((== "kids") . genre) (draft @Joke "make it more kid-friendly") `named` "polish until it's for kids"
       T.lines (renderTree (Agentic.describe flow))
-        `shouldBe` ["polish until it's for kids  repeat until done", "└─ draft Joke  \"make it more kid-friendly\""]
+        `shouldBe` ["polish until it's for kids  repeat until done", "└─ draft @Joke  \"make it more kid-friendly\""]
 
     it "draws a fork that joins again in mermaid" $ do
       let flow :: Agentic IO Joke (Joke, Rating)
@@ -219,8 +219,8 @@ main = hspec $ do
       let researcher :: Agentic IO Text Text
           researcher = draftWith @Text [tool "research" "Research deeper" researcher] "research this"
       T.lines (renderTree (Agentic.describe researcher))
-        `shouldBe` [ "draft Text  \"research this\""
-                   , "└─ tool research  draft Text  \"research this\""
+        `shouldBe` [ "draft @Text  \"research this\""
+                   , "└─ tool research  draft @Text  \"research this\""
                    , "   └─ tool research  (see above)"
                    ]
   where
