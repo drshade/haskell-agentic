@@ -8,16 +8,38 @@ build-type:         Simple
 
 library
   default-language: GHC2021
-  default-extensions: LambdaCase
+  default-extensions: LambdaCase OverloadedStrings
   ghc-options:      -Wall
   hs-source-dirs:   src
   exposed-modules:
     Agentic.IO
     Agentic.IO.Concurrent
     Agentic.IO.DotEnv
+    Agentic.IO.Store
   build-depends:
     , agentic
+    , agentic-aeson
+    , aeson
     , async      >=2.2 && <2.3
+    , bytestring
+    , containers
+    , text
     , base       >=4.18 && <5
     , directory
     , filepath
+
+test-suite agentic-io-test
+  default-language: GHC2021
+  default-extensions: DeriveAnyClass LambdaCase OverloadedStrings
+  ghc-options:      -Wall
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Spec.hs
+  build-depends:
+    , agentic
+    , agentic-io
+    , base
+    , directory
+    , filepath
+    , hspec
+    , text

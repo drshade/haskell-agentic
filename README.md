@@ -6,9 +6,9 @@ Composable agentic workflows in Haskell: typed steps, mixing LLMs and
 > **Status:** v2 in progress. The core (`agentic/`) and three providers work,
 > each with live tests: Jev as System One (`agentic-jev`), and Claude
 > (`agentic-anthropic`) and OpenAI (`agentic-openai`) as System Two, or as System
-> One through `viaLLM`. `agentic-io` has `concurrently` and `loadDotEnv`;
-> recording and replay aren't written yet. `cabal run dino` and
-> `cabal run tictactoe` run the two examples with the real models.
+> One through `viaLLM`. `agentic-io` adds concurrency, recording and replay.
+> `cabal run dino` and `cabal run tictactoe` run the two examples with the real
+> models.
 
 ## The idea
 
@@ -487,9 +487,33 @@ Everything else is a function from `Runtime m` to `Runtime m`:
 |---|---|
 | `concurrently` | run independent work at the same time (from `agentic-io`; the dino example takes about half as long) |
 | `observing f` | send every event to `f` |
-| `cached store` | reuse answers, keyed by note path and request |
-| `recording file`, `replaying file` | record calls in production, replay them in tests |
+| `withStore mode file` | record model calls to a file and replay them (from `agentic-io`; see below) |
 | `capped n` | fail a step after `n` turns |
+
+### Recording and replay
+
+`withStore` records every model call to a file and replays it later:
+
+```haskell
+rt <- pure runtime
+  >>= withSystemOne jev
+  >>= withSystemTwo anthropic
+  >>= withStore ReplayOrRecord "dino.jsonl"
+```
+
+Each answer is keyed by its whole request (the step's instruction, its input,
+the schemas and the conversation so far), so it's replayed exactly when the
+model would be asked exactly the same thing. There are three modes:
+
+- `Record` calls the models and writes every answer, starting the file afresh.
+- `Replay` answers only from the file, and fails with a `StoreMiss` if asked
+  something new. Use it for tests that are real but free.
+- `ReplayOrRecord` replays what it has and records what it doesn't. Use it while
+  you work on the end of a long flow: everything upstream comes from the file.
+
+The dino project takes about 30 seconds live and about a second replayed, with
+the same output. Only model calls are stored: `act` steps and tool bodies run
+for real every time.
 
 For tests, swap in scripted providers. It's the same flow with no network:
 
@@ -507,7 +531,7 @@ testRuntime = runtime { systemOne = answerAll (yes 0.95), systemTwo = scripted [
 | `agentic-anthropic` | `agentic`, http, aeson | Anthropic as System Two (and System One via the LLM adapter) |
 | `agentic-openai` | `agentic`, http, aeson | OpenAI as System Two (and System One), over the Responses API |
 | `agentic-jev` | `agentic`, http, aeson | Jev as System One |
-| `agentic-io` | `agentic`, async, directory | `concurrently` and `loadDotEnv`; recording and replay to come |
+| `agentic-io` | `agentic`, `agentic-aeson`, async, directory | `concurrently`, `withStore` and `loadDotEnv` |
 | `examples` | all of the above | everything in this README |
 
 ## Design rules
