@@ -21,7 +21,7 @@ in the providers you actually use:
 
 | Package | What it's for |
 |---|---|
-| `agentic` | flows, contracts, questions, the runtime and the interpreter (depends only on `base` and `text`) |
+| `agentic` | flows, contracts, questions, the runtime and the interpreter (depends only on `base` and `text`, and builds with MicroHs too) |
 | `agentic-jev` | Jev as System One |
 | `agentic-anthropic` | Claude as System Two (or System One) |
 | `agentic-openai` | OpenAI as System Two (or System One) |

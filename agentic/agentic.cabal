@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               agentic
-version:            0.2.0.1
+version:            0.2.0.2
 synopsis:           Composable, inspectable agentic workflows mixing LLMs and Jev
 description:
   Typed agentic workflows built from Arrow combinators. A flow is a description: you can describe it as a tree, Mermaid or Graphviz before running anything, then interpret it against System One (Jev) and System Two (an LLM) providers. This is the core: flows, contracts, questions, the runtime and the interpreter. It depends only on base and text.
@@ -66,3 +66,14 @@ test-suite agentic-test
     , base             >=4.18 && <5
     , hspec  >=2.10 && <3
     , text             >=2.0 && <2.2
+-- The core without GHC-only features, in a pure monad. CI also runs this same
+-- file under MicroHs.
+test-suite agentic-portable-test
+  import:           shared
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Portable.hs
+  build-depends:
+    , agentic
+    , base
+    , text

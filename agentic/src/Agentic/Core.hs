@@ -6,6 +6,8 @@ module Agentic.Core
     Agentic (..)
   , Step (..)
   , Tool (..)
+  , toolName
+  , toolDescription
   , Note (..)
   , Instruction (..)
     -- * Steps
@@ -80,7 +82,15 @@ data Agentic m i o where
 
 -- | A named flow a model can call.
 data Tool m where
-  Tool :: {toolName :: Text, toolDescription :: Text, toolInput :: Codec i, toolOutput :: Codec o, toolBody :: Agentic m i o} -> Tool m
+  -- | A name, a description for the model, the input and output contracts, and
+  -- the flow to run.
+  Tool :: Text -> Text -> Codec i -> Codec o -> Agentic m i o -> Tool m
+
+toolName :: Tool m -> Text
+toolName (Tool name _ _ _ _) = name
+
+toolDescription :: Tool m -> Text
+toolDescription (Tool _ description _ _ _) = description
 
 instance Category.Category (Agentic m) where
   id = Step Pass

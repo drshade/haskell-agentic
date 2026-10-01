@@ -2,7 +2,7 @@ module Main (main) where
 
 import Agentic
 import Agentic.Scripted
-import Agentic.Schema (Field (..), Schema (..))
+import Agentic.Schema (Field (..), Schema (..), Shape (..))
 import Data.IORef
 import Data.Text (Text)
 import qualified Data.Text as T

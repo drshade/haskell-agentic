@@ -34,7 +34,7 @@ renderJson = \case
   Object kvs -> "{" <> T.intercalate "," [quote k <> ":" <> renderJson v | (k, v) <- kvs] <> "}"
 
 quote :: Text -> Text
-quote s = "\"" <> T.concatMap escape s <> "\""
+quote s = "\"" <> concatMapText escape s <> "\""
   where
     escape = \case
       '"' -> "\\\""
@@ -48,3 +48,7 @@ quote s = "\"" <> T.concatMap escape s <> "\""
 
 lookupField :: Text -> [(Text, Value)] -> Maybe Value
 lookupField = lookup
+
+-- | 'T.concatMap', which MicroHs's "Data.Text" doesn't provide.
+concatMapText :: (Char -> Text) -> Text -> Text
+concatMapText f = T.concat . map f . T.unpack

@@ -1,0 +1,55 @@
+# The agentic core under MicroHs: type-check every module, then compile and run
+# the portable test (the same file Haskell-CI runs under GHC as
+# agentic-portable-test). MicroHs is built from source at a pinned commit, the
+# one Kyyn uses.
+name: MicroHs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MICROHS_COMMIT: 8bf3d4d4242c8707b31c2338716977d24a95ad39
+
+jobs:
+  core:
+    name: agentic under MicroHs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache the MicroHs build
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: microhs
+          key: microhs-${{ runner.os }}-${{ env.MICROHS_COMMIT }}
+
+      - name: Build MicroHs
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/augustss/MicroHs.git microhs
+          cd microhs
+          git checkout "$MICROHS_COMMIT"
+          make bin/mhs bin/cpphs
+
+      - name: Set up MicroHs
+        run: |
+          echo "$GITHUB_WORKSPACE/microhs/bin" >> "$GITHUB_PATH"
+          echo "MHSDIR=$GITHUB_WORKSPACE/microhs" >> "$GITHUB_ENV"
+
+      - name: Version
+        run: mhs --version
+
+      - name: Type-check the core
+        run: mhs -fno-code -iagentic/src Agentic
+
+      - name: Run the portable test
+        run: |
+          mhs -iagentic/src agentic/test/Portable.hs -o portable
+          ./portable

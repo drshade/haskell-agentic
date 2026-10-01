@@ -1,7 +1,14 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE CPP #-}
 
 -- | Contracts: two-way codecs with documentation. A contract says how to show a
 -- value to a model, how to read one back, and what its schema looks like.
+--
+-- Generic deriving (@deriving (Generic, Contract)@ and
+-- @deriving (Generic, Options)@) is GHC only: MicroHs's "GHC.Generics" has no
+-- metadata classes to read names from. Under MicroHs, write contracts out
+-- with 'record', 'required', 'sumOf' and 'constructor', and options with
+-- 'option'.
 module Agentic.Contract
   ( -- * Codecs
     Codec (..)
@@ -23,12 +30,14 @@ module Agentic.Contract
   , field
   , checked
   , between
+#ifndef __MHS__
     -- * Generic deriving
   , genericContract
   , GContract (..)
   , GCases (..)
   , GCase (..)
   , GFields (..)
+#endif
     -- * Enumerations
   , Options (..)
   , OptionSet (..)
@@ -37,18 +46,21 @@ module Agentic.Contract
   , described
   , Enumeration (..)
   , enumeration
+#ifndef __MHS__
   , GEnum (..)
-  , GConName (..)
+#endif
   ) where
 
 import Agentic.Schema
 import Agentic.Value
-import Data.Kind (Type)
 import Data.List (find)
 import Data.Maybe (fromMaybe, isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
+#ifndef __MHS__
+import Data.Kind (Type)
 import GHC.Generics
+#endif
 
 -- ---------------------------------------------------------------------------
 -- Codecs
@@ -61,8 +73,10 @@ data Codec a = Codec
 
 class Contract a where
   contract :: Codec a
+#ifndef __MHS__
   default contract :: (Generic a, GContract (Rep a)) => Codec a
   contract = genericContract
+#endif
 
 mapCodec :: (a -> b) -> (b -> a) -> Codec a -> Codec b
 mapCodec to' from' c = Codec (codecSchema c) (encode c . from') (fmap to' . decode c)
@@ -302,6 +316,7 @@ documentSchema' = maybe id documentSchema
 nonEmpty :: Text -> Maybe Text
 nonEmpty t = if T.null t then Nothing else Just t
 
+#ifndef __MHS__
 -- ---------------------------------------------------------------------------
 -- Generic deriving
 
@@ -389,6 +404,8 @@ instance (Selector s, Contract a) => GFields (M1 S s (K1 i a)) where
     | null (selName (undefined :: M1 S s (K1 i a) ())) = Just (mapCodec (M1 . K1) (unK1 . unM1) contract)
     | otherwise = Nothing
 
+#endif
+
 -- ---------------------------------------------------------------------------
 -- Enumerations
 
@@ -408,18 +425,22 @@ data OptionSet a = OptionSet
 -- @choice@ and @score@ need one.
 class Options a where
   options :: OptionSet a
-  default options :: (Generic a, GEnum (Rep a), GConName (Rep a)) => OptionSet a
-  options = OptionSet Nothing [Option v (conLabel v) Nothing | v <- map to (genum @(Rep a))]
+#ifndef __MHS__
+  default options :: (Generic a, GEnum (Rep a), Show a) => OptionSet a
+  options = OptionSet Nothing [Option v (label v) Nothing | v <- map to (genum @(Rep a))]
+#endif
 
--- | One option, labelled with its constructor name.
-option :: (Generic a, GConName (Rep a)) => a -> Text -> Option a
-option v d = Option v (conLabel v) (nonEmpty d)
+-- | One option, labelled by 'show' (the constructor's name, for an enumeration).
+option :: Show a => a -> Text -> Option a
+option v d = Option v (label v) (nonEmpty d)
 
 described :: Text -> [Option a] -> OptionSet a
 described d = OptionSet (nonEmpty d)
 
-conLabel :: (Generic a, GConName (Rep a)) => a -> Text
-conLabel = T.pack . gconName . from
+-- | An option's label: what the model sees and answers with. For an
+-- enumeration, 'show' gives the constructor's name.
+label :: Show a => a -> Text
+label = T.pack . show
 
 -- | Use with @deriving via@ to give an 'Options' type a matching 'Contract':
 --
@@ -443,6 +464,7 @@ enumeration =
     set = options @a
     opts = optionList set
 
+#ifndef __MHS__
 class GEnum (f :: Type -> Type) where
   genum :: [f p]
 
@@ -454,17 +476,4 @@ instance (GEnum f, GEnum g) => GEnum (f :+: g) where
 
 instance GEnum (M1 C c U1) where
   genum = [M1 U1]
-
-class GConName (f :: Type -> Type) where
-  gconName :: f p -> String
-
-instance GConName f => GConName (M1 D d f) where
-  gconName (M1 x) = gconName x
-
-instance (GConName f, GConName g) => GConName (f :+: g) where
-  gconName = \case
-    L1 x -> gconName x
-    R1 x -> gconName x
-
-instance Constructor c => GConName (M1 C c f) where
-  gconName = conName
+#endif

@@ -120,10 +120,10 @@ trees seen = \case
   Leaf Identity -> (seen, [])
   Leaf Glue -> (seen, [])
   Leaf info -> leaf Nothing info
-  Sequence ds -> concat <$> mapAccumL trees seen ds
+  Sequence ds -> onSnd concat (mapAccumL trees seen ds)
   Together ds ->
     let keeping = if any passes ds then "  (keeping its input)" else ""
-     in case concat <$> mapAccumL parallel seen (filter (not . passes) ds) of
+     in case onSnd concat (mapAccumL parallel seen (filter (not . passes) ds)) of
           (seen', [Node t cs]) -> (seen', [Node (t <> keeping) cs])
           (seen', ts) -> (seen', [Node ("together" <> keeping) ts])
   Halves l r ->
@@ -414,7 +414,7 @@ dot d =
       Uses -> ["style=dotted", "arrowhead=none"]
       Again -> ["style=dashed"]
     str t = "\"" <> inner t <> "\""
-    inner = T.concatMap (\case '"' -> "\\\""; '\\' -> "\\\\"; c -> T.singleton c)
+    inner = concatMapText (\case '"' -> "\\\""; '\\' -> "\\\\"; c -> T.singleton c)
 
 -- | Is the node with this id inside the box with that id?
 inBox :: Text -> Text -> [Item] -> Bool
@@ -490,3 +490,12 @@ toValue = \case
       AskYesNo q -> Object [("type", String "yesNo"), ("question", String q)]
       AskChoice q opts -> Object [("type", String "choice"), ("question", String q), ("options", Array [String l | (l, _) <- opts])]
       AskScore q levels -> Object [("type", String "score"), ("question", String q), ("levels", Array [String l | (l, _) <- levels])]
+
+-- | 'T.concatMap', which MicroHs's "Data.Text" doesn't provide.
+concatMapText :: (Char -> Text) -> Text -> Text
+concatMapText f = T.concat . map f . T.unpack
+
+-- | Apply a function to a pair's second half. (MicroHs has no Functor instance
+-- for pairs.)
+onSnd :: (b -> c) -> (a, b) -> (a, c)
+onSnd f (a, b) = (a, f b)

@@ -2,6 +2,7 @@ module Main (main) where
 
 import Agentic
 import Agentic.Runtime (Conversation (..))
+import Agentic.Schema (Shape (..))
 import Agentic.Aeson (toAeson)
 import Agentic.OpenAI
 import qualified Data.Aeson as J
