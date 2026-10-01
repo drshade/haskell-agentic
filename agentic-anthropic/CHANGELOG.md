@@ -1,6 +1,6 @@
 # Changelog for agentic-anthropic
 
-## 0.2.0.2 - ???
+## 0.2.0.2 - 2026-10-01
 
 * No changes; released alongside agentic 0.2.0.2.
 

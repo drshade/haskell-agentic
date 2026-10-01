@@ -1,6 +1,6 @@
 # Changelog for agentic
 
-## 0.2.0.2 - ???
+## 0.2.0.2 - 2026-10-01
 
 * The core now builds and runs under MicroHs as well as GHC. Generic
   deriving of `Contract` and `Options` is GHC only; under MicroHs, write
