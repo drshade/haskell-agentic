@@ -3,12 +3,21 @@
 Composable agentic workflows in Haskell: typed steps, mixing LLMs and
 [Jev](https://docs.typesafe.ai), that you can inspect before you run them.
 
-> **Status:** v2 in progress. The core (`agentic/`) and three providers work,
-> each with live tests: Jev as System One (`agentic-jev`), and Claude
-> (`agentic-anthropic`) and OpenAI (`agentic-openai`) as System Two, or as System
-> One through `viaLLM`. `agentic-io` adds concurrency, recording and replay.
-> `cabal run dino`, `cabal run tictactoe` and `cabal run kitchensink` run the
-> examples with the real models.
+## Packages
+
+| Package | What it's for |
+|---|---|
+| `agentic` | flows, contracts, questions, the runtime and the interpreter (depends only on `base` and `text`) |
+| `agentic-jev` | Jev as System One |
+| `agentic-anthropic` | Claude as System Two (or System One) |
+| `agentic-openai` | OpenAI as System Two (or System One) |
+| `agentic-io` | concurrency, recording and replay, and `.env` loading |
+| `agentic-aeson` | shared by the providers: JSON conversions and strict JSON Schema |
+
+The examples in this README are in `examples/` and run against the real models:
+`cabal run dino`, `cabal run tictactoe`, `cabal run review` and
+`cabal run kitchensink`. Copy `.env.example` to `.env` and fill in your keys
+first.
 
 ## The idea
 
@@ -614,5 +623,5 @@ testRuntime = runtime { systemOne = answerAll (yes 0.95), systemTwo = scripted [
 
 ## History
 
-v0 (the Kleisli-arrow prototype, with Dhall as the output format) will be tagged
-`v0-prototype` when v2 replaces `main`.
+v0, the Kleisli-arrow prototype with Dhall as its output format, is tagged
+`v0-prototype`.

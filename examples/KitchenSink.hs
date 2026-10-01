@@ -227,7 +227,7 @@ polish =
 send :: Handled -> IO Handled
 send h = do
   let Reply to (Subject s) _ = reply h
-  T.putStrLn ("  sent to " <> to <> ": " <> s)
+  T.putStrLn ("  sent email to " <> to <> ": " <> s)
   pure h
 
 page :: Handled -> IO Handled

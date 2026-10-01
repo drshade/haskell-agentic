@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/setup@v2
+        id: setup
+        with:
+          ghc-version: "9.14.1"
+          cabal-version: latest
+
+      - name: Resolve dependencies
+        run: cabal build all --enable-tests --dry-run
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: cabal-${{ runner.os }}-${{ hashFiles('dist-newstyle/cache/plan.json') }}
+          restore-keys: cabal-${{ runner.os }}-
+
+      - name: Build
+        run: cabal build all --enable-tests
+
+      # The offline suites only. The *-live suites call real models and need keys.
+      - name: Test
+        run: |
+          for t in agentic-test agentic-io-test agentic-jev-test agentic-anthropic-test agentic-openai-test; do
+            cabal test "$t"
+          done
+
+      - name: Check packages
+        run: |
+          for p in agentic agentic-aeson agentic-io agentic-jev agentic-anthropic agentic-openai; do
+            (cd "$p" && cabal check)
+          done
