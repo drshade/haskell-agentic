@@ -94,6 +94,9 @@ wrap s = case shape s of
 -- | A top-level object schema: the schema itself if it's an object, or an
 -- object with a single @value@ field holding it. A named type that appears more
 -- than once, identically, is written once under @$defs@ and referenced.
+--
+-- TBD: Recursively defined schemas will hang here. A recursive type's derived
+-- schema contains itself, so walking it never ends.
 objectSchema :: Schema -> Value
 objectSchema s = case root of
   Object kvs | not (null defs) -> Object (kvs <> [("$defs", Object defs)])
