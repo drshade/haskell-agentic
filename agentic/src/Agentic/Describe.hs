@@ -270,6 +270,17 @@ item i = Build $ \case
 edge :: Edge -> Build ()
 edge e = Build (\(BuildState n open es) -> ((), BuildState n open (e : es)))
 
+edgeCount :: Build Int
+edgeCount = Build (\s@(BuildState _ _ es) -> (length es, s))
+
+-- | The nodes that edges added since @before@ lead into from these sources.
+entriesSince :: Int -> [Text] -> Build [Text]
+entriesSince before sources = Build $ \s@(BuildState _ _ es) ->
+  let new = reverse (take (length es - before) es)
+   in (nubOrdered [edgeTo e | e <- new, edgeFrom e `elem` sources], s)
+  where
+    nubOrdered = foldr (\x acc -> x : filter (/= x) acc) []
+
 connect :: From -> Text -> Build ()
 connect from to = mapM_ (\(f, l) -> edge (Edge f to l Flow)) from
 
@@ -303,9 +314,14 @@ build context from = \case
   Branch l r -> (<>) <$> build InBranch (labelled "left") l <*> build InBranch (labelled "right") r
   OnFirst f -> (<>) <$> build InBranch (labelled "first") f <*> pure (labelled "second")
   ForEach f -> snd <$> box "each" (build InSequence from f)
+  -- "Again" goes back to where the body starts: the steps the loop's input
+  -- flows into. If the body has none, it goes to the box.
   Repeated f -> do
+    before <- edgeCount
     (b, exits) <- box "repeat until done" (build InSequence from f)
-    mapM_ (\(e, _) -> edge (Edge e b (Just "again") Again)) exits
+    entries <- entriesSince before (map fst from)
+    let targets = if null entries then [b] else entries
+    mapM_ (\(e, _) -> mapM_ (\t -> edge (Edge e t (Just "again") Again)) targets) exits
     pure exits
   Annotated n (Leaf Glue) -> node from [noteName n]
   Annotated n (Leaf info) | not (passes (Leaf info)) -> step (Just (noteName n)) info
@@ -406,7 +422,8 @@ inBox b n = any within
       ItemNode i _ _ -> i == n
       ItemBox _ _ inside -> any contains inside
 
--- | The first node inside the box with this id, if the id is a box's.
+-- | The first node inside the box with this id, if the id is a box's. Only an
+-- edge into an empty loop needs it.
 firstNode :: Text -> [Item] -> Maybe Text
 firstNode b = go
   where

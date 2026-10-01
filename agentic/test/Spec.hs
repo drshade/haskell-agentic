@@ -208,6 +208,13 @@ main = hspec $ do
       length (filter (T.isInfixOf "subgraph cluster_") dotOut) `shouldBe` 2
       length (filter (T.isInfixOf "subgraph ") (T.lines out)) `shouldBe` 2
 
+    it "sends a loop's again edge back to the body's first step, in both formats" $ do
+      let flow :: Agentic IO Joke Joke
+          flow = repeatUntil ((== "kids") . genre) (draft @Joke "make it kid-friendly" >>> act pure `named` "show it")
+          d = Agentic.describe flow
+      filter (T.isInfixOf "again") (T.lines (mermaid d)) `shouldBe` ["  n2 -.->|again| n1"]
+      filter (T.isInfixOf "again") (T.lines (dot d)) `shouldBe` ["  n2 -> n1 [label=\"again\", style=dashed];"]
+
     it "expands a tool that calls itself only once" $ do
       let researcher :: Agentic IO Text Text
           researcher = draftWith @Text [tool "research" "Research deeper" researcher] "research this"
