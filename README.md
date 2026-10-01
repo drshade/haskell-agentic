@@ -7,8 +7,8 @@ Composable agentic workflows in Haskell: typed steps, mixing LLMs and
 > each with live tests: Jev as System One (`agentic-jev`), and Claude
 > (`agentic-anthropic`) and OpenAI (`agentic-openai`) as System Two, or as System
 > One through `viaLLM`. `agentic-io` adds concurrency, recording and replay.
-> `cabal run dino` and `cabal run tictactoe` run the two examples with the real
-> models.
+> `cabal run dino`, `cabal run tictactoe` and `cabal run kitchensink` run the
+> examples with the real models.
 
 ## The idea
 
@@ -436,6 +436,26 @@ stays describable: the tree shows what repeats, and a name says what it waits
 for. `cabal run tictactoe` plays a game on OpenAI (`withSystemTwo (openai &
 effort Low)`), where the dino project runs on Claude; the flow code is the same
 either way.
+
+## The kitchen sink
+
+`examples/KitchenSink.hs` uses every feature at once, on a day of support email
+at an online bookshop. Claude writes the day's inbox. Jev drops the spam
+(`keep`) and triages each email with three questions in one request (a `choice`
+of topic, a `score` of urgency, and `yesNo` "is the customer angry?"); a named
+policy (`note`, `arr`) turns that into a ticket. Urgent and routine tickets are
+handled side by side (`***`). Refunds go to an agent with two tools, an order
+lookup (`act`) and a refund-policy check (`judge`), and everything else gets a
+plain reply (`|||`). Each reply is polished until Jev rates it polite
+(`repeatUntil`) while a log line is written alongside it (`&&&`), then sent
+(`act`); urgent tickets also page the on-call team. Claude ends the day with a
+report. The runtime runs independent work at the same time (`concurrently`) and
+records every model call (`withStore`), so `cabal run kitchensink` takes about a
+minute the first time and a moment after that.
+
+In a typical run Claude's first drafts are already polite enough, so the polish
+loop returns them as they are: `repeatUntil` checks its condition before each
+round.
 
 ## Running flows
 

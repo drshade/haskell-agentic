@@ -206,6 +206,17 @@ main = hspec $ do
       any (T.isInfixOf "arr\\ncheck\\nMake sure it's still a joke") (T.lines (dot d)) `shouldBe` True
       any (T.isInfixOf "Tidy the wording") (T.lines (renderTree d)) `shouldBe` False
 
+    it "groups a parallel branch that's several steps in a row" $ do
+      let flow :: Agentic IO Joke (Joke, Rating)
+          flow = (draft @Joke "rewrite it" >>> draft @Joke "shorten it") &&& draft @Rating "rate it"
+      T.lines (renderTree (Agentic.describe flow))
+        `shouldBe` [ "together"
+                   , "├─ in order"
+                   , "│  ├─ draft @Joke  \"rewrite it\""
+                   , "│  └─ draft @Joke  \"shorten it\""
+                   , "└─ draft @Rating  \"rate it\""
+                   ]
+
     it "shows a loop and what it runs" $ do
       let flow :: Agentic IO Joke Joke
           flow = repeatUntil ((== "kids") . genre) (draft @Joke "make it more kid-friendly") `named` "polish until it's for kids"

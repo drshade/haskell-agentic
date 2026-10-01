@@ -2,9 +2,10 @@
 -- models such as Jev, that you can inspect before you run them.
 --
 -- This module is for writing and running flows. The fields of the types that
--- providers work with ('Conversation', 'Schema' and 'Field') aren't exported
--- here, so they don't clash with your own records; provider code imports
--- "Agentic.Runtime" and "Agentic.Schema" directly.
+-- providers work with ('Conversation', 'Schema' and 'Field'), and the
+-- constructors of 'Format', aren't exported here, so they don't clash with your
+-- own types; provider code imports "Agentic.Runtime" and "Agentic.Schema"
+-- directly.
 module Agentic
   ( module Agentic.Core
   , module Agentic.Contract
@@ -25,8 +26,8 @@ import Agentic.Interpret
 import Agentic.Questions
 import Agentic.Runtime hiding (Conversation (..))
 import Agentic.Runtime (Conversation)
-import Agentic.Schema hiding (Field (..), Schema (..))
-import Agentic.Schema (Field, Schema)
+import Agentic.Schema hiding (Field (..), Format (..), Schema (..))
+import Agentic.Schema (Field, Format, Schema)
 import Agentic.Settings
 import Agentic.Value
 import Agentic.ViaLLM

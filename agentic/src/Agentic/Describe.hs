@@ -123,7 +123,7 @@ trees seen = \case
   Sequence ds -> concat <$> mapAccumL trees seen ds
   Together ds ->
     let keeping = if any passes ds then "  (keeping its input)" else ""
-     in case concat <$> mapAccumL branch seen (filter (not . passes) ds) of
+     in case concat <$> mapAccumL parallel seen (filter (not . passes) ds) of
           (seen', [Node t cs]) -> (seen', [Node (t <> keeping) cs])
           (seen', ts) -> (seen', [Node ("together" <> keeping) ts])
   Halves l r ->
@@ -152,6 +152,11 @@ trees seen = \case
             DraftInfo _ _ _ tools -> mapAccumL toolTree seen tools
             _ -> (seen, [])
        in (seen', [Node (T.intercalate "  " (stepLines name info)) toolTrees])
+    -- A branch of @&&&@ that's several steps in a row is grouped, so its steps
+    -- don't read as more parallel branches.
+    parallel s d = case branch s d of
+      (s', ts@(_ : _ : _)) -> (s', [Node "in order" ts])
+      r -> r
     -- A branch always shows, even when it's only glue.
     branch s d = case trees s d of
       (s', []) -> (s', [Node (if passes d then "pass" else "arr") []])

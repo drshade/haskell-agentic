@@ -56,3 +56,21 @@ executable tictactoe
     , agentic-io
     , base
     , text
+
+executable kitchensink
+  default-language: GHC2021
+  default-extensions:
+    DeriveAnyClass
+    DerivingVia
+    LambdaCase
+    OverloadedStrings
+  ghc-options:      -Wall
+  hs-source-dirs:   .
+  main-is:          KitchenSink.hs
+  build-depends:
+    , agentic
+    , agentic-anthropic
+    , agentic-io
+    , agentic-jev
+    , base
+    , text
