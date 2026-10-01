@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               agentic-openai
-version:            0.2.0.0
+version:            0.2.0.1
 synopsis:           OpenAI as the System Two provider for agentic
 description:
   Runs agentic's draft steps on OpenAI models through the Responses API, with strict structured outputs and tools, and can stand in as System One.

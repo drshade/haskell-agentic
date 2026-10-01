@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               agentic-aeson
-version:            0.2.0.0
+version:            0.2.0.1
 synopsis:           Conversions between agentic's values and aeson, and strict JSON Schema
 description:
   Shared by the agentic provider packages: converts the core's Value to and from aeson, and lowers contracts to the strict JSON Schema that providers' structured outputs accept, keeping field order and sharing repeated types through $defs.

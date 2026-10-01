@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               agentic
-version:            0.2.0.0
+version:            0.2.0.1
 synopsis:           Composable, inspectable agentic workflows mixing LLMs and Jev
 description:
   Typed agentic workflows built from Arrow combinators. A flow is a description: you can describe it as a tree, Mermaid or Graphviz before running anything, then interpret it against System One (Jev) and System Two (an LLM) providers. This is the core: flows, contracts, questions, the runtime and the interpreter. It depends only on base and text.
@@ -13,7 +13,9 @@ category:           AI
 homepage:           https://github.com/drshade/haskell-agentic
 bug-reports:        https://github.com/drshade/haskell-agentic/issues
 build-type:         Simple
-extra-doc-files:    CHANGELOG.md
+extra-doc-files:
+  CHANGELOG.md
+  README.md
 tested-with:        GHC ==9.6.7 || ==9.8.4 || ==9.10.3 || ==9.12.2 || ==9.14.1
 
 source-repository head
