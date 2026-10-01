@@ -191,7 +191,7 @@ main = hspec $ do
       let flow :: Agentic IO Joke Joke
           flow = repeatUntil ((== "kids") . genre) (draft @Joke "make it more kid-friendly") `named` "polish until it's for kids"
       T.lines (renderTree (Agentic.describe flow))
-        `shouldBe` ["polish until it's for kids  repeat until done", "└─ draft @Joke  \"make it more kid-friendly\""]
+        `shouldBe` ["polish until it's for kids  repeatUntil", "└─ draft @Joke  \"make it more kid-friendly\""]
 
     it "draws a fork that joins again in mermaid" $ do
       let flow :: Agentic IO Joke (Joke, Rating)

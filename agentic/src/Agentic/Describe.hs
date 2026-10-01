@@ -136,8 +136,8 @@ trees seen = \case
         (seen2, rs) = branch seen1 r
      in (seen2, [Node "branch" [labelled "left" ls, labelled "right" rs]])
   Repeated d -> case branch seen d of
-    (seen', [Node "together" ts]) -> (seen', [Node "repeat until done" ts])
-    (seen', ts) -> (seen', [Node "repeat until done" ts])
+    (seen', [Node "together" ts]) -> (seen', [Node "repeatUntil" ts])
+    (seen', ts) -> (seen', [Node "repeatUntil" ts])
   ForEach d -> case branch seen d of
     (seen', [Node "together" ts]) -> (seen', [Node "each" ts])
     (seen', ts) -> (seen', [Node "each" ts])
@@ -316,7 +316,7 @@ build context from = \case
   -- flows into. If the body has none, it goes to the box.
   Repeated f -> do
     before <- edgeCount
-    (b, exits) <- box "repeat until done" (build InSequence from f)
+    (b, exits) <- box "repeatUntil" (build InSequence from f)
     entries <- entriesSince before (map fst from)
     let targets = if null entries then [b] else entries
     mapM_ (\(e, _) -> mapM_ (\t -> edge (Edge e t (Just "again") Again)) targets) exits

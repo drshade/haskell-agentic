@@ -425,7 +425,7 @@ types say there's a 3×3 board of `Blank`, `X` and `O`, and a game that's either
 `Playing` or `Ended`; the model knows the rest. `describe` shows the loop:
 
 ```
-play until the game ends  repeat until done
+play until the game ends  repeatUntil
 ├─ draft @Game  "Play the next move!"
 └─ act  print the board
 ```
