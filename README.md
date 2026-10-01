@@ -306,10 +306,13 @@ both halves
 draft Poster  "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
 ```
 
-`mermaid` draws the same flow as a Mermaid flowchart of how data moves: steps
+`mermaid` and `dot` draw the same flow as a diagram of how data moves: steps
 in order, forks that join again (a pass-through is an edge straight to the
 join), boxes for `each`, `repeatUntil` and named sub-flows, and tools on dotted
-lines. `cabal run dino` prints both. Here's the dino project:
+lines. `mermaid` writes a Mermaid flowchart, which GitHub and many editors draw
+inline; `dot` writes Graphviz, which renders offline (`dot -Tsvg`). Both come
+from one graph, `flowGraph`, so they always agree, and you can walk it yourself.
+`cabal run dino` prints all three views. Here's the dino project:
 
 ```mermaid
 flowchart TD
@@ -343,8 +346,8 @@ flowchart TD
 ```
 
 `describe` returns a `Description`, a plain data type whose `Show` instance is the
-tree above. `mermaid` renders it as the flowchart, and `toValue` turns it into
-JSON for UIs and other agents. You can also walk it yourself:
+tree above. `mermaid` and `dot` render it as a diagram, and `toValue` turns it
+into JSON for UIs and other agents. You can also walk it yourself:
 
 ```haskell
 describe :: Agentic m i o -> Description

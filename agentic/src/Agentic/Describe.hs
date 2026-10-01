@@ -6,6 +6,13 @@ module Agentic.Describe
   , ToolInfo (..)
   , renderTree
   , mermaid
+  , dot
+  , flowGraph
+  , FlowGraph (..)
+  , Item (..)
+  , NodeKind (..)
+  , Edge (..)
+  , EdgeStyle (..)
   , toValue
   ) where
 
@@ -189,19 +196,44 @@ draw lead childLead (Node t cs) = (lead <> t) : go cs
 -- ---------------------------------------------------------------------------
 -- Mermaid
 
--- | A Mermaid flowchart of how data moves through the flow. Steps are joined
--- in order; @&&&@, @***@ and @|||@ fork into their branches and join again at
--- the next step, with a pass-through drawn as an edge straight to the join;
--- @each@, @repeatUntil@ and named sub-flows are boxes; tools hang off their
--- draft with dotted lines.
-mermaid :: Description -> Text
-mermaid d = T.unlines ("flowchart TD" : reverse (lines' final))
+-- | How data moves through a flow, as a graph: steps joined in order; @&&&@,
+-- @***@ and @|||@ forking into their branches and joining again at the next
+-- step, with a pass-through drawn as an edge straight to the join; @each@,
+-- @repeatUntil@ and named sub-flows as boxes; tools hanging off their draft.
+-- 'mermaid' and 'dot' render it.
+data FlowGraph = FlowGraph
+  { graphItems :: [Item]
+  , graphEdges :: [Edge]
+  }
+
+-- | A node, or a box of items.
+data Item
+  = ItemNode Text NodeKind [Text]
+    -- ^ An id, what kind of node it is, and its label's lines.
+  | ItemBox Text Text [Item]
+    -- ^ An id, a label, and what's inside.
+
+data NodeKind = Terminal | StepNode | ToolNode
+
+data Edge = Edge
+  { edgeFrom :: Text
+  , edgeTo :: Text
+    -- ^ A node, or a box's id.
+  , edgeLabel :: Maybe Text
+  , edgeStyle :: EdgeStyle
+  }
+
+data EdgeStyle = Flow | Uses | Again
+
+-- | The flow's graph, from @input@ to @output@.
+flowGraph :: Description -> FlowGraph
+flowGraph d = case runBuild flow (BuildState 0 [[]] []) of
+  (_, BuildState _ open edges) -> FlowGraph (reverse (concat open)) (reverse edges)
   where
-    (_, final) = runBuild flow (Graph 0 [])
     flow = do
-      emit "  input([input])"
+      item (ItemNode "input" Terminal ["input"])
       exits <- build InSequence [("input", Nothing)] d
-      emit "  output([output])"
+      item (ItemNode "output" Terminal ["output"])
       connect exits "output"
 
 -- | Where a description sits: unnamed glue between steps is plumbing, but a
@@ -211,12 +243,10 @@ data Context = InSequence | InBranch
 -- | Nodes the next step connects from, each with an optional edge label.
 type From = [(Text, Maybe Text)]
 
-data Graph = Graph Int [Text]
+-- | A counter for ids, the items of each open box (innermost first), and edges.
+data BuildState = BuildState Int [[Item]] [Edge]
 
-lines' :: Graph -> [Text]
-lines' (Graph _ ls) = ls
-
-newtype Build a = Build {runBuild :: Graph -> (a, Graph)}
+newtype Build a = Build {runBuild :: BuildState -> (a, BuildState)}
 
 instance Functor Build where
   fmap f (Build g) = Build (\s -> let (a, s') = g s in (f a, s'))
@@ -229,27 +259,34 @@ instance Monad Build where
   Build g >>= k = Build (\s -> let (a, s1) = g s in runBuild (k a) s1)
 
 fresh :: Build Text
-fresh = Build (\(Graph n ls) -> ("n" <> T.pack (show n), Graph (n + 1) ls))
+fresh = Build (\(BuildState n open es) -> ("n" <> T.pack (show n), BuildState (n + 1) open es))
 
-emit :: Text -> Build ()
-emit l = Build (\(Graph n ls) -> ((), Graph n (l : ls)))
+item :: Item -> Build ()
+item i = Build $ \case
+  BuildState n (current : outer) es -> ((), BuildState n ((i : current) : outer) es)
+  BuildState n [] es -> ((), BuildState n [[i]] es)
+
+edge :: Edge -> Build ()
+edge e = Build (\(BuildState n open es) -> ((), BuildState n open (e : es)))
 
 connect :: From -> Text -> Build ()
-connect from to = mapM_ (\(f, l) -> emit ("  " <> f <> " -->" <> maybe "" (\t -> "|" <> escape t <> "|") l <> " " <> to)) from
+connect from to = mapM_ (\(f, l) -> edge (Edge f to l Flow)) from
 
-node :: From -> Text -> Build From
+node :: From -> [Text] -> Build From
 node from label = do
   n <- fresh
-  emit ("  " <> n <> "[\"" <> escape label <> "\"]")
+  item (ItemNode n StepNode label)
   connect from n
   pure [(n, Nothing)]
 
 box :: Text -> Build a -> Build (Text, a)
 box label inside = do
   b <- fresh
-  emit ("  subgraph " <> b <> "[\"" <> escape label <> "\"]")
+  Build (\(BuildState n open es) -> ((), BuildState n ([] : open) es))
   a <- inside
-  emit "  end"
+  Build $ \case
+    BuildState n (contents : parent : outer) es -> ((), BuildState n ((ItemBox b label (reverse contents) : parent) : outer) es)
+    s -> ((), s)
   pure (b, a)
 
 build :: Context -> From -> Description -> Build From
@@ -257,9 +294,9 @@ build context from = \case
   Leaf Identity -> pure from
   Leaf Glue -> case context of
     InSequence -> pure from
-    InBranch -> node from "arr"
+    InBranch -> node from ["arr"]
   Leaf info -> step Nothing info
-  Sequence ds -> foldlM' (build InSequence) from ds
+  Sequence ds -> chain from ds
   Together ds -> concat <$> mapM (build InBranch from) ds
   Halves l r -> (<>) <$> build InBranch (labelled "first") l <*> build InBranch (labelled "second") r
   Branch l r -> (<>) <$> build InBranch (labelled "left") l <*> build InBranch (labelled "right") r
@@ -267,44 +304,120 @@ build context from = \case
   ForEach f -> snd <$> box "each" (build InSequence from f)
   Repeated f -> do
     (b, exits) <- box "repeat until done" (build InSequence from f)
-    mapM_ (\(e, _) -> emit ("  " <> e <> " -.->|again| " <> b)) exits
+    mapM_ (\(e, _) -> edge (Edge e b (Just "again") Again)) exits
     pure exits
-  Annotated n (Leaf Glue) -> node from (noteName n)
+  Annotated n (Leaf Glue) -> node from [noteName n]
   Annotated n (Leaf info) | not (passes (Leaf info)) -> step (Just (noteName n)) info
   Annotated n f -> snd <$> box (noteName n) (build InSequence from f)
   where
     labelled l = [(f, Just l) | (f, _) <- from]
-    foldlM' step = go
-      where
-        go acc = \case
-          [] -> pure acc
-          x : xs -> step acc x >>= (`go` xs)
-    -- A step's node, with its name (if it has one) in front of its label, and
-    -- any tools hanging off it.
+    chain acc = \case
+      [] -> pure acc
+      x : xs -> build InSequence acc x >>= (`chain` xs)
+    -- A step's node, with its name (if it has one) above its label, and any
+    -- tools hanging off it.
     step name info = do
-      exits <- node from (maybe "" (<> "<br/>") name <> leafText info)
+      exits <- node from (maybe [] pure name <> leafLines info)
       case info of
         DraftInfo _ _ _ tools ->
           mapM_
             ( \t -> do
                 n <- fresh
-                emit ("  " <> n <> "[/\"" <> escape ("tool " <> infoName t) <> "\"/]")
-                mapM_ (\(e, _) -> emit ("  " <> e <> " -.- " <> n)) exits
+                item (ItemNode n ToolNode ["tool " <> infoName t])
+                mapM_ (\(e, _) -> edge (Edge e n Nothing Uses)) exits
             )
             tools
         _ -> pure ()
       pure exits
 
-leafText :: StepInfo -> Text
-leafText = \case
-  Identity -> "pass"
-  Glue -> "arr"
-  Effect -> "act"
-  DraftInfo instruction _ out _ -> "draft " <> typeLabel out <> "<br/>" <> quoted (instructionText instruction)
-  JudgeInfo _ qs -> judgeText qs
+leafLines :: StepInfo -> [Text]
+leafLines = \case
+  Identity -> ["pass"]
+  Glue -> ["arr"]
+  Effect -> ["act"]
+  DraftInfo instruction _ out _ -> ["draft " <> typeLabel out, quoted (instructionText instruction)]
+  JudgeInfo _ qs -> [judgeText qs]
 
-escape :: Text -> Text
-escape = T.replace "\"" "#quot;"
+-- | A Mermaid flowchart of the flow's graph.
+mermaid :: Description -> Text
+mermaid d = T.unlines ("flowchart TD" : concatMap (items' "  ") is <> map edge' es)
+  where
+    FlowGraph is es = flowGraph d
+    items' indent = \case
+      ItemNode i kind ls -> [indent <> i <> shape kind (T.intercalate "<br/>" (map escape ls))]
+      ItemBox i l inside -> [indent <> "subgraph " <> i <> "[\"" <> escape l <> "\"]"] <> concatMap (items' (indent <> "  ")) inside <> [indent <> "end"]
+    shape kind l = case kind of
+      Terminal -> "([\"" <> l <> "\"])"
+      StepNode -> "[\"" <> l <> "\"]"
+      ToolNode -> "[/\"" <> l <> "\"/]"
+    edge' (Edge f t l style) = "  " <> f <> arrow style <> maybe "" (\x -> "|" <> escape x <> "|") l <> " " <> t
+    arrow = \case
+      Flow -> " -->"
+      Uses -> " -.-"
+      Again -> " -.->"
+    escape = T.replace "\"" "#quot;"
+
+-- | A Graphviz DOT digraph of the flow's graph. Render it with, for example,
+-- @dot -Tsvg@.
+dot :: Description -> Text
+dot d =
+  T.unlines $
+    ["digraph flow {", "  compound=true;", "  node [shape=box, style=rounded, fontname=\"Helvetica\"];", "  edge [fontname=\"Helvetica\"];"]
+      <> concatMap (items' "  ") is
+      <> map edge' es
+      <> ["}"]
+  where
+    FlowGraph is es = flowGraph d
+    items' indent = \case
+      ItemNode i kind ls -> [indent <> i <> " [label=\"" <> T.intercalate "\\n" (map inner ls) <> "\"" <> shape kind <> "];"]
+      ItemBox i l inside -> [indent <> "subgraph cluster_" <> i <> " {", indent <> "  label=" <> str l <> ";", indent <> "  style=rounded;"] <> concatMap (items' (indent <> "  ")) inside <> [indent <> "}"]
+    shape = \case
+      Terminal -> ", shape=oval"
+      StepNode -> ""
+      ToolNode -> ", shape=parallelogram, style=\"\""
+    -- An edge into a box points at the box's first node, clipped to the box.
+    edge' (Edge f t l style) =
+      let (target, attrs) = case firstNode t is of
+            Just n
+              | inBox t f is -> (n, [])
+              | otherwise -> (n, ["lhead=cluster_" <> t])
+            Nothing -> (t, [])
+          extra = maybe [] (\x -> ["label=" <> str x]) l <> attrs <> styleOf style
+       in "  " <> f <> " -> " <> target <> (if null extra then "" else " [" <> T.intercalate ", " extra <> "]") <> ";"
+    styleOf = \case
+      Flow -> []
+      Uses -> ["style=dotted", "arrowhead=none"]
+      Again -> ["style=dashed"]
+    str t = "\"" <> inner t <> "\""
+    inner = T.concatMap (\case '"' -> "\\\""; '\\' -> "\\\\"; c -> T.singleton c)
+
+-- | Is the node with this id inside the box with that id?
+inBox :: Text -> Text -> [Item] -> Bool
+inBox b n = any within
+  where
+    within = \case
+      ItemBox i _ inside
+        | i == b -> any contains inside
+        | otherwise -> any within inside
+      ItemNode {} -> False
+    contains = \case
+      ItemNode i _ _ -> i == n
+      ItemBox _ _ inside -> any contains inside
+
+-- | The first node inside the box with this id, if the id is a box's.
+firstNode :: Text -> [Item] -> Maybe Text
+firstNode b = go
+  where
+    go = \case
+      [] -> Nothing
+      ItemBox i _ inside : rest
+        | i == b -> first inside
+        | otherwise -> maybe (go rest) Just (go inside)
+      ItemNode {} : rest -> go rest
+    first = \case
+      ItemNode i _ _ : _ -> Just i
+      ItemBox _ _ inside : rest -> maybe (first rest) Just (first inside)
+      [] -> Nothing
 
 -- ---------------------------------------------------------------------------
 -- JSON

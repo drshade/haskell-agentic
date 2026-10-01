@@ -199,6 +199,15 @@ main = hspec $ do
           edges = filter (T.isInfixOf "-->") (T.lines (mermaid (Agentic.describe flow)))
       edges `shouldBe` ["  input --> n0", "  input --> output", "  n0 --> output"]
 
+    it "draws the same graph as DOT, with boxes as clusters" $ do
+      let flow :: Agentic IO [Joke] [Joke]
+          flow = each (draft @Joke "polish it") `named` "polish"
+          out = mermaid (Agentic.describe flow)
+          dotOut = T.lines (dot (Agentic.describe flow))
+      filter (T.isInfixOf "->") dotOut `shouldBe` ["  input -> n2;", "  n2 -> output;"]
+      length (filter (T.isInfixOf "subgraph cluster_") dotOut) `shouldBe` 2
+      length (filter (T.isInfixOf "subgraph ") (T.lines out)) `shouldBe` 2
+
     it "expands a tool that calls itself only once" $ do
       let researcher :: Agentic IO Text Text
           researcher = draftWith @Text [tool "research" "Research deeper" researcher] "research this"
