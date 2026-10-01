@@ -392,7 +392,8 @@ Without that name, the tree would show nothing between classifying and building
 exhibits, and the step that decides which creatures become exhibits would be
 invisible. To name a larger
 sub-flow, bracket it, as `exhibit` does above. `note name description flow`
-names a flow and describes it too.
+names a flow and describes it too; the diagrams show the description under the
+name, and the tree leaves it out to stay compact.
 
 Names nest into paths like `exhibit / picture`. Tracing uses those paths, and
 they stay stable when you edit the flow around them, so they also work as keys

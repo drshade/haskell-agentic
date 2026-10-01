@@ -197,6 +197,15 @@ main = hspec $ do
       tree (second d :: Agentic IO (Int, Joke) (Int, Rating)) `shouldBe` ["both halves", "├─ first → pass", "└─ second → draft @Rating  \"rate it\""]
       tree (left d :: Agentic IO (Either Joke Int) (Either Rating Int)) `shouldBe` ["branch", "├─ left → draft @Rating  \"rate it\"", "└─ right → pass"]
 
+    it "puts a description under the name in diagrams, not in the tree" $ do
+      let flow :: Agentic IO Joke Joke
+          flow = note "polish" "Tidy the wording" (draft @Joke "polish it" >>> note "check" "Make sure it's still a joke" (arr id))
+          d = Agentic.describe flow
+      any (T.isInfixOf "Tidy the wording") (T.lines (mermaid d)) `shouldBe` True
+      any (T.isInfixOf "act\\ncheck\\nMake sure") (T.lines (dot d)) `shouldBe` False
+      any (T.isInfixOf "arr\\ncheck\\nMake sure it's still a joke") (T.lines (dot d)) `shouldBe` True
+      any (T.isInfixOf "Tidy the wording") (T.lines (renderTree d)) `shouldBe` False
+
     it "shows a loop and what it runs" $ do
       let flow :: Agentic IO Joke Joke
           flow = repeatUntil ((== "kids") . genre) (draft @Joke "make it more kid-friendly") `named` "polish until it's for kids"

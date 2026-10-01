@@ -208,8 +208,8 @@ data FlowGraph = FlowGraph
 data Item
   = ItemNode Text NodeKind [Text]
     -- ^ An id, what kind of node it is, and its label's lines.
-  | ItemBox Text Text [Item]
-    -- ^ An id, a label, and what's inside.
+  | ItemBox Text [Text] [Item]
+    -- ^ An id, its label's lines, and what's inside.
 
 data NodeKind = Terminal | StepNode | ToolNode
 
@@ -288,7 +288,7 @@ node from label = do
   connect from n
   pure [(n, Nothing)]
 
-box :: Text -> Build a -> Build (Text, a)
+box :: [Text] -> Build a -> Build (Text, a)
 box label inside = do
   b <- fresh
   Build (\(BuildState n open es) -> ((), BuildState n ([] : open) es))
@@ -309,26 +309,30 @@ build context from = \case
   Together ds -> concat <$> mapM (build InBranch from) ds
   Halves l r -> (<>) <$> build InBranch (labelled "first") l <*> build InBranch (labelled "second") r
   Branch l r -> (<>) <$> build InBranch (labelled "left") l <*> build InBranch (labelled "right") r
-  ForEach f -> snd <$> box "each" (build InSequence from f)
+  ForEach f -> snd <$> box ["each"] (build InSequence from f)
   -- "Again" goes back to where the body starts: the steps the loop's input
   -- flows into. If the body has none, it goes to the box.
   Repeated f -> do
     before <- edgeCount
-    (b, exits) <- box "repeatUntil" (build InSequence from f)
+    (b, exits) <- box ["repeatUntil"] (build InSequence from f)
     entries <- entriesSince before (map fst from)
     let targets = if null entries then [b] else entries
     mapM_ (\(e, _) -> mapM_ (\t -> edge (Edge e t (Just "again") Again)) targets) exits
     pure exits
-  Annotated n (Leaf info) | not (passes (Leaf info)) -> step (Just (noteName n)) info
-  Annotated n f -> snd <$> box (noteName n) (build InSequence from f)
+  Annotated n (Leaf info) | not (passes (Leaf info)) -> step (Just n) info
+  Annotated n f -> snd <$> box (noteName n : maybe [] pure (noteDescription n)) (build InSequence from f)
   where
     labelled l = [(f, Just l) | (f, _) <- from]
     chain acc = \case
       [] -> pure acc
       x : xs -> build InSequence acc x >>= (`chain` xs)
     -- A step's node, labelled by 'stepLines', with any tools hanging off it.
-    step name info = do
-      exits <- node from (stepLines name info)
+    -- In a diagram, a named step's description goes under its name.
+    step note' info = do
+      let lines'' = case (stepLines (noteName <$> note') info, note' >>= noteDescription) of
+            (kind : name : details, Just description) -> kind : name : description : details
+            (ls, _) -> ls
+      exits <- node from lines''
       case info of
         DraftInfo _ _ _ tools ->
           mapM_
@@ -361,7 +365,7 @@ mermaid d = T.unlines ("flowchart TD" : concatMap (items' "  ") is <> map edge' 
     FlowGraph is es = flowGraph d
     items' indent = \case
       ItemNode i kind ls -> [indent <> i <> shape kind (T.intercalate "<br/>" (map escape ls))]
-      ItemBox i l inside -> [indent <> "subgraph " <> i <> "[\"" <> escape l <> "\"]"] <> concatMap (items' (indent <> "  ")) inside <> [indent <> "end"]
+      ItemBox i ls inside -> [indent <> "subgraph " <> i <> "[\"" <> T.intercalate "<br/>" (map escape ls) <> "\"]"] <> concatMap (items' (indent <> "  ")) inside <> [indent <> "end"]
     shape kind l = case kind of
       Terminal -> "([\"" <> l <> "\"])"
       StepNode -> "[\"" <> l <> "\"]"
@@ -386,7 +390,7 @@ dot d =
     FlowGraph is es = flowGraph d
     items' indent = \case
       ItemNode i kind ls -> [indent <> i <> " [label=\"" <> T.intercalate "\\n" (map inner ls) <> "\"" <> shape kind <> "];"]
-      ItemBox i l inside -> [indent <> "subgraph cluster_" <> i <> " {", indent <> "  label=" <> str l <> ";", indent <> "  style=rounded;"] <> concatMap (items' (indent <> "  ")) inside <> [indent <> "}"]
+      ItemBox i ls inside -> [indent <> "subgraph cluster_" <> i <> " {", indent <> "  label=\"" <> T.intercalate "\\n" (map inner ls) <> "\";", indent <> "  style=rounded;"] <> concatMap (items' (indent <> "  ")) inside <> [indent <> "}"]
     shape = \case
       Terminal -> ", shape=oval"
       StepNode -> ""
