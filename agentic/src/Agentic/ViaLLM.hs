@@ -17,19 +17,19 @@ import qualified Data.Text as T
 -- probability for each answer; unlike Jev's, they aren't calibrated.
 viaLLM :: MonadFail m => SystemTwo m -> SystemOne m
 viaLLM two = SystemOne $ \request -> do
-  let qs = zip ids (requestQuestions request)
+  let qs = zip ids request.questions
       conversation =
         Conversation
           { path = []
           , instruction = Instruction "Answer each question about the input. Give every probability as a number from 0 to 1."
-          , input = requestInput request
+          , input = request.input
           , inputSchema = schemaOf SNull
           , tools = []
           , outputSchema = schemaOf (SObject [Field qid (questionSchema q) True | (qid, q) <- qs])
           , history = []
           }
-  turn <- askSystemTwo two conversation
-  case action turn of
+  turn <- two.ask conversation
+  case turn.action of
     Respond (Object kvs) -> either (fail . T.unpack) pure (traverse (\(qid, q) -> answer q =<< field' qid kvs) qs)
     Respond other -> fail ("viaLLM: expected an object of answers, got " <> T.unpack (renderJson other))
     CallTools _ -> fail "viaLLM: the model called a tool while answering questions"

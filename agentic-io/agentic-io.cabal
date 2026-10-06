@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               agentic-io
-version:            0.2.0.3
+version:            0.2.0.4
 synopsis:           IO helpers for agentic runtimes: concurrency, recording and replay
 description:
   Runs a flow's independent work concurrently, records model calls to a file and replays them, and loads provider keys from a .env file.
@@ -23,7 +23,7 @@ source-repository head
 
 library
   default-language: GHC2021
-  default-extensions: LambdaCase OverloadedStrings
+  default-extensions: DuplicateRecordFields LambdaCase NoFieldSelectors OverloadedRecordDot OverloadedStrings
   ghc-options:      -Wall
   hs-source-dirs:   src
   exposed-modules:
@@ -44,7 +44,7 @@ library
     , filepath         >=1.4 && <1.6
 test-suite agentic-io-test
   default-language: GHC2021
-  default-extensions: DeriveAnyClass LambdaCase OverloadedStrings
+  default-extensions: DeriveAnyClass DuplicateRecordFields LambdaCase NoFieldSelectors OverloadedRecordDot OverloadedStrings
   ghc-options:      -Wall
   type:             exitcode-stdio-1.0
   hs-source-dirs:   test

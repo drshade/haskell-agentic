@@ -41,16 +41,16 @@ data Shape
   deriving (Eq, Show)
 
 data Field = Field
-  { fieldName :: Text
-  , fieldSchema :: Schema
-  , fieldRequired :: Bool
+  { name :: Text
+  , schema :: Schema
+  , required :: Bool
   }
   deriving (Eq, Show)
 
 data Variant = Variant
-  { variantTag :: Text
-  , variantDoc :: Maybe Text
-  , variantFields :: [Field]
+  { tag :: Text
+  , doc :: Maybe Text
+  , fields :: [Field]
   }
   deriving (Eq, Show)
 
@@ -61,20 +61,20 @@ schemaOf :: Shape -> Schema
 schemaOf = Schema Nothing Nothing []
 
 documentedSchema :: Text -> Schema -> Schema
-documentedSchema d s = s {doc = Just d}
+documentedSchema d (Schema t _ cs sh) = Schema t (Just d) cs sh
 
 -- | Name the schema's type, unless it already has a name.
 titled :: Text -> Schema -> Schema
-titled t s = s {title = maybe (Just t) Just (title s)}
+titled t s = s {title = maybe (Just t) Just s.title}
 
 -- | A short label for display, e.g. in 'Agentic.Describe.describe'.
 typeLabel :: Schema -> Text
-typeLabel s = maybe (structural (shape s)) id (title s)
+typeLabel s = maybe (structural s.shape) id s.title
   where
     structural = \case
       SObject _ -> "object"
       SSum [] -> "sum"
-      SSum vs -> "sum of " <> joinTags (map variantTag vs)
+      SSum vs -> "sum of " <> joinTags (map (.tag) vs)
       SEnum ls -> "one of " <> joinTags (map fst ls)
       SArray inner -> "[" <> typeLabel inner <> "]"
       SNullable inner -> typeLabel inner <> "?"

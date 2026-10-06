@@ -30,10 +30,10 @@ nextMove :: Agentic IO Game Game
 nextMove = draft @Game "Play the next move!"
 
 game :: Agentic IO Game Game
-game = repeatUntil ((== Ended) . state) (nextMove >>> act printBoard `named` "print the board") `named` "play until the game ends"
+game = repeatUntil ((== Ended) . (.state)) (nextMove >>> act printBoard `named` "print the board") `named` "play until the game ends"
 
 printBoard :: Game -> IO Game
-printBoard g = T.putStrLn (render (board g) <> "\n") >> pure g
+printBoard g = T.putStrLn (render g.board <> "\n") >> pure g
 
 render :: Board -> Text
 render (Board t m b) = mconcat [line r <> "\n" | r <- [t, m, b]]

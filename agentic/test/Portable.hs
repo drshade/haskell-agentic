@@ -61,20 +61,20 @@ instance Applicative Pure where
   Pure f <*> Pure g = Pure (\w -> let (h, w1) = f w; (a, w2) = g w1 in (h a, w2))
 
 instance Monad Pure where
-  Pure g >>= k = Pure (\w -> let (a, w1) = g w in runPure (k a) w1)
+  Pure g >>= k = Pure (\w -> let (a, w1) = g w in (k a).runPure w1)
 
 say :: Text -> Pure ()
-say t = Pure (\w -> ((), w {logged = logged w <> [t]}))
+say t = Pure (\w -> ((), w {logged = w.logged <> [t]}))
 
 -- | The handlers: scripted turns, fixed judgements, and every event recorded.
 handlers :: Runtime Pure
 handlers =
   (runtimeWith (\e -> error ("flow error: " <> show e)))
-    { systemTwo = SystemTwo $ \_ -> Pure $ \w -> case script w of
+    { systemTwo = SystemTwo $ \_ -> Pure $ \w -> case w.script of
         a : rest -> (Turn (Raw Null) a, w {script = rest})
         [] -> error "the script ran out of turns"
-    , systemOne = SystemOne $ \request -> pure (map answer (requestQuestions request))
-    , observe = \e -> Pure (\w -> ((), w {events = events w <> [happened e]}))
+    , systemOne = SystemOne $ \request -> pure (map answer request.questions)
+    , observe = \e -> Pure (\w -> ((), w {events = w.events <> [e.happened]}))
     }
   where
     answer = \case
@@ -114,43 +114,43 @@ main = do
         if ok then pure () else modifyIORef failures (+ 1)
 
   -- 1. Explicit codecs for a record and a payload-bearing sum.
-  check "a record round-trips through its codec" (decode contract (encode contract joke) == Right joke)
-  check "a sum with payloads round-trips" (decode contract (encode contract (Rect 2 3)) == Right (Rect 2 3))
-  check "a sum encodes its constructor as a tag" (encode contract (Circle 1) == Object [("tag", String "Circle"), ("radius", Number 1)])
-  check "a record missing a field is rejected" (either (const True) (const False) (decode (contract @Joke) (Object [("setup", String "x")])))
+  check "a record round-trips through its codec" (contract.decode (contract.encode joke) == Right joke)
+  check "a sum with payloads round-trips" (contract.decode (contract.encode (Rect 2 3)) == Right (Rect 2 3))
+  check "a sum encodes its constructor as a tag" (contract.encode (Circle 1) == Object [("tag", String "Circle"), ("radius", Number 1)])
+  check "a record missing a field is rejected" (either (const True) (const False) ((contract @Joke).decode (Object [("setup", String "x")])))
 
   let world0 =
         World
           { script =
               [ CallTools [ToolCall "c1" "count_letters" (String "scarecrow")]
               , CallTools [ToolCall "c2" "write_joke" (String "farms")]
-              , Respond (encode contract joke) -- answers the nested write_joke draft
+              , Respond (contract.encode joke) -- answers the nested write_joke draft
               , Respond (Object [("setup", String "only a setup")]) -- invalid: no punchline
-              , Respond (encode contract joke) -- the correction
-              , Respond (encode contract (Rect 2 3)) -- the shape
+              , Respond (contract.encode joke) -- the correction
+              , Respond (contract.encode (Rect 2 3)) -- the shape
               ]
           , logged = []
           , events = []
           }
       ((result, verdict), world) =
-        runPure ((,) <$> interpret handlers jokeAndFigure "scarecrows" <*> interpret handlers review joke) world0
-      seen = events world
+        ((,) <$> interpret handlers jokeAndFigure "scarecrows" <*> interpret handlers review joke).runPure world0
+      seen = world.events
 
   -- 2. A scripted tool call runs its typed body, and the draft continues.
-  check "the tool's typed body ran with the model's input" (logged world == ["count_letters ran on scarecrow"])
+  check "the tool's typed body ran with the model's input" (world.logged == ["count_letters ran on scarecrow"])
   check "the tool's typed result went back to the model" (any (\case ToolReturned "c1" (ToolOk (Integer 9)) -> True; _ -> False) seen)
   check "the draft continued to a typed response" (result == (joke, Rect 2 3))
 
   -- 3. A nested drafting tool.
   check "the nested tool ran its own draft" (length [() | Drafting _ <- seen] == 3)
-  check "the nested draft's result went back as the tool's result" (any (\case ToolReturned "c2" (ToolOk v) -> decode contract v == Right joke; _ -> False) seen)
+  check "the nested draft's result went back as the tool's result" (any (\case ToolReturned "c2" (ToolOk v) -> contract.decode v == Right joke; _ -> False) seen)
 
   -- 4. Invalid output, then a corrected response.
   check "the invalid output was rejected" (length [() | OutputRejected _ <- seen] == 1)
-  check "every scripted turn was used" (null (script world))
+  check "every scripted turn was used" (null world.script)
 
   -- 5. An applicative judgement batch: two questions, one request.
-  check "two questions went in one request" ([length (requestQuestions r) | Judged r _ <- seen] == [2])
+  check "two questions went in one request" ([length r.questions | Judged r _ <- seen] == [2])
   check "the answers decoded to typed values" (verdict == (YesNo 0.9, YesNo 0.9))
 
   -- 6. Describing the flow invokes no handlers: describe has no runtime to call.

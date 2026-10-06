@@ -101,8 +101,8 @@ requestBody :: Jev -> JudgeRequest -> A.Value
 requestBody cfg request =
   A.Object
     [ ("model", A.String cfg.model)
-    , ("state", requestInput request)
-    , ("questions", A.Object [(qid, question q) | (qid, q) <- ided (requestQuestions request)])
+    , ("state", request.input)
+    , ("questions", A.Object [(qid, question q) | (qid, q) <- ided request.questions])
     ]
   where
     question = \case
@@ -126,7 +126,7 @@ decodeResponse request = either (Left . T.pack) Right . J.parseEither parse
   where
     parse = J.withObject "response" $ \response -> do
       answers <- response .: "answers"
-      traverse (\(qid, q) -> answers .: Key.fromText qid >>= answer q) (ided (requestQuestions request))
+      traverse (\(qid, q) -> answers .: Key.fromText qid >>= answer q) (ided request.questions)
     answer q = J.withObject "answer" $ \a -> case q of
       AskYesNo _ -> YesNoAnswer . toProbability <$> a .: "noul"
       AskChoice _ opts -> do

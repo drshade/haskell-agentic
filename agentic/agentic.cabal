@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               agentic
-version:            0.2.0.3
+version:            0.2.0.4
 synopsis:           Composable, inspectable agentic workflows mixing LLMs and Jev
 description:
   Typed agentic workflows built from Arrow combinators. A flow is a description: you can describe it as a tree, Mermaid or Graphviz before running anything, then interpret it against System One (Jev) and System Two (an LLM) providers. This is the core: flows, contracts, questions, the runtime and the interpreter. It depends only on base and text.
@@ -30,8 +30,11 @@ common shared
     DefaultSignatures
     DeriveAnyClass
     DerivingVia
+    DuplicateRecordFields
     GADTs
     LambdaCase
+    NoFieldSelectors
+    OverloadedRecordDot
     OverloadedStrings
     RankNTypes
   ghc-options:      -Wall -Wno-name-shadowing

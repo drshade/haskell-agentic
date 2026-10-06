@@ -19,7 +19,7 @@ request :: JudgeRequest
 request =
   JudgeRequest
     (Object [("joke", String "Why was the scarecrow promoted?")])
-    (specs ((,,) <$> yesNo "Is it funny?" <*> choice @Groan "Which reaction?" <*> score @Groan "How much groaning?"))
+    (((,,) <$> yesNo "Is it funny?" <*> choice @Groan "Which reaction?" <*> score @Groan "How much groaning?").specs)
 
 
 main :: IO ()

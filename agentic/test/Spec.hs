@@ -17,9 +17,9 @@ data Joke = Joke {genre :: Text, setup :: Text, punchline :: Text}
   deriving (Generic, Show, Eq, Contract)
 
 data BetterJoke
-  = DadJoke {setup' :: Text, punchline' :: Text}
+  = DadJoke {setup :: Text, punchline :: Text}
   | OneLiner {line :: Text}
-  | KnockKnock {whosThere :: Text, punchline' :: Text}
+  | KnockKnock {whosThere :: Text, punchline :: Text}
   deriving (Generic, Show, Eq, Contract)
 
 data Groan = Mild | Solid | Unbearable
@@ -42,16 +42,16 @@ newtype Rating = Rating Int
 instance Contract Rating where
   contract = mapCodec Rating (\(Rating n) -> n) (between 1 10 contract)
 
-data Review = Review {funnyAnswer :: YesNo, groanAnswer :: Score Groan}
+data Review = Review {funny :: YesNo, groan :: Score Groan}
   deriving (Show, Eq)
 
 documentedJoke :: Codec Joke
 documentedJoke =
   record "A joke, split into its parts" $
     Joke
-      <$> required "genre" "The style of joke" genre
-      <*> required "setup" "The setup line" setup
-      <*> required "punchline" "The line that lands it" punchline
+      <$> required "genre" "The style of joke" (.genre)
+      <*> required "setup" "The setup line" (.setup)
+      <*> required "punchline" "The line that lands it" (.punchline)
 
 funny :: Questions YesNo
 funny = yesNo "Would a 10-year-old laugh at this joke?"
@@ -72,7 +72,7 @@ testRuntime turns p = do
   pure runtime {systemOne = fixedAnswers p, systemTwo = two}
 
 roundTrips :: (Eq a, Show a) => Codec a -> a -> Expectation
-roundTrips c a = decode c (encode c a) `shouldBe` Right a
+roundTrips c a = c.decode (c.encode a) `shouldBe` Right a
 
 main :: IO ()
 main = hspec $ do
@@ -82,33 +82,33 @@ main = hspec $ do
 
     it "round-trips a derived sum as tagged objects" $ do
       roundTrips contract (OneLiner "I'm on a seafood diet.")
-      encode contract (OneLiner "x")
+      contract.encode (OneLiner "x")
         `shouldBe` Object [("tag", String "OneLiner"), ("line", String "x")]
 
     it "encodes an Options type as its labels" $ do
-      encode contract Solid `shouldBe` String "Solid"
-      decode contract (String "Unbearable") `shouldBe` Right Unbearable
+      contract.encode Solid `shouldBe` String "Solid"
+      contract.decode (String "Unbearable") `shouldBe` Right Unbearable
 
     it "names derived schemas after their type" $
-      title (codecSchema (contract @Joke)) `shouldBe` Just "Joke"
+      (contract @Joke).schema.title `shouldBe` Just "Joke"
 
     it "keeps descriptions written in the codec" $
-      case shape (codecSchema documentedJoke) of
-        SObject fs -> map (doc . fieldSchema) fs `shouldBe` map Just ["The style of joke", "The setup line", "The line that lands it"]
+      case documentedJoke.schema.shape of
+        SObject fs -> map ((.doc) . (.schema)) fs `shouldBe` map Just ["The style of joke", "The setup line", "The line that lands it"]
         other -> expectationFailure (show other)
 
     it "adds descriptions to a derived contract" $
-      case shape (codecSchema (field "punchline" "No explanation" (contract @Joke))) of
-        SObject fs -> map (doc . fieldSchema) fs `shouldBe` [Nothing, Nothing, Just "No explanation"]
+      case (field "punchline" "No explanation" (contract @Joke)).schema.shape of
+        SObject fs -> map ((.doc) . (.schema)) fs `shouldBe` [Nothing, Nothing, Just "No explanation"]
         other -> expectationFailure (show other)
 
     it "checks constraints the schema can't express" $ do
-      decode (contract @Rating) (Integer 7) `shouldBe` Right (Rating 7)
-      decode (contract @Rating) (Integer 11) `shouldBe` Left "must be between 1 and 10"
+      (contract @Rating).decode (Integer 7) `shouldBe` Right (Rating 7)
+      (contract @Rating).decode (Integer 11) `shouldBe` Left "must be between 1 and 10"
 
   describe' "Questions" $ do
     it "batches combined questions into one request" $
-      map (\case AskYesNo _ -> "yesNo"; AskScore _ ls -> "score " <> T.pack (show (length ls)); AskChoice _ _ -> "choice" :: Text) (specs (Review <$> funny <*> groan))
+      map (\case AskYesNo _ -> "yesNo"; AskScore _ ls -> "score " <> T.pack (show (length ls)); AskChoice _ _ -> "choice" :: Text) ((Review <$> funny <*> groan).specs)
         `shouldBe` ["yesNo", "score 3"]
 
     it "decodes answers back to typed values" $
@@ -134,7 +134,7 @@ main = hspec $ do
     it "tells the model about unknown tools instead of failing" $ do
       events <- newIORef []
       rt <- testRuntime [callTools [("nope", Null)], respond joke] 1
-      let rt' = observing (\e -> modifyIORef events (happened e :)) rt
+      let rt' = observing (\e -> modifyIORef events (e.happened :)) rt
       _ <- interpret rt' (draft @Joke "a joke please") ()
       results <- readIORef events
       [r | ToolReturned _ r <- results] `shouldBe` [ToolFailed "there is no tool named nope"]
@@ -185,7 +185,7 @@ main = hspec $ do
 
     it "never hides a branch, even when it's only glue" $ do
       let flow :: Agentic IO (Joke, Joke) (Rating, Text)
-          flow = draft @Rating "rate it" *** arr genre
+          flow = draft @Rating "rate it" *** arr (.genre)
       T.lines (renderTree (Agentic.describe flow))
         `shouldBe` ["both halves", "├─ first → draft @Rating  \"rate it\"", "└─ second → arr"]
 
@@ -219,7 +219,7 @@ main = hspec $ do
 
     it "shows a loop and what it runs" $ do
       let flow :: Agentic IO Joke Joke
-          flow = repeatUntil ((== "kids") . genre) (draft @Joke "make it more kid-friendly") `named` "polish until it's for kids"
+          flow = repeatUntil ((== "kids") . (.genre)) (draft @Joke "make it more kid-friendly") `named` "polish until it's for kids"
       T.lines (renderTree (Agentic.describe flow))
         `shouldBe` ["polish until it's for kids  repeatUntil", "└─ draft @Joke  \"make it more kid-friendly\""]
 
@@ -240,7 +240,7 @@ main = hspec $ do
 
     it "sends a loop's again edge back to the body's first step, in both formats" $ do
       let flow :: Agentic IO Joke Joke
-          flow = repeatUntil ((== "kids") . genre) (draft @Joke "make it kid-friendly" >>> act pure `named` "show it")
+          flow = repeatUntil ((== "kids") . (.genre)) (draft @Joke "make it kid-friendly" >>> act pure `named` "show it")
           d = Agentic.describe flow
       filter (T.isInfixOf "again") (T.lines (mermaid d)) `shouldBe` ["  n2 -.->|again| n1"]
       filter (T.isInfixOf "again") (T.lines (dot d)) `shouldBe` ["  n2 -> n1 [label=\"again\", style=dashed];"]

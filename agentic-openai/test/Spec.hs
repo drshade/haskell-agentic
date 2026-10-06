@@ -29,8 +29,8 @@ conversation =
     , instruction = "Suggest 3 dinosaurs"
     , input = Null
     , inputSchema = schemaOf SNull
-    , tools = [ToolSpec "search" "Search the fossil database" (codecSchema (contract @Text))]
-    , outputSchema = codecSchema (contract @[Text])
+    , tools = [ToolSpec "search" "Search the fossil database" ((contract @Text).schema)]
+    , outputSchema = (contract @[Text]).schema
     , history = []
     }
 
@@ -57,7 +57,7 @@ main = hspec $ Test.Hspec.describe "Agentic.OpenAI" $ do
         )
 
   it "names the schema after its type, and shares repeated types through $defs" $ do
-    let format = at "format" (at "text" (body conversation {outputSchema = codecSchema (contract @Board)}))
+    let format = at "format" (at "text" (body conversation {outputSchema = (contract @Board).schema}))
         schema = at "schema" format
     at "name" format `shouldBe` J.String "Board"
     at "top" (at "properties" schema) `shouldBe` fromJust (J.decode "{\"$ref\":\"#/$defs/Row\"}")
@@ -90,11 +90,11 @@ main = hspec $ Test.Hspec.describe "Agentic.OpenAI" $ do
         )
 
   it "reads function calls, parsing and unwrapping their arguments" $
-    fmap action (decoded (fromJust (J.decode "{\"status\":\"completed\",\"output\":[{\"type\":\"reasoning\"},{\"type\":\"function_call\",\"call_id\":\"c1\",\"name\":\"search\",\"arguments\":\"{\\\"value\\\":\\\"rex\\\"}\"}]}")))
+    fmap (.action) (decoded (fromJust (J.decode "{\"status\":\"completed\",\"output\":[{\"type\":\"reasoning\"},{\"type\":\"function_call\",\"call_id\":\"c1\",\"name\":\"search\",\"arguments\":\"{\\\"value\\\":\\\"rex\\\"}\"}]}")))
       `shouldBe` Right (CallTools [ToolCall "c1" "search" (String "rex")])
 
   it "reads a final answer from the message text" $
-    fmap action (decoded (fromJust (J.decode "{\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"{\\\"value\\\":[\\\"Stegosaurus\\\"]}\"}]}]}")))
+    fmap (.action) (decoded (fromJust (J.decode "{\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"{\\\"value\\\":[\\\"Stegosaurus\\\"]}\"}]}]}")))
       `shouldBe` Right (Respond (Array [String "Stegosaurus"]))
 
   it "reports refusals and truncation as errors" $ do

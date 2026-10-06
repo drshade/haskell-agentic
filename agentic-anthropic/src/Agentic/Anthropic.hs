@@ -152,11 +152,11 @@ requestBody cfg c =
     , ("max_tokens", A.Integer (toInteger cfg.maxTokens))
     ]
       <> maybe [] (\s -> [("system", A.String s)]) cfg.system
-      <> [("tools", A.Array (map tool (tools c))) | not (null (tools c))]
-      <> [ ("messages", A.Array (task : concatMap exchange (history c)))
+      <> [("tools", A.Array (map tool c.tools)) | not (null c.tools)]
+      <> [ ("messages", A.Array (task : concatMap exchange c.history))
          , ( "output_config"
            , A.Object
-               ( ("format", A.Object [("type", A.String "json_schema"), ("schema", objectSchema (outputSchema c))])
+               ( ("format", A.Object [("type", A.String "json_schema"), ("schema", objectSchema c.outputSchema)])
                    : maybe [] (\e -> [("effort", A.String (effortName e))]) cfg.effort
                )
            )
@@ -164,15 +164,15 @@ requestBody cfg c =
          ]
       <> [("fallbacks", A.String "default") | cfg.fallbacks]
   where
-    task = message "user" (A.String (instructionText (instruction c) <> inputText))
-    inputText = case input c of
+    task = message "user" (A.String (c.instruction.text <> inputText))
+    inputText = case c.input of
       A.Null -> ""
       s -> "\n\nInput:\n" <> A.renderJson s
     tool spec =
       A.Object
-        [ ("name", A.String (specName spec))
-        , ("description", A.String (specDescription spec))
-        , ("input_schema", objectSchema (specInput spec))
+        [ ("name", A.String spec.name)
+        , ("description", A.String spec.description)
+        , ("input_schema", objectSchema spec.input)
         , ("strict", A.Bool True)
         ]
     exchange = \case
@@ -223,11 +223,11 @@ decodeTurn c = either (Left . UnexpectedResponse . T.pack) id . J.parseEither pa
     -- A reply that isn't JSON goes back to the core as text; the output
     -- contract then rejects it and the model gets another go.
     final text = case J.eitherDecode (TL.encodeUtf8 (TL.fromStrict text)) of
-      Right v -> unwrap (outputSchema c) (fromAeson v)
+      Right v -> unwrap c.outputSchema (fromAeson v)
       Left _ -> A.String text
     unwrapInput name v = maybe v (`unwrap` v) (inputSchema name)
     inputSchema :: Text -> Maybe Schema
-    inputSchema name = case catMaybes [if specName s == name then Just (specInput s) else Nothing | s <- tools c] of
+    inputSchema name = case catMaybes [if s.name == name then Just s.input else Nothing | s <- c.tools] of
       s : _ -> Just s
       [] -> Nothing
 

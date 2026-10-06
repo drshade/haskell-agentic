@@ -33,14 +33,14 @@ replyingWith f = SystemTwo (pure . Turn (Raw Null) . f)
 
 -- | A final answer, encoded with its contract.
 respond :: Contract a => a -> Action
-respond = Respond . encode contract
+respond = Respond . contract.encode
 
 callTools :: [(Text, Value)] -> Action
 callTools calls = CallTools [ToolCall ("call-" <> name) name input | (name, input) <- calls]
 
 -- | Answer every question with a pure function of it.
 answering :: Applicative m => (QuestionSpec -> Answer) -> SystemOne m
-answering f = SystemOne (pure . map f . requestQuestions)
+answering f = SystemOne (pure . map f . (.questions))
 
 -- | Yes/no questions get probability @p@; choices and scores pick the first
 -- option with certainty.

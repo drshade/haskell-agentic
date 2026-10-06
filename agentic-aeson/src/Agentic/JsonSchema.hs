@@ -30,23 +30,23 @@ jsonSchema = schemaWith []
 -- | Like 'jsonSchema', but any schema named in @shared@ becomes a @$ref@ into
 -- @$defs@.
 schemaWith :: [Text] -> Schema -> Value
-schemaWith shared s = case title s of
+schemaWith shared s = case s.title of
   Just t | t `elem` shared -> Object [("$ref", String ("#/$defs/" <> t))]
   _ -> definition shared s
 
 -- | A schema written out, though the schemas inside it may still be references.
 definition :: [Text] -> Schema -> Value
-definition shared s = withDescription (body (shape s))
+definition shared s = withDescription (body s.shape)
   where
     sub = schemaWith shared
     withDescription = \case
       Object kvs | Just d <- description -> Object (kvs <> [("description", String d)])
       v -> v
-    description = case catMaybes [doc s] <> map (\c -> "Must be " <> c <> ".") (checks s) of
+    description = case catMaybes [s.doc] <> map (\c -> "Must be " <> c <> ".") s.checks of
       [] -> Nothing
       ds -> Just (T.intercalate " " ds)
     body = \case
-      SObject fs -> object (map (\f -> (fieldName f, sub (fieldSchema f))) fs)
+      SObject fs -> object (map (\f -> (f.name, sub f.schema)) fs)
       SSum vs -> Object [("anyOf", Array (map variant vs))]
       SEnum ls
         | all ((== Nothing) . snd) ls -> Object [typed "string", ("enum", Array (map (String . fst) ls))]
@@ -59,9 +59,9 @@ definition shared s = withDescription (body (shape s))
       SBool -> Object [typed "boolean"]
       SNull -> Object [typed "null"]
     variant v =
-      let tagged = ("tag", Object [typed "string", ("const", String (variantTag v))])
-          o = object (tagged : map (\f -> (fieldName f, sub (fieldSchema f))) (variantFields v))
-       in case (o, variantDoc v) of
+      let tagged = ("tag", Object [typed "string", ("const", String v.tag)])
+          o = object (tagged : map (\f -> (f.name, sub f.schema)) v.fields)
+       in case (o, v.doc) of
             (Object kvs, Just d) -> Object (kvs <> [("description", String d)])
             _ -> o
     constant l d = Object ([typed "string", ("const", String l)] <> maybe [] (\t -> [("description", String t)]) d)
@@ -87,7 +87,7 @@ formatName = \case
 
 -- | Does this schema need wrapping to be a top-level object?
 wrap :: Schema -> Bool
-wrap s = case shape s of
+wrap s = case s.shape of
   SObject _ -> False
   _ -> True
 
@@ -107,24 +107,24 @@ objectSchema s = case root of
       | otherwise = definition shared s
     shared = sharedNames s
     defs = [(t, definition shared d) | t <- shared, Just d <- [lookup t named']]
-    named' = [(t, d) | d <- nested s, Just t <- [title d]]
+    named' = [(t, d) | d <- nested s, Just t <- [d.title]]
 
 -- | Names of the types inside a schema (not the schema itself) that appear more
 -- than once and are identical everywhere they appear, in order of appearance.
 sharedNames :: Schema -> [Text]
-sharedNames s = [t | t <- nub names, uses t >= 2, length (nub [d | d <- inside, title d == Just t]) == 1]
+sharedNames s = [t | t <- nub names, uses t >= 2, length (nub [d | d <- inside, d.title == Just t]) == 1]
   where
     inside = nested s
-    names = catMaybes (map title inside)
-    uses t = length (filter ((== Just t) . title) inside)
+    names = catMaybes (map (.title) inside)
+    uses t = length (filter ((== Just t) . (.title)) inside)
 
 -- | Every schema nested inside this one, outermost first.
 nested :: Schema -> [Schema]
-nested s = concatMap (\c -> c : nested c) (children (shape s))
+nested s = concatMap (\c -> c : nested c) (children s.shape)
   where
     children = \case
-      SObject fs -> map fieldSchema fs
-      SSum vs -> concatMap (map fieldSchema . variantFields) vs
+      SObject fs -> map (.schema) fs
+      SSum vs -> concatMap (map (.schema) . (.fields)) vs
       SArray c -> [c]
       SNullable c -> [c]
       _ -> []
@@ -132,7 +132,7 @@ nested s = concatMap (\c -> c : nested c) (children (shape s))
 -- | A name for the schema, for providers that ask for one: the type's name with
 -- anything but letters, digits, @_@ and @-@ dropped, or @output@.
 schemaName :: Schema -> Text
-schemaName s = case T.intercalate "_" (filter (not . T.null) (T.split (not . valid) (maybe "" id (title s)))) of
+schemaName s = case T.intercalate "_" (filter (not . T.null) (T.split (not . valid) (maybe "" id s.title))) of
   "" -> "output"
   n -> T.take 64 n
   where

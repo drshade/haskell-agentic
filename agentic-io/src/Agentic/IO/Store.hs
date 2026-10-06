@@ -78,16 +78,16 @@ withStore mode file rt = do
             withMVar lock $ \_ -> append file key answer
             pure answer
       one request =
-        lookupOr (judgeKey request) ("a judgement: " <> questionsText request) (encodeStoredAnswers <$> askSystemOne (systemOne rt) request)
+        lookupOr (judgeKey request) ("a judgement: " <> questionsText request) (encodeStoredAnswers <$> rt.systemOne.ask request)
           >>= decodedAs "answers to a judgement" decodeStoredAnswers
       two conversation =
-        lookupOr (turnKey conversation) ("a turn of: " <> instructionText (instruction conversation)) (encodeStoredTurn <$> askSystemTwo (systemTwo rt) conversation)
+        lookupOr (turnKey conversation) ("a turn of: " <> conversation.instruction.text) (encodeStoredTurn <$> rt.systemTwo.ask conversation)
           >>= decodedAs "a turn" decodeStoredTurn
   pure rt {systemOne = SystemOne one, systemTwo = SystemTwo two}
   where
     decodedAs :: Text -> (Value -> Maybe a) -> Value -> IO a
     decodedAs what decode' = maybe (throwIO (StoreUnreadable file what)) pure . decode'
-    questionsText r = T.intercalate "; " (map question (requestQuestions r))
+    questionsText r = T.intercalate "; " (map question r.questions)
     question = \case
       AskYesNo q -> q
       AskChoice q _ -> q
@@ -133,13 +133,13 @@ turnKey :: Conversation -> Value
 turnKey c =
   Object
     [ ("kind", String "turn")
-    , ("path", Array [String (noteName n) | n <- path c])
-    , ("instruction", String (instructionText (instruction c)))
-    , ("input", input c)
-    , ("inputSchema", jsonSchema (inputSchema c))
-    , ("tools", Array [Object [("name", String (specName t)), ("description", String (specDescription t)), ("input", jsonSchema (specInput t))] | t <- tools c])
-    , ("outputSchema", jsonSchema (outputSchema c))
-    , ("history", Array (map exchange (history c)))
+    , ("path", Array [String n.name | n <- c.path])
+    , ("instruction", String c.instruction.text)
+    , ("input", c.input)
+    , ("inputSchema", jsonSchema c.inputSchema)
+    , ("tools", Array [Object [("name", String t.name), ("description", String t.description), ("input", jsonSchema t.input)] | t <- c.tools])
+    , ("outputSchema", jsonSchema c.outputSchema)
+    , ("history", Array (map exchange c.history))
     ]
   where
     exchange = \case
@@ -150,7 +150,7 @@ turnKey c =
       ToolFailed t -> Object [("failed", String t)]
 
 judgeKey :: JudgeRequest -> Value
-judgeKey r = Object [("kind", String "judgement"), ("input", requestInput r), ("questions", Array (map spec (requestQuestions r)))]
+judgeKey r = Object [("kind", String "judgement"), ("input", r.input), ("questions", Array (map spec r.questions))]
   where
     spec = \case
       AskYesNo q -> Object [("yesNo", String q)]
@@ -165,7 +165,7 @@ encodeStoredTurn :: Turn -> Value
 encodeStoredTurn (Turn (Raw r) a) = Object [("raw", r), ("action", act a)]
   where
     act = \case
-      CallTools calls -> Object [("callTools", Array [Object [("id", String (callId c)), ("name", String (callName c)), ("input", callInput c)] | c <- calls])]
+      CallTools calls -> Object [("callTools", Array [Object [("id", String c.callId), ("name", String c.name), ("input", c.input)] | c <- calls])]
       Respond v -> Object [("respond", v)]
 
 decodeStoredTurn :: Value -> Maybe Turn

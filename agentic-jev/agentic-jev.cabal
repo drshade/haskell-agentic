@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               agentic-jev
-version:            0.2.0.3
+version:            0.2.0.4
 synopsis:           Jev (TypeSafe) as the System One provider for agentic
 description:
   Answers agentic's judgements (yes/no, choice and score questions) with Jev, TypeSafe's System One model, which returns calibrated probabilities.

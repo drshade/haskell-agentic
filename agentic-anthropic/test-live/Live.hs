@@ -15,9 +15,9 @@ data Joke = Joke {genre :: Text, setup :: Text, punchline :: Text}
   deriving (Generic, Show, Contract)
 
 data BetterJoke
-  = DadJoke {setup' :: Text, punchline' :: Text}
+  = DadJoke {setup :: Text, punchline :: Text}
   | OneLiner {line :: Text}
-  | KnockKnock {whosThere :: Text, punchline' :: Text}
+  | KnockKnock {whosThere :: Text, punchline :: Text}
   deriving (Generic, Show, Contract)
 
 data Square = Blank | X | O

@@ -45,9 +45,9 @@ main = do
                   <*> score @Groan "How much will the audience groan?"
             )
             joke
-        probability (yes funny) `shouldSatisfy` (\p -> p >= 0 && p <= 1)
-        map fst (choiceProbabilities reaction) `shouldBe` [Mild, Solid, Unbearable]
-        position groan `shouldSatisfy` (\p -> p >= 0 && p <= 2)
+        probability funny.yes `shouldSatisfy` (\p -> p >= 0 && p <= 1)
+        map fst reaction.probabilities `shouldBe` [Mild, Solid, Unbearable]
+        groan.position `shouldSatisfy` (\p -> p >= 0 && p <= 2)
 
       it "filters with keep" $ do
         rt <- pure runtime >>= withSystemOne jev

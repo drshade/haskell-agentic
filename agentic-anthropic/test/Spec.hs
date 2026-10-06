@@ -20,8 +20,8 @@ conversation =
     , instruction = "Suggest 3 dinosaurs"
     , input = Null
     , inputSchema = schemaOf SNull
-    , tools = [ToolSpec "search" "Search the fossil database" (codecSchema (contract @Text))]
-    , outputSchema = codecSchema (contract @[Text])
+    , tools = [ToolSpec "search" "Search the fossil database" ((contract @Text).schema)]
+    , outputSchema = (contract @[Text]).schema
     , history = []
     }
 
@@ -48,7 +48,7 @@ main = hspec $ Test.Hspec.describe "Agentic.Anthropic" $ do
         )
 
   it "keeps a record's field order in its schema" $ do
-    let body = renderJson (requestBody anthropic conversation {outputSchema = codecSchema (contract @(Text, Text, Text))})
+    let body = renderJson (requestBody anthropic conversation {outputSchema = (contract @(Text, Text, Text)).schema})
         at' k = T.length (fst (T.breakOn k body))
     (at' "\"_1\"" < at' "\"_2\"", at' "\"_2\"" < at' "\"_3\"") `shouldBe` (True, True)
 
@@ -73,15 +73,15 @@ main = hspec $ Test.Hspec.describe "Agentic.Anthropic" $ do
         )
 
   it "reads tool calls, unwrapping their input" $
-    fmap action (decoded (fromJust (J.decode "{\"stop_reason\":\"tool_use\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"x\"},{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"search\",\"input\":{\"value\":\"rex\"}}]}")))
+    fmap (.action) (decoded (fromJust (J.decode "{\"stop_reason\":\"tool_use\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"x\"},{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"search\",\"input\":{\"value\":\"rex\"}}]}")))
       `shouldBe` Right (CallTools [ToolCall "t1" "search" (String "rex")])
 
   it "reads a final answer, unwrapping it" $
-    fmap action (decoded (fromJust (J.decode "{\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\",\"text\":\"{\\\"value\\\":[\\\"Stegosaurus\\\"]}\"}]}")))
+    fmap (.action) (decoded (fromJust (J.decode "{\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\",\"text\":\"{\\\"value\\\":[\\\"Stegosaurus\\\"]}\"}]}")))
       `shouldBe` Right (Respond (Array [String "Stegosaurus"]))
 
   it "keeps the whole content, thinking included, as the raw turn" $
-    fmap raw (decoded (fromJust (J.decode "{\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"x\"},{\"type\":\"text\",\"text\":\"{}\"}]}")))
+    fmap (.raw) (decoded (fromJust (J.decode "{\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"x\"},{\"type\":\"text\",\"text\":\"{}\"}]}")))
       -- aeson orders object keys, which JSON ignores; the blocks themselves are unchanged.
       `shouldBe` Right (Raw (Array [Object [("signature", String "x"), ("thinking", String ""), ("type", String "thinking")], Object [("text", String "{}"), ("type", String "text")]]))
 

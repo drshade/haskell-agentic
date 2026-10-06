@@ -124,21 +124,25 @@ write a contract out rather than derive it:
 ```haskell
 instance Contract Joke where
   contract = record "A joke, split into its parts" $ Joke
-    <$> required "genre"     "The style of joke, e.g. pun, dad joke"  genre
-    <*> required "setup"     "The setup line"                         setup
-    <*> required "punchline" "The line that lands it; no explanation" punchline
+    <$> required "genre"     "The style of joke, e.g. pun, dad joke"  (.genre)
+    <*> required "setup"     "The setup line"                         (.setup)
+    <*> required "punchline" "The line that lands it; no explanation" (.punchline)
 
 instance Contract BetterJoke where
   contract = sumOf "A joke in one of several shapes"
     [ constructor "DadJoke" "A setup and a groan-worthy punchline" isDadJoke $
-        DadJoke <$> required "setup" "" setup <*> required "punchline" "" punchline
+        DadJoke <$> required "setup" "" (.setup) <*> required "punchline" "" (.punchline)
     , constructor "OneLiner" "A single line" isOneLiner $
-        OneLiner <$> required "line" "" line
+        OneLiner <$> required "line" "" (.line)
     , constructor "KnockKnock" "The classic call-and-response" isKnockKnock $
-        KnockKnock <$> required "whosThere" "" whosThere <*> required "punchline" "" punchline ]
+        KnockKnock <$> required "whosThere" "" (.whosThere) <*> required "punchline" "" (.punchline) ]
 ```
 
 (Or derive it and add descriptions after: `genericContract & field "punchline" "..."`.)
+
+The getters are `(.genre)` and friends because everything here, the library
+included, is written with `DuplicateRecordFields`, `NoFieldSelectors` and
+`OverloadedRecordDot`.
 
 Contracts compile to the providers' native structured outputs and strict tool
 schemas, not to prompt text, so a reply that doesn't match the schema basically

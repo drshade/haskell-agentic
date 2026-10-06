@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               agentic-examples
-version:            0.2.0.3
+version:            0.2.0.4
 synopsis:           The examples from the haskell-agentic README
 description:
   Runnable examples for the agentic packages: the dino project, tic-tac-toe,
@@ -18,7 +18,10 @@ executable dino
   default-extensions:
     DeriveAnyClass
     DerivingVia
+    DuplicateRecordFields
     LambdaCase
+    NoFieldSelectors
+    OverloadedRecordDot
     OverloadedStrings
   ghc-options:      -Wall
   hs-source-dirs:   .
@@ -35,7 +38,10 @@ executable review
   default-extensions:
     DeriveAnyClass
     DerivingVia
+    DuplicateRecordFields
     LambdaCase
+    NoFieldSelectors
+    OverloadedRecordDot
     OverloadedStrings
   ghc-options:      -Wall
   hs-source-dirs:   .
@@ -51,7 +57,10 @@ executable tictactoe
   default-extensions:
     DeriveAnyClass
     DerivingVia
+    DuplicateRecordFields
     LambdaCase
+    NoFieldSelectors
+    OverloadedRecordDot
     OverloadedStrings
   ghc-options:      -Wall
   hs-source-dirs:   .
@@ -67,7 +76,10 @@ executable kitchensink
   default-extensions:
     DeriveAnyClass
     DerivingVia
+    DuplicateRecordFields
     LambdaCase
+    NoFieldSelectors
+    OverloadedRecordDot
     OverloadedStrings
   ghc-options:      -Wall
   hs-source-dirs:   .

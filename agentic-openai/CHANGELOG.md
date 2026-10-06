@@ -1,5 +1,9 @@
 # Changelog for agentic-openai
 
+## 0.2.0.4 - 2026-10-06
+
+* Follows agentic's record field changes; no API change.
+
 ## 0.2.0.3 - 2026-10-06
 
 * Follows agentic's renames: `endpoint` is `Text`.

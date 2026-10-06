@@ -47,22 +47,22 @@ data StepInfo
   | Effect
     -- ^ @act@: plain code with an effect.
   | DraftInfo
-      { draftInstruction :: Instruction
-      , draftInput :: Schema
-      , draftOutput :: Schema
-      , draftTools :: [ToolInfo]
+      { instruction :: Instruction
+      , input :: Schema
+      , output :: Schema
+      , tools :: [ToolInfo]
       }
   | JudgeInfo
-      { judgeInput :: Schema
-      , judgeQuestions :: [QuestionSpec]
+      { input :: Schema
+      , questions :: [QuestionSpec]
       }
 
 data ToolInfo = ToolInfo
-  { infoName :: Text
-  , infoDescription :: Text
-  , infoInput :: Schema
-  , infoOutput :: Schema
-  , infoBody :: Description
+  { name :: Text
+  , description :: Text
+  , input :: Schema
+  , output :: Schema
+  , body :: Description
   }
 
 -- | Describe a flow. This never runs anything.
@@ -92,12 +92,12 @@ stepInfo = \case
   Arr _ -> Glue
   Act _ -> Effect
   Draft input out instruction tools ->
-    DraftInfo instruction (codecSchema input) (codecSchema out) (map toolInfo tools)
-  Judge input qs -> JudgeInfo (codecSchema input) (specs qs)
+    DraftInfo instruction input.schema out.schema (map toolInfo tools)
+  Judge input qs -> JudgeInfo input.schema qs.specs
 
 toolInfo :: Tool m -> ToolInfo
 toolInfo (Tool name description input out body) =
-  ToolInfo name description (codecSchema input) (codecSchema out) (describe body)
+  ToolInfo name description input.schema out.schema (describe body)
 
 -- ---------------------------------------------------------------------------
 -- The tree view
@@ -140,11 +140,11 @@ trees seen = \case
   ForEach d -> case branch seen d of
     (seen', [Node "together" ts]) -> (seen', [Node "each" ts])
     (seen', ts) -> (seen', [Node "each" ts])
-  Annotated n (Leaf info) | not (passes (Leaf info)) -> leaf (Just (noteName n)) info
+  Annotated n (Leaf info) | not (passes (Leaf info)) -> leaf (Just n.name) info
   Annotated n d -> case trees seen d of
-    (seen', [Node t cs]) -> (seen', [Node (noteName n <> "  " <> t) cs])
-    (seen', []) -> (seen', [Node (noteName n) []])
-    (seen', ts) -> (seen', [Node (noteName n) ts])
+    (seen', [Node t cs]) -> (seen', [Node (n.name <> "  " <> t) cs])
+    (seen', []) -> (seen', [Node n.name []])
+    (seen', ts) -> (seen', [Node n.name ts])
   where
     -- A step: what kind it is, then its name, then the details.
     leaf name info =
@@ -162,10 +162,10 @@ trees seen = \case
       (s', []) -> (s', [Node (if passes d then "pass" else "arr") []])
       r -> r
     toolTree s t
-      | infoName t `elem` s = (s, Node ("tool " <> infoName t <> "  (see above)") [])
-      | otherwise = case trees (infoName t : s) (infoBody t) of
-          (s', [Node body cs]) -> (s', Node ("tool " <> infoName t <> "  " <> body) cs)
-          (s', ts) -> (s', Node ("tool " <> infoName t) ts)
+      | t.name `elem` s = (s, Node ("tool " <> t.name <> "  (see above)") [])
+      | otherwise = case trees (t.name : s) t.body of
+          (s', [Node body cs]) -> (s', Node ("tool " <> t.name <> "  " <> body) cs)
+          (s', ts) -> (s', Node ("tool " <> t.name) ts)
     labelled l = \case
       [Node t cs] -> Node (l <> " → " <> t) cs
       [] -> Node (l <> " → pass") []
@@ -205,8 +205,8 @@ draw lead childLead (Node t cs) = (lead <> t) : go cs
 -- @repeatUntil@ and named sub-flows as boxes; tools hanging off their draft.
 -- 'mermaid' and 'dot' render it.
 data FlowGraph = FlowGraph
-  { graphItems :: [Item]
-  , graphEdges :: [Edge]
+  { items :: [Item]
+  , edges :: [Edge]
   }
 
 -- | A node, or a box of items.
@@ -219,18 +219,18 @@ data Item
 data NodeKind = Terminal | StepNode | ToolNode
 
 data Edge = Edge
-  { edgeFrom :: Text
-  , edgeTo :: Text
+  { from :: Text
+  , to :: Text
     -- ^ A node, or a box's id.
-  , edgeLabel :: Maybe Text
-  , edgeStyle :: EdgeStyle
+  , label :: Maybe Text
+  , style :: EdgeStyle
   }
 
 data EdgeStyle = Flow | Uses | Again
 
 -- | The flow's graph, from @input@ to @output@.
 flowGraph :: Description -> FlowGraph
-flowGraph d = case runBuild flow (BuildState 0 [[]] []) of
+flowGraph d = case flow.runBuild (BuildState 0 [[]] []) of
   (_, BuildState _ open edges) -> FlowGraph (reverse (concat open)) (reverse edges)
   where
     flow = do
@@ -259,7 +259,7 @@ instance Applicative Build where
   Build f <*> Build g = Build (\s -> let (h, s1) = f s; (a, s2) = g s1 in (h a, s2))
 
 instance Monad Build where
-  Build g >>= k = Build (\s -> let (a, s1) = g s in runBuild (k a) s1)
+  Build g >>= k = Build (\s -> let (a, s1) = g s in (k a).runBuild s1)
 
 fresh :: Build Text
 fresh = Build (\(BuildState n open es) -> ("n" <> T.pack (show n), BuildState (n + 1) open es))
@@ -279,7 +279,7 @@ edgeCount = Build (\s@(BuildState _ _ es) -> (length es, s))
 entriesSince :: Int -> [Text] -> Build [Text]
 entriesSince before sources = Build $ \s@(BuildState _ _ es) ->
   let new = reverse (take (length es - before) es)
-   in (nubOrdered [edgeTo e | e <- new, edgeFrom e `elem` sources], s)
+   in (nubOrdered [e.to | e <- new, e.from `elem` sources], s)
   where
     nubOrdered = foldr (\x acc -> x : filter (/= x) acc) []
 
@@ -325,7 +325,7 @@ build context from = \case
     mapM_ (\(e, _) -> mapM_ (\t -> edge (Edge e t (Just "again") Again)) targets) exits
     pure exits
   Annotated n (Leaf info) | not (passes (Leaf info)) -> step (Just n) info
-  Annotated n f -> snd <$> box (noteName n : maybe [] pure (noteDescription n)) (build InSequence from f)
+  Annotated n f -> snd <$> box (n.name : maybe [] pure n.description) (build InSequence from f)
   where
     labelled l = [(f, Just l) | (f, _) <- from]
     chain acc = \case
@@ -334,7 +334,7 @@ build context from = \case
     -- A step's node, labelled by 'stepLines', with any tools hanging off it.
     -- In a diagram, a named step's description goes under its name.
     step note' info = do
-      let lines'' = case (stepLines (noteName <$> note') info, note' >>= noteDescription) of
+      let lines'' = case (stepLines ((.name) <$> note') info, note' >>= (.description)) of
             (kind : name : details, Just description) -> kind : name : description : details
             (ls, _) -> ls
       exits <- node from lines''
@@ -343,7 +343,7 @@ build context from = \case
           mapM_
             ( \t -> do
                 n <- fresh
-                item (ItemNode n ToolNode ["tool " <> infoName t])
+                item (ItemNode n ToolNode ["tool " <> t.name])
                 mapM_ (\(e, _) -> edge (Edge e n Nothing Uses)) exits
             )
             tools
@@ -359,7 +359,7 @@ stepLines name info = kind : maybe [] pure name <> details
       Identity -> ("pass", [])
       Glue -> ("arr", [])
       Effect -> ("act", [])
-      DraftInfo instruction _ out _ -> ("draft @" <> typeLabel out, [quoted (instructionText instruction)])
+      DraftInfo instruction _ out _ -> ("draft @" <> typeLabel out, [quoted instruction.text])
       JudgeInfo _ [q] -> ("judge", [questionText q])
       JudgeInfo _ qs -> ("judge " <> T.pack (show (length qs)) <> " questions in one request", map questionText qs)
 
@@ -461,8 +461,8 @@ descriptionValue = \case
   Repeated d -> node "repeat" [("step", descriptionValue d)]
   Annotated n d ->
     node "note" $
-      [("name", String (noteName n))]
-        <> maybe [] (\t -> [("description", String t)]) (noteDescription n)
+      [("name", String n.name)]
+        <> maybe [] (\t -> [("description", String t)]) n.description
         <> [("step", descriptionValue d)]
   where
     node kind fields = Object (("kind", String kind) : fields)
@@ -473,7 +473,7 @@ descriptionValue = \case
       DraftInfo instruction input out tools ->
         node
           "draft"
-          [ ("instruction", String (instructionText instruction))
+          [ ("instruction", String instruction.text)
           , ("input", String (typeLabel input))
           , ("output", String (typeLabel out))
           , ("tools", Array (map tool tools))
@@ -482,10 +482,10 @@ descriptionValue = \case
         node "judge" [("input", String (typeLabel input)), ("questions", Array (map question qs))]
     tool t =
       Object
-        [ ("name", String (infoName t))
-        , ("description", String (infoDescription t))
-        , ("input", String (typeLabel (infoInput t)))
-        , ("output", String (typeLabel (infoOutput t)))
+        [ ("name", String t.name)
+        , ("description", String t.description)
+        , ("input", String (typeLabel t.input))
+        , ("output", String (typeLabel t.output))
         ]
     question = \case
       AskYesNo q -> Object [("type", String "yesNo"), ("question", String q)]

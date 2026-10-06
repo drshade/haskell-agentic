@@ -24,8 +24,8 @@ instance Contract Creature where
   contract =
     record "A prehistoric creature" $
       Creature
-        <$> required "name" "Its common name, e.g. Triceratops" name
-        <*> required "about" "One sentence on what it was and how it lived" about
+        <$> required "name" "Its common name, e.g. Triceratops" (.name)
+        <*> required "about" "One sentence on what it was and how it lived" (.about)
 
 -- | What kind of animal a creature was. Jev chooses one, with probabilities.
 data Kind = Dinosaur | Pterosaur | MarineReptile | Fish | Mammal | Bird | Other
@@ -89,7 +89,7 @@ classify = returnA &&& judge (choice "What kind of animal was this creature?")
 
 -- | Keep a creature when Jev chose this kind with at least probability @p@.
 clearly :: Kind -> Probability -> (Creature, Choice Kind) -> Bool
-clearly kind p (_, c) = chosen c == kind && maybe False (>= p) (lookup kind (choiceProbabilities c))
+clearly kind p (_, c) = c.chosen == kind && maybe False (>= p) (lookup kind c.probabilities)
 
 exhibit :: Agentic IO Creature Entry
 exhibit =
@@ -99,7 +99,7 @@ exhibit =
     >>> arr (\(c, (p, t)) -> Entry c p t)
 
 notADinosaur :: (Creature, Choice Kind) -> NotADinosaur
-notADinosaur (c, k) = NotADinosaur (name c) (chosen k)
+notADinosaur (c, k) = NotADinosaur c.name k.chosen
 
 -- ---------------------------------------------------------------------------
 
@@ -113,4 +113,4 @@ main = do
               >>= withSystemOne jev 
               >>= withSystemTwo (anthropic & effort Low)
   poster <- interpret rt dinoProject ()
-  T.putStrLn $ "\n" <> heading poster <> "\n\n" <> body poster
+  T.putStrLn $ "\n" <> poster.heading <> "\n\n" <> poster.body

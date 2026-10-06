@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               agentic-aeson
-version:            0.2.0.3
+version:            0.2.0.4
 synopsis:           Conversions between agentic's values and aeson, and strict JSON Schema
 description:
   Shared by the agentic provider packages: converts the core's Value to and from aeson, and lowers contracts to the strict JSON Schema that providers' structured outputs accept, keeping field order and sharing repeated types through $defs.
@@ -23,7 +23,7 @@ source-repository head
 
 library
   default-language: GHC2021
-  default-extensions: LambdaCase OverloadedStrings
+  default-extensions: DuplicateRecordFields LambdaCase NoFieldSelectors OverloadedRecordDot OverloadedStrings
   ghc-options:      -Wall
   hs-source-dirs:   src
   exposed-modules:

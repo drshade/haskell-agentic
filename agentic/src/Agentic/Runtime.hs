@@ -2,6 +2,8 @@
 module Agentic.Runtime
   ( -- * Runtime
     Runtime (..)
+  , inParallel
+  , failWith
   , runtime
   , runtimeWith
   , SystemOne (..)
@@ -55,9 +57,9 @@ data Conversation = Conversation
   deriving (Eq, Show)
 
 data ToolSpec = ToolSpec
-  { specName :: Text
-  , specDescription :: Text
-  , specInput :: Schema
+  { name :: Text
+  , description :: Text
+  , input :: Schema
   }
   deriving (Eq, Show)
 
@@ -89,8 +91,8 @@ data Action
 
 data ToolCall = ToolCall
   { callId :: Text
-  , callName :: Text
-  , callInput :: Value
+  , name :: Text
+  , input :: Value
   }
   deriving (Eq, Show)
 
@@ -98,7 +100,7 @@ data ToolCall = ToolCall
 -- Events and errors
 
 data Event = Event
-  { eventPath :: [Note]
+  { path :: [Note]
   , happened :: Happened
   }
   deriving (Show)
@@ -127,10 +129,10 @@ instance Exception FlowError
 -- Runtime
 
 -- | Fast, typed judgements (Jev, or an LLM standing in).
-newtype SystemOne m = SystemOne {askSystemOne :: JudgeRequest -> m [Answer]}
+newtype SystemOne m = SystemOne {ask :: JudgeRequest -> m [Answer]}
 
 -- | One LLM turn.
-newtype SystemTwo m = SystemTwo {askSystemTwo :: Conversation -> m Turn}
+newtype SystemTwo m = SystemTwo {ask :: Conversation -> m Turn}
 
 -- | Everything a flow needs from the outside world: its two kinds of model,
 -- how to run independent work, where events go, and how to raise errors.
@@ -142,6 +144,15 @@ data Runtime m = Runtime
   , observe :: Event -> m ()
   , failure :: forall a. FlowError -> m a
   }
+
+-- | Run work with a runtime's @parallel@. (Record dot can't select a
+-- polymorphic field, so this and 'failWith' are functions.)
+inParallel :: Runtime m -> [m a] -> m [a]
+inParallel Runtime {parallel = p} = p
+
+-- | Fail with a runtime's @failure@.
+failWith :: Runtime m -> FlowError -> m a
+failWith Runtime {failure = f} = f
 
 -- | A runtime in IO with no providers: it runs things one after another,
 -- observes nothing, and throws 'FlowError's.
@@ -176,12 +187,12 @@ withSystemTwo p rt = (\s -> rt {systemTwo = s}) <$> toSystemTwo p
 
 -- | Also send every event to @f@.
 observing :: Applicative m => (Event -> m ()) -> Runtime m -> Runtime m
-observing f rt = rt {observe = \e -> observe rt e *> f e}
+observing f rt = rt {observe = \e -> rt.observe e *> f e}
 
 -- | Fail a step that takes more than @n@ turns.
 capped :: Int -> Runtime m -> Runtime m
 capped n rt = rt {systemTwo = SystemTwo turn}
   where
     turn c
-      | length (history c) >= n = failure rt (TurnLimit n)
-      | otherwise = askSystemTwo (systemTwo rt) c
+      | length c.history >= n = failWith rt (TurnLimit n)
+      | otherwise = rt.systemTwo.ask c

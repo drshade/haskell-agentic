@@ -34,9 +34,9 @@ instance Contract Email where
   contract =
     record "An email to the shop's support address" $
       Email
-        <$> required "sender" "The customer's email address" sender
-        <*> required "subject" "The subject line" subject
-        <*> required "message" "The body of the email" message
+        <$> required "sender" "The customer's email address" (.sender)
+        <*> required "subject" "The subject line" (.subject)
+        <*> required "message" "The body of the email" (.message)
 
 -- ---------------------------------------------------------------------------
 -- Triage: Jev judges, code decides
@@ -86,9 +86,9 @@ data Ticket = Ticket {email :: Email, about :: Topic, urgent :: Bool, upset :: B
   deriving (Generic, Show, Contract)
 
 decide :: (Email, Triage) -> Ticket
-decide (e, t) = Ticket e (chosen (topic t)) (position (urgency t) >= 1.5 || isUpset) isUpset
+decide (e, t) = Ticket e t.topic.chosen (t.urgency.position >= 1.5 || isUpset) isUpset
   where
-    isUpset = yes (angry t) >= 0.5
+    isUpset = t.angry.yes >= 0.5
 
 -- ---------------------------------------------------------------------------
 -- What goes out
@@ -103,7 +103,7 @@ instance Contract Subject where
       checked "60 characters or fewer" ((<= 60) . T.length . (\(Subject s) -> s)) $
         mapCodec Subject (\(Subject s) -> s) contract
 
-data Reply = Reply {recipient :: Text, subjectLine :: Subject, text :: Text}
+data Reply = Reply {recipient :: Text, subject :: Subject, text :: Text}
   deriving (Generic, Show, Contract)
 
 data Handled = Handled {ticket :: Ticket, reply :: Reply, logEntry :: Text}
@@ -116,23 +116,23 @@ instance Contract Day where
   contract =
     record "A day of support email" $
       Day
-        <$> required "received" "How many emails arrived, spam included" received
-        <*> required "spamDropped" "How many of them were spam, and dropped without a reply" spamDropped
-        <*> required "urgentTickets" "Tickets that needed an answer quickly" urgentTickets
-        <*> required "routineTickets" "Everything else" routineTickets
+        <$> required "received" "How many emails arrived, spam included" (.received)
+        <*> required "spamDropped" "How many of them were spam, and dropped without a reply" (.spamDropped)
+        <*> required "urgentTickets" "Tickets that needed an answer quickly" (.urgentTickets)
+        <*> required "routineTickets" "Everything else" (.routineTickets)
 
 -- | The day's report. Claude writes the content; code lays it out.
-data Report = Report {headline :: Text, urgent' :: [TicketSummary], routine :: [TicketSummary], forTheLead :: [Text]}
+data Report = Report {headline :: Text, urgent :: [TicketSummary], routine :: [TicketSummary], forTheLead :: [Text]}
   deriving (Generic, Show)
 
 instance Contract Report where
   contract =
     record "A report on the day's support email, for the support lead" $
       Report
-        <$> required "headline" "One sentence on how the day went" headline
-        <*> required "urgent" "One entry per urgent ticket" urgent'
-        <*> required "routine" "One entry per routine ticket" routine
-        <*> required "forTheLead" "Things the support lead should do, most important first" forTheLead
+        <$> required "headline" "One sentence on how the day went" (.headline)
+        <*> required "urgent" "One entry per urgent ticket" (.urgent)
+        <*> required "routine" "One entry per routine ticket" (.routine)
+        <*> required "forTheLead" "Things the support lead should do, most important first" (.forTheLead)
 
 data TicketSummary = TicketSummary {who :: Text, gist :: Text}
   deriving (Generic, Show)
@@ -141,8 +141,8 @@ instance Contract TicketSummary where
   contract =
     record "A ticket, summarised" $
       TicketSummary
-        <$> required "customer" "The customer's name, or their email address if there's no name" who
-        <*> required "gist" "What they wanted and what the reply did, in one or two sentences" gist
+        <$> required "customer" "The customer's name, or their email address if there's no name" (.who)
+        <*> required "gist" "What they wanted and what the reply did, in one or two sentences" (.gist)
 
 -- ---------------------------------------------------------------------------
 -- The refund agent's tools
@@ -169,7 +169,7 @@ instance Contract RefundCase where
   contract =
     record "A refund request" $
       RefundCase
-        <$> required "reason" "Why the customer wants a refund" reason
+        <$> required "reason" "Why the customer wants a refund" (.reason)
         <*> required "daysSincePurchase" "Days since the order was placed" (\(RefundCase _ d) -> d)
 
 -- | Jev, as a tool: does a refund request fit the policy?
@@ -186,9 +186,9 @@ kitchenSink =
   draft @[Email] "Write 8 emails to the support address of an online bookshop, as they might arrive in a day. Include one spam email, one refund request and one angry customer."
     >>> (arr length `named` "count the emails" &&& keep 0.5 (yesNo "Is this a genuine email from a customer, not spam?"))
     >>> second (each triage)
-    >>> second (arr (partition urgent) `named` "split off the urgent tickets")
+    >>> second (arr (partition (.urgent)) `named` "split off the urgent tickets")
     >>> second (each (handle >>> act page `named` "page the on-call team") *** each handle)
-    >>> arr (\(n, (u, r)) -> Day n (n - length u - length r) u r)
+    >>> arr (\(received, (urgent, routine)) -> Day received (received - length urgent - length routine) urgent routine)
     >>> draft @Report "Summarise the day's support email for the support lead."
 
 triage :: Agentic IO Email Ticket
@@ -205,7 +205,7 @@ handle =
 
 route :: Agentic IO Ticket (Ticket, Reply)
 route =
-  arr (\t -> if about t == Refund then Left t else Right t) `named` "refunds to the refund agent"
+  arr (\t -> if t.about == Refund then Left t else Right t) `named` "refunds to the refund agent"
     >>> (returnA &&& refundAgent ||| returnA &&& draft @Reply "Write a helpful reply to this customer's email.")
 
 refundAgent :: Agentic IO Ticket Reply
@@ -219,19 +219,19 @@ polish :: Agentic IO (Ticket, Reply) (Ticket, Reply)
 polish =
   note "polish" "Revise until Jev rates the reply polite (≥ 0.9)" $
     rate
-      >>> repeatUntil ((>= 0.9) . yes . snd) (arr fst >>> second (draft @Reply "Make this reply warmer and more polite, keeping what it says.") >>> rate)
+      >>> repeatUntil ((>= 0.9) . (.yes) . snd) (arr fst >>> second (draft @Reply "Make this reply warmer and more polite, keeping what it says.") >>> rate)
       >>> arr fst
   where
-    rate = returnA &&& (arr (text . snd) >>> judge (yesNo "Is this reply polite and warm?"))
+    rate = returnA &&& (arr ((.text) . snd) >>> judge (yesNo "Is this reply polite and warm?"))
 
 send :: Handled -> IO Handled
 send h = do
-  let Reply to (Subject s) _ = reply h
+  let Reply to (Subject s) _ = h.reply
   T.putStrLn ("  sent email to " <> to <> ": " <> s)
   pure h
 
 page :: Handled -> IO Handled
-page h = T.putStrLn ("  paged on-call about: " <> subject (email (ticket h))) >> pure h
+page h = T.putStrLn ("  paged on-call about: " <> h.ticket.email.subject) >> pure h
 
 -- ---------------------------------------------------------------------------
 
@@ -252,11 +252,11 @@ main = do
 render :: Report -> Text
 render r =
   T.unlines $
-    [headline r, ""]
-      <> section "Urgent" (map ticket' (urgent' r))
-      <> section "Routine" (map ticket' (routine r))
-      <> section "For the lead" [T.pack (show i) <> ". " <> a | (i, a) <- zip [1 :: Int ..] (forTheLead r)]
+    [r.headline, ""]
+      <> section "Urgent" (map ticket r.urgent)
+      <> section "Routine" (map ticket r.routine)
+      <> section "For the lead" [T.pack (show i) <> ". " <> a | (i, a) <- zip [1 :: Int ..] r.forTheLead]
   where
     section _ [] = []
     section title items = [title] <> map ("  " <>) items <> [""]
-    ticket' t = "- " <> who t <> ": " <> gist t
+    ticket t = "- " <> t.who <> ": " <> t.gist

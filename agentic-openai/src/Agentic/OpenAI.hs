@@ -141,15 +141,15 @@ requestBody cfg c =
   A.Object $
     [("model", A.String cfg.model)]
       <> maybe [] (\s -> [("instructions", A.String s)]) cfg.system
-      <> [("tools", A.Array (map tool (tools c))) | not (null (tools c))]
-      <> [ ("input", A.Array (task : concatMap exchange (history c)))
+      <> [("tools", A.Array (map tool c.tools)) | not (null c.tools)]
+      <> [ ("input", A.Array (task : concatMap exchange c.history))
          , ( "text"
            , A.Object
                [ ( "format"
                  , A.Object
                      [ ("type", A.String "json_schema")
-                     , ("name", A.String (schemaName (outputSchema c)))
-                     , ("schema", objectSchema (outputSchema c))
+                     , ("name", A.String (schemaName c.outputSchema))
+                     , ("schema", objectSchema c.outputSchema)
                      , ("strict", A.Bool True)
                      ]
                  )
@@ -161,16 +161,16 @@ requestBody cfg c =
       <> maybe [] (\e -> [("reasoning", A.Object [("effort", A.String (effortName e))])]) cfg.effort
       <> maybe [] (\n -> [("max_output_tokens", A.Integer (toInteger n))]) cfg.maxTokens
   where
-    task = message "user" (instructionText (instruction c) <> inputText)
-    inputText = case input c of
+    task = message "user" (c.instruction.text <> inputText)
+    inputText = case c.input of
       A.Null -> ""
       s -> "\n\nInput:\n" <> A.renderJson s
     tool spec =
       A.Object
         [ ("type", A.String "function")
-        , ("name", A.String (specName spec))
-        , ("description", A.String (specDescription spec))
-        , ("parameters", objectSchema (specInput spec))
+        , ("name", A.String spec.name)
+        , ("description", A.String spec.description)
+        , ("parameters", objectSchema spec.input)
         , ("strict", A.Bool True)
         ]
     -- A turn's raw value is its list of output items, which go back as input.
@@ -235,13 +235,13 @@ decodeTurn c = either (Left . UnexpectedResponse . T.pack) id . J.parseEither pa
     -- A reply that isn't JSON goes back to the core as text; the output
     -- contract then rejects it and the model gets another go.
     final text = case decodeJson text of
-      Just v -> unwrap (outputSchema c) v
+      Just v -> unwrap c.outputSchema v
       Nothing -> A.String text
     json t = maybe (A.String t) id (decodeJson t)
     decodeJson t = fromAeson <$> J.decode (TL.encodeUtf8 (TL.fromStrict t))
     unwrapInput name v = maybe v (`unwrap` v) (inputSchema name)
     inputSchema :: Text -> Maybe Schema
-    inputSchema name = case [specInput s | s <- tools c, specName s == name] of
+    inputSchema name = case [s.input | s <- c.tools, s.name == name] of
       s : _ -> Just s
       [] -> Nothing
 

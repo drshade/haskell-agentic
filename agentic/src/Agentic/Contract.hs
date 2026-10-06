@@ -7,13 +7,14 @@
 -- Generic deriving (@deriving (Generic, Contract)@ and
 -- @deriving (Generic, Options)@) is GHC only: MicroHs's "GHC.Generics" has no
 -- metadata classes to read names from. Under MicroHs, write contracts out
--- with 'record', 'required', 'sumOf' and 'constructor', and options with
--- 'option'.
+-- with 'record', 'Agentic.Contract.required', 'sumOf' and 'constructor', and
+-- options with 'option'.
 module Agentic.Contract
   ( -- * Codecs
     Codec (..)
   , Contract (..)
   , mapCodec
+  , reschema
     -- * Records
   , ObjectCodec
   , record
@@ -66,7 +67,7 @@ import GHC.Generics
 -- Codecs
 
 data Codec a = Codec
-  { codecSchema :: Schema
+  { schema :: Schema
   , encode :: a -> Value
   , decode :: Value -> Either Text a
   }
@@ -79,7 +80,12 @@ class Contract a where
 #endif
 
 mapCodec :: (a -> b) -> (b -> a) -> Codec a -> Codec b
-mapCodec to' from' c = Codec (codecSchema c) (encode c . from') (fmap to' . decode c)
+mapCodec to' from' c = Codec c.schema (c.encode . from') (fmap to' . c.decode)
+
+-- | Change a codec's schema. (A record update can't do this: t'Field' has a
+-- @schema@ too, so @c {schema = ...}@ is ambiguous.)
+reschema :: (Schema -> Schema) -> Codec a -> Codec a
+reschema f (Codec s e d) = Codec (f s) e d
 
 primitive :: Shape -> (a -> Value) -> (Value -> Either Text a) -> Codec a
 primitive s = Codec (schemaOf s)
@@ -119,10 +125,10 @@ instance Contract a => Contract [a] where
   contract =
     let c = contract @a
      in Codec
-          (schemaOf (SArray (codecSchema c)))
-          (Array . map (encode c))
+          (schemaOf (SArray c.schema))
+          (Array . map c.encode)
           ( \case
-              Array vs -> traverse (decode c) vs
+              Array vs -> traverse c.decode vs
               v -> mismatch "a list" v
           )
 
@@ -130,11 +136,11 @@ instance Contract a => Contract (Maybe a) where
   contract =
     let c = contract @a
      in Codec
-          (schemaOf (SNullable (codecSchema c)))
-          (maybe Null (encode c))
+          (schemaOf (SNullable c.schema))
+          (maybe Null c.encode)
           ( \case
               Null -> Right Nothing
-              v -> Just <$> decode c v
+              v -> Just <$> c.decode v
           )
 
 instance (Contract a, Contract b) => Contract (a, b) where
@@ -154,26 +160,26 @@ instance (Contract a, Contract b, Contract c) => Contract (a, b, c) where
 -- Records
 
 -- | The fields of an object: encodes an @i@, decodes an @o@. Build one
--- applicatively with 'required', then close it with 'record'.
+-- applicatively with 'Agentic.Contract.required', then close it with 'record'.
 data ObjectCodec i o = ObjectCodec
-  { objectFields :: [Field]
-  , objectEncode :: i -> [(Text, Value)]
-  , objectDecode :: [(Text, Value)] -> Either Text o
+  { fields :: [Field]
+  , encode :: i -> [(Text, Value)]
+  , decode :: [(Text, Value)] -> Either Text o
   }
 
 instance Functor (ObjectCodec i) where
-  fmap f o = o {objectDecode = fmap f . objectDecode o}
+  fmap f (ObjectCodec fs e d) = ObjectCodec fs e (fmap f . d)
 
 instance Applicative (ObjectCodec i) where
   pure x = ObjectCodec [] (const []) (const (Right x))
   f <*> x =
     ObjectCodec
-      (objectFields f <> objectFields x)
-      (\i -> objectEncode f i <> objectEncode x i)
-      (\kvs -> objectDecode f kvs <*> objectDecode x kvs)
+      (f.fields <> x.fields)
+      (\i -> f.encode i <> x.encode i)
+      (\kvs -> f.decode kvs <*> x.decode kvs)
 
 lmapObject :: (j -> i) -> ObjectCodec i o -> ObjectCodec j o
-lmapObject g o = o {objectEncode = objectEncode o . g}
+lmapObject g (ObjectCodec fs e d) = ObjectCodec fs (e . g) d
 
 -- | A described field, using the field type's contract.
 required :: Contract a => Text -> Text -> (r -> a) -> ObjectCodec r a
@@ -184,16 +190,16 @@ requiredWith :: Text -> Maybe Text -> Codec a -> (r -> a) -> ObjectCodec r a
 requiredWith name d c get =
   ObjectCodec
     [Field name schema (not nullable)]
-    (\r -> [(name, encode c (get r))])
+    (\r -> [(name, c.encode (get r))])
     ( \kvs -> case lookupField name kvs of
-        Just v -> prefix (decode c v)
+        Just v -> prefix (c.decode v)
         Nothing
-          | nullable -> prefix (decode c Null)
+          | nullable -> prefix (c.decode Null)
           | otherwise -> Left ("missing field " <> name)
     )
   where
-    schema = maybe id documentedSchema d (codecSchema c)
-    nullable = case shape (codecSchema c) of
+    schema = maybe id documentedSchema d c.schema
+    nullable = case c.schema.shape of
       SNullable _ -> True
       _ -> False
     prefix = either (\e -> Left (name <> ": " <> e)) Right
@@ -206,10 +212,10 @@ optional = required
 record :: Text -> ObjectCodec a a -> Codec a
 record d o =
   Codec
-    (documentedSchema' (nonEmpty d) (schemaOf (SObject (objectFields o))))
-    (Object . objectEncode o)
+    (documentedSchema' (nonEmpty d) (schemaOf (SObject o.fields)))
+    (Object . o.encode)
     ( \case
-        Object kvs -> objectDecode o kvs
+        Object kvs -> o.decode kvs
         v -> mismatch "an object" v
     )
 
@@ -218,11 +224,11 @@ record d o =
 
 -- | One constructor of a sum type.
 data Case a = Case
-  { caseTag :: Text
-  , caseDoc :: Maybe Text
-  , caseFields :: [Field]
-  , caseEncode :: a -> Maybe [(Text, Value)]
-  , caseDecode :: [(Text, Value)] -> Either Text a
+  { tag :: Text
+  , doc :: Maybe Text
+  , fields :: [Field]
+  , encode :: a -> Maybe [(Text, Value)]
+  , decode :: [(Text, Value)] -> Either Text a
   }
 
 -- | A constructor: its tag, a description, how to recognise it, and its fields.
@@ -233,9 +239,9 @@ constructor tag d matches o =
   Case
     tag
     (nonEmpty d)
-    (objectFields o)
-    (\a -> if matches a then Just (objectEncode o a) else Nothing)
-    (objectDecode o)
+    o.fields
+    (\a -> if matches a then Just (o.encode a) else Nothing)
+    o.decode
 
 -- | A sum type. If no constructor has fields, it's encoded as an enumeration of
 -- tags; otherwise each value is an object with a @tag@ field.
@@ -244,52 +250,51 @@ sumOf d = sumCodec (nonEmpty d)
 
 sumCodec :: Maybe Text -> [Case a] -> Codec a
 sumCodec d cases
-  | all (null . caseFields) cases =
+  | all (null . (.fields)) cases =
       Codec
-        (documentedSchema' d (schemaOf (SEnum [(caseTag c, caseDoc c) | c <- cases])))
-        (\a -> maybe Null (String . caseTag) (matching a))
+        (documentedSchema' d (schemaOf (SEnum [(c.tag, c.doc) | c <- cases])))
+        (\a -> maybe Null (String . (.tag)) (matching a))
         ( \case
-            String t | Just c <- byTag t -> caseDecode c []
-            v -> mismatch ("one of " <> T.intercalate ", " (map caseTag cases)) v
+            String t | Just c <- byTag t -> c.decode []
+            v -> mismatch ("one of " <> T.intercalate ", " (map (.tag) cases)) v
         )
   | otherwise =
       Codec
-        (documentedSchema' d (schemaOf (SSum [Variant (caseTag c) (caseDoc c) (caseFields c) | c <- cases])))
-        ( \a -> case [(caseTag c, kvs) | c <- cases, Just kvs <- [caseEncode c a]] of
+        (documentedSchema' d (schemaOf (SSum [Variant c.tag c.doc c.fields | c <- cases])))
+        ( \a -> case [(c.tag, kvs) | c <- cases, Just kvs <- [c.encode a]] of
             (t, kvs) : _ -> Object (("tag", String t) : kvs)
             [] -> Null
         )
         ( \case
             Object kvs
               | Just (String t) <- lookupField "tag" kvs ->
-                  maybe (Left ("unknown tag " <> t)) (`caseDecode` kvs) (byTag t)
+                  maybe (Left ("unknown tag " <> t)) (\c -> c.decode kvs) (byTag t)
             v -> mismatch "an object with a tag" v
         )
   where
-    matching a = find (\c -> isJust (caseEncode c a)) cases
-    byTag t = find ((== t) . caseTag) cases
+    matching a = find (\c -> isJust (c.encode a)) cases
+    byTag t = find ((== t) . (.tag)) cases
 
 -- ---------------------------------------------------------------------------
 -- Adjusting contracts
 
 -- | Describe the whole type.
 documented :: Text -> Codec a -> Codec a
-documented d c = c {codecSchema = documentedSchema d (codecSchema c)}
+documented d = reschema (documentedSchema d)
 
 -- | Describe one field of a record (or of any constructor of a sum). Naming a
 -- field that doesn't exist is an error when the schema is first used.
 field :: Text -> Text -> Codec a -> Codec a
-field name d c = c {codecSchema = s {shape = update (shape s)}}
+field name d = reschema (\s -> s {shape = update s.shape})
   where
-    s = codecSchema c
     update = \case
       SObject fs | any named fs -> SObject (map describeField fs)
-      SSum vs | any (any named . variantFields) vs ->
-        SSum [v {variantFields = map describeField (variantFields v)} | v <- vs]
+      SSum vs | any (any named . (.fields)) vs ->
+        SSum [Variant t vd (map describeField vfs) | Variant t vd vfs <- vs]
       _ -> error ("Agentic.Contract.field: no field named " <> T.unpack name)
-    named f = fieldName f == name
-    describeField f
-      | named f = f {fieldSchema = documentedSchema d (fieldSchema f)}
+    named f = f.name == name
+    describeField f@(Field n s r)
+      | named f = Field n (documentedSchema d s) r
       | otherwise = f
 
 -- | A constraint the wire schemas can't express. It's stated to the model and
@@ -297,12 +302,14 @@ field name d c = c {codecSchema = s {shape = update (shape s)}}
 checked :: Text -> (a -> Bool) -> Codec a -> Codec a
 checked rule ok c =
   Codec
-    ((codecSchema c) {checks = checks (codecSchema c) <> [rule]})
-    (encode c)
+    (s {checks = s.checks <> [rule]})
+    c.encode
     ( \v -> do
-        a <- decode c v
+        a <- c.decode v
         if ok a then Right a else Left ("must be " <> rule)
     )
+  where
+    s = c.schema
 
 between :: (Ord a, Show a) => a -> a -> Codec a -> Codec a
 between lo hi =
@@ -333,18 +340,18 @@ class GContract (f :: Type -> Type) where
 instance (Datatype d, GCases f) => GContract (M1 D d f) where
   gcontract = named $ mapCodec M1 unM1 $ case gcases @f of
     [GCase _ (Just bare)] -> bare
-    [GCase c Nothing] | not (null (caseFields c)) -> recordFromCase c
-    cs -> sumCodec Nothing (map gcase cs)
+    [GCase c Nothing] | not (null c.fields) -> recordFromCase c
+    cs -> sumCodec Nothing (map (.gcase) cs)
     where
-      named c = c {codecSchema = titled (T.pack (datatypeName (undefined :: M1 D d f ()))) (codecSchema c)}
+      named = reschema (titled (T.pack (datatypeName (undefined :: M1 D d f ()))))
 
 recordFromCase :: Case a -> Codec a
 recordFromCase c =
   Codec
-    (schemaOf (SObject (caseFields c)))
-    (Object . fromMaybe [] . caseEncode c)
+    (schemaOf (SObject c.fields))
+    (Object . fromMaybe [] . c.encode)
     ( \case
-        Object kvs -> caseDecode c kvs
+        Object kvs -> c.decode kvs
         v -> mismatch "an object" v
     )
 
@@ -361,17 +368,13 @@ instance (GCases f, GCases g) => GCases (f :+: g) where
     <> map (inject R1 (\case R1 x -> Just x; L1 _ -> Nothing)) (gcases @g)
     where
       inject :: (x -> y) -> (y -> Maybe x) -> GCase x -> GCase y
-      inject wrap unwrap (GCase c _) =
-        GCase
-          c { caseEncode = \y -> unwrap y >>= caseEncode c
-            , caseDecode = fmap wrap . caseDecode c
-            }
-          Nothing
+      inject wrap unwrap (GCase (Case t d fs e dec) _) =
+        GCase (Case t d fs (\y -> unwrap y >>= e) (fmap wrap . dec)) Nothing
 
 instance (Constructor c, GFields f) => GCases (M1 C c f) where
   gcases =
     [ GCase
-        (Case tag Nothing (objectFields o) (Just . objectEncode o) (objectDecode o))
+        (Case tag Nothing o.fields (Just . o.encode) o.decode)
         (mapCodec M1 unM1 <$> gbare @f)
     ]
     where
@@ -410,14 +413,14 @@ instance (Selector s, Contract a) => GFields (M1 S s (K1 i a)) where
 -- Enumerations
 
 data Option a = Option
-  { optionValue :: a
-  , optionLabel :: Text
-  , optionDoc :: Maybe Text
+  { value :: a
+  , label :: Text
+  , doc :: Maybe Text
   }
 
 data OptionSet a = OptionSet
-  { optionsDoc :: Maybe Text
-  , optionList :: [Option a]
+  { doc :: Maybe Text
+  , options :: [Option a]
     -- ^ In order. For a score, this is the level order, lowest first.
   }
 
@@ -427,12 +430,12 @@ class Options a where
   options :: OptionSet a
 #ifndef __MHS__
   default options :: (Generic a, GEnum (Rep a), Show a) => OptionSet a
-  options = OptionSet Nothing [Option v (label v) Nothing | v <- map to (genum @(Rep a))]
+  options = OptionSet Nothing [Option v (showLabel v) Nothing | v <- map to (genum @(Rep a))]
 #endif
 
 -- | One option, labelled by 'show' (the constructor's name, for an enumeration).
 option :: Show a => a -> Text -> Option a
-option v d = Option v (label v) (nonEmpty d)
+option v d = Option v (showLabel v) (nonEmpty d)
 
 -- | Options with a description of the whole set.
 documentedOptions :: Text -> [Option a] -> OptionSet a
@@ -440,8 +443,8 @@ documentedOptions d = OptionSet (nonEmpty d)
 
 -- | An option's label: what the model sees and answers with. For an
 -- enumeration, 'show' gives the constructor's name.
-label :: Show a => a -> Text
-label = T.pack . show
+showLabel :: Show a => a -> Text
+showLabel = T.pack . show
 
 -- | Use with @deriving via@ to give an 'Options' type a matching 'Contract':
 --
@@ -455,15 +458,15 @@ instance (Options a, Eq a) => Contract (Enumeration a) where
 enumeration :: forall a. (Options a, Eq a) => Codec a
 enumeration =
   Codec
-    (documentedSchema' (optionsDoc set) (schemaOf (SEnum [(optionLabel o, optionDoc o) | o <- opts])))
-    (\a -> maybe Null (String . optionLabel) (find ((== a) . optionValue) opts))
+    (documentedSchema' set.doc (schemaOf (SEnum [(o.label, o.doc) | o <- opts])))
+    (\a -> maybe Null (String . (.label)) (find ((== a) . (.value)) opts))
     ( \case
-        String t | Just o <- find ((== t) . optionLabel) opts -> Right (optionValue o)
-        v -> mismatch ("one of " <> T.intercalate ", " (map optionLabel opts)) v
+        String t | Just o <- find ((== t) . (.label)) opts -> Right o.value
+        v -> mismatch ("one of " <> T.intercalate ", " (map (.label) opts)) v
     )
   where
     set = options @a
-    opts = optionList set
+    opts = set.options
 
 #ifndef __MHS__
 class GEnum (f :: Type -> Type) where

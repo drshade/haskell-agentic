@@ -29,7 +29,7 @@ module Agentic.Core
   , module Control.Arrow
   ) where
 
-import Agentic.Contract (Codec (..), Contract (..))
+import Agentic.Contract (Codec (..), Contract (..), reschema)
 import Agentic.Questions (Probability, Questions, YesNo (..))
 import Control.Arrow
 import qualified Control.Category as Category
@@ -41,7 +41,7 @@ import Data.Typeable (Typeable, typeRep)
 import Data.Proxy (Proxy (..))
 
 -- | What a model step is asked to do.
-newtype Instruction = Instruction {instructionText :: Text}
+newtype Instruction = Instruction {text :: Text}
   deriving (Eq, Ord, Show)
 
 instance IsString Instruction where
@@ -50,8 +50,8 @@ instance IsString Instruction where
 -- | A name, and optionally a description, for a sub-flow. Notes are for whoever
 -- is watching the flow, not for the model.
 data Note = Note
-  { noteName :: Text
-  , noteDescription :: Maybe Text
+  { name :: Text
+  , description :: Maybe Text
   }
   deriving (Eq, Ord, Show)
 
@@ -135,9 +135,7 @@ tool name description = Tool name description (titledContract @i) (titledContrac
 
 -- | A type's contract, with its schema named after the type if it isn't already.
 titledContract :: forall a. (Contract a, Typeable a) => Codec a
-titledContract = c {codecSchema = titled (T.pack (show (typeRep (Proxy @a)))) (codecSchema c)}
-  where
-    c = contract @a
+titledContract = reschema (titled (T.pack (show (typeRep (Proxy @a))))) (contract @a)
 
 -- | Map a flow over a list. The runtime may run the items concurrently.
 each :: Agentic m a b -> Agentic m [a] [b]
@@ -174,7 +172,7 @@ keep :: (Contract i, Typeable i) => Probability -> Questions YesNo -> Agentic m 
 keep p q =
   note ("keep " <> T.pack (show p)) "" $
     each (returnA &&& judge q)
-      >>> arr (map fst . filter ((>= p) . yes . snd))
+      >>> arr (map fst . filter ((>= p) . (.yes) . snd))
 
 -- | Send the input 'Right' if the probability of yes is at least @p@, and
 -- 'Left' otherwise.
@@ -182,4 +180,4 @@ gate :: (Contract i, Typeable i) => Probability -> Questions YesNo -> Agentic m 
 gate p q =
   note ("gate " <> T.pack (show p)) "" $
     (returnA &&& judge q)
-      >>> arr (\(x, a) -> if yes a >= p then Right x else Left x)
+      >>> arr (\(x, a) -> if a.yes >= p then Right x else Left x)

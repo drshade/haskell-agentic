@@ -1,5 +1,25 @@
 # Changelog for agentic
 
+## 0.2.0.4 - 2026-10-06
+
+* Record fields are no longer functions: the packages are written with
+  `DuplicateRecordFields`, `NoFieldSelectors` and `OverloadedRecordDot`, so
+  read a field with record dot (`c.schema`, `map (.label) opts`). Flows that
+  read the library's records need `OverloadedRecordDot`, and ones that build
+  records with shared field names need `DuplicateRecordFields`.
+* Fields lose the prefixes that only kept them unique. `Codec`'s `codecSchema`
+  is `schema`; `ObjectCodec`, `Case`, `Option`, `OptionSet`, `Field`,
+  `Variant`, `Note`, `ToolInfo`, `FlowGraph`, `Edge`, `Choice`, `Score`,
+  `JudgeRequest`, `ToolSpec`, `ToolCall`, `Event`, and `StepInfo`'s
+  `DraftInfo` and `JudgeInfo` drop theirs the same way (`caseTag` is `tag`,
+  `edgeFrom` is `from`, `requestInput` is `input`). `Instruction`'s field is
+  `text`, and `SystemOne`'s and `SystemTwo`'s are both `ask`. `ToolCall`
+  keeps `callId`: a field named `id` clashes with the Prelude's under MicroHs.
+* `reschema` changes a codec's schema. `c {schema = ...}` is ambiguous now
+  that `Field` has a `schema` too.
+* `inParallel` and `failWith` use a runtime's `parallel` and `failure`, which
+  record dot can't select because they're polymorphic.
+
 ## 0.2.0.3 - 2026-10-06
 
 * `fromBasisPoints` is renamed `toProbability`, the inverse of `probability`:
