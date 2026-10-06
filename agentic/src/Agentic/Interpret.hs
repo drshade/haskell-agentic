@@ -43,6 +43,8 @@ interpret rt = go []
     step path s x = case s of
       Pass -> pure x
       Wrap f -> pure (f x)
+      TakeFirst -> pure (fst x)
+      TakeSecond -> pure (snd x)
       Arr f -> pure (f x)
       Act f -> emit path Acted >> f x
       Judge input qs

@@ -1,5 +1,22 @@
 # Changelog for agentic
 
+## 0.2.0.5 - 2026-10-06
+
+* `takeFirst` and `takeSecond` do what `arr fst` and `arr snd` do, but a
+  diagram can follow them. `StepInfo` has `FirstHalf` and `SecondHalf` for
+  them.
+* `:/\` is a pair, as a type and a pattern, so the nested pairs `&&&` builds
+  read flat: `\(creature :/\ picture :/\ card) -> ...`.
+* `mermaid` and `dot` follow each half of a pair from `&&&` or `***`, so a
+  later `first`, `second` or `***` is wired only to the half it gets.
+  Previously every step before the pair was wired into both halves.
+* A step reached by the same node along several routes, such as both sides of
+  a `|||`, gets one edge instead of one per route.
+* A `repeatUntil`'s input is drawn going straight out as well as through the
+  body, since the condition is checked before the first run.
+* `(a &&& b) &&& c` is described as a pair inside a pair, not flattened like
+  `a &&& b &&& c`.
+
 ## 0.2.0.4 - 2026-10-06
 
 * Record fields are no longer functions: the packages are written with

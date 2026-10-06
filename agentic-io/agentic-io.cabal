@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               agentic-io
-version:            0.2.0.4
+version:            0.2.0.5
 synopsis:           IO helpers for agentic runtimes: concurrency, recording and replay
 description:
   Runs a flow's independent work concurrently, records model calls to a file and replays them, and loads provider keys from a .env file.

@@ -260,7 +260,7 @@ dinoProject =
   draft @[Creature] "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
     >>> each classify
     >>> arr (partition (clearly Dinosaur 0.8)) `named` "split off the clear dinosaurs (≥ 0.8)"
-    >>> (each (arr fst >>> exhibit) *** arr (map notADinosaur) `named` "note what the others were")
+    >>> (each (takeFirst >>> exhibit) *** arr (map notADinosaur) `named` "note what the others were")
     >>> arr (uncurry Exhibit)
     >>> draft @Poster "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
 
@@ -273,8 +273,11 @@ exhibit =
   (returnA &&& draft @DinoPic "Draw an ascii picture of this dinosaur, 10 lines high"
            &&& draft @TrumpCard "Make a trump card for this dinosaur")
     `named` "exhibit"
-    >>> arr (\(c, (p, t)) -> Entry c p t)
+    >>> arr (\(dinosaur :/\ picture :/\ card) -> Entry dinosaur picture card)
 ```
+
+`a &&& b &&& c` builds the nested pair `(a, (b, c))`, and `:/\` matches it
+without the brackets: `dinosaur :/\ picture :/\ card`. It works as a type too.
 
 The trump card's stats use a `Stat` contract that checks 1 to 10, so every card
 uses the same scale. And the poster is drafted from a named `Exhibit` record
@@ -352,7 +355,7 @@ flowchart TD
   n3 -->|first| n6
   n3 -->|first| n7
   n3 -->|second| n8
-  n3 -->|first| n9
+  n3 --> n9
   n6 --> n9
   n7 --> n9
   n8 --> n9
@@ -362,6 +365,11 @@ flowchart TD
 `describe` returns a plain `Description` you can walk yourself, and
 `descriptionValue` turns it into JSON for UIs and other agents. The tree hides
 unnamed glue between steps, but never a branch.
+
+The diagram follows each half of a pair from `&&&` or `***` to wherever it
+goes next, but it can't see inside an `arr`, so `arr fst` loses track of which
+step the half came from. `takeFirst` and `takeSecond` do the same job and keep
+it.
 
 ### Naming things
 

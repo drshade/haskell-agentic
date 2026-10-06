@@ -229,6 +229,30 @@ main = hspec $ do
           edges = filter (T.isInfixOf "-->") (T.lines (mermaid (Agentic.describe flow)))
       edges `shouldBe` ["  input --> n0", "  input --> output", "  n0 --> output"]
 
+    it "wires second to the second half of a known pair" $ do
+      let flow :: Agentic IO Joke (Joke, Rating)
+          flow = (draft @Joke "retell it" &&& draft @Rating "rate it") >>> second (draft @Rating "rate it again")
+          edges = filter (T.isInfixOf "-->") (T.lines (mermaid (Agentic.describe flow)))
+      edges `shouldBe` ["  input --> n0", "  input --> n1", "  n1 --> n2", "  n0 --> output", "  n2 --> output"]
+
+    it "joins a pass-through from both sides of a choice with one edge" $ do
+      let flow :: Agentic IO (Either Joke Joke) (Joke, Rating)
+          flow = (returnA &&& draft @Rating "rate it") ||| (returnA &&& draft @Rating "rate it harshly")
+          edges = filter (T.isInfixOf "-->") (T.lines (mermaid (Agentic.describe flow)))
+      edges `shouldBe` ["  input -->|left| n0", "  input -->|right| n1", "  input --> output", "  n0 --> output", "  n1 --> output"]
+
+    it "follows takeSecond to the half it keeps" $ do
+      let flow :: Agentic IO Joke Rating
+          flow = (draft @Joke "retell it" &&& draft @Rating "rate it") >>> takeSecond >>> draft @Rating "rate it again"
+          edges = filter (T.isInfixOf "-->") (T.lines (mermaid (Agentic.describe flow)))
+      edges `shouldBe` ["  input --> n0", "  input --> n1", "  n1 --> n2", "  n2 --> output"]
+
+    it "lets a loop's input leave without going through the body" $ do
+      let flow :: Agentic IO Joke Joke
+          flow = repeatUntil ((== "kids") . (.genre)) (draft @Joke "make it kid-friendly") >>> act pure `named` "show it"
+          edges = filter (T.isInfixOf "-->") (T.lines (mermaid (Agentic.describe flow)))
+      edges `shouldBe` ["  input --> n1", "  input --> n2", "  n1 --> n2", "  n2 --> output"]
+
     it "draws the same graph as DOT, with boxes as clusters" $ do
       let flow :: Agentic IO [Joke] [Joke]
           flow = each (draft @Joke "polish it") `named` "polish"

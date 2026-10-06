@@ -44,6 +44,10 @@ data StepInfo
     -- ^ The input, unchanged ('returnA').
   | Glue
     -- ^ @arr@: a pure function.
+  | FirstHalf
+    -- ^ 'takeFirst'.
+  | SecondHalf
+    -- ^ 'takeSecond'.
   | Effect
     -- ^ @act@: plain code with an effect.
   | DraftInfo
@@ -70,7 +74,9 @@ describe :: Agentic m i o -> Description
 describe = \case
   Step s -> Leaf (stepInfo s)
   Seq f g -> Sequence (sequenced (describe f) <> sequenced (describe g))
-  Fanout f g -> Together (together (describe f) <> together (describe g))
+  -- Only the right is flattened: @(a &&& b) &&& c@ is a different shape of
+  -- pair from @a &&& b &&& c@, and the graph routes by that shape.
+  Fanout f g -> Together (describe f : together (describe g))
   Split f g -> Halves (describe f) (describe g)
   First f -> Halves (describe f) (Leaf Identity)
   Choose f g -> Branch (describe f) (describe g)
@@ -90,6 +96,8 @@ stepInfo = \case
   Pass -> Identity
   Wrap _ -> Identity
   Arr _ -> Glue
+  TakeFirst -> FirstHalf
+  TakeSecond -> SecondHalf
   Act _ -> Effect
   Draft input out instruction tools ->
     DraftInfo instruction input.schema out.schema (map toolInfo tools)
@@ -119,6 +127,8 @@ trees :: [Text] -> Description -> ([Text], [Tree])
 trees seen = \case
   Leaf Identity -> (seen, [])
   Leaf Glue -> (seen, [])
+  Leaf FirstHalf -> (seen, [])
+  Leaf SecondHalf -> (seen, [])
   Leaf info -> leaf Nothing info
   Sequence ds -> onSnd concat (mapAccumL trees seen ds)
   Together ds ->
@@ -159,7 +169,7 @@ trees seen = \case
       r -> r
     -- A branch always shows, even when it's only glue.
     branch s d = case trees s d of
-      (s', []) -> (s', [Node (if passes d then "pass" else "arr") []])
+      (s', []) -> (s', [Node (plumbing d) []])
       r -> r
     toolTree s t
       | t.name `elem` s = (s, Node ("tool " <> t.name <> "  (see above)") [])
@@ -170,6 +180,15 @@ trees seen = \case
       [Node t cs] -> Node (l <> " → " <> t) cs
       [] -> Node (l <> " → pass") []
       ts -> Node l ts
+
+-- | How a branch that's only plumbing shows in the tree view.
+plumbing :: Description -> Text
+plumbing = \case
+  d | passes d -> "pass"
+  Leaf FirstHalf -> "takeFirst"
+  Leaf SecondHalf -> "takeSecond"
+  Annotated _ d -> plumbing d
+  _ -> "arr"
 
 -- | Does this part of a flow only pass its input through?
 passes :: Description -> Bool
@@ -235,7 +254,7 @@ flowGraph d = case flow.runBuild (BuildState 0 [[]] []) of
   where
     flow = do
       item (ItemNode "input" Terminal ["input"])
-      exits <- build InSequence [("input", Nothing)] d
+      exits <- build InSequence (Sources [("input", Nothing)]) d
       item (ItemNode "output" Terminal ["output"])
       connect exits "output"
 
@@ -243,8 +262,30 @@ flowGraph d = case flow.runBuild (BuildState 0 [[]] []) of
 -- branch that's only glue is still a branch.
 data Context = InSequence | InBranch
 
--- | Nodes the next step connects from, each with an optional edge label.
-type From = [(Text, Maybe Text)]
+-- | Where the next step's input comes from: nodes, each with an optional edge
+-- label, or a pair (after @&&&@ or @***@) whose halves are known separately, so
+-- a later @first@, @second@ or @***@ wires each half to its own flow.
+data From = Sources [(Text, Maybe Text)] | Pair From From
+
+-- | Every node a 'From' draws on, once each. A node reached by routes with
+-- different labels (both sides of a @|||@) keeps one unlabelled edge.
+sources :: From -> [(Text, Maybe Text)]
+sources = dedupe . go
+  where
+    go = \case
+      Sources s -> s
+      Pair a b -> go a <> go b
+    dedupe = \case
+      [] -> []
+      (n, l) : rest ->
+        let others = [l' | (n', l') <- rest, n' == n]
+         in (n, if all (== l) others then l else Nothing) : dedupe [x | x@(n', _) <- rest, n' /= n]
+
+-- | The two sides of a @|||@ joining again: where both made a pair, so does
+-- the join.
+merge :: From -> From -> From
+merge (Pair a b) (Pair c d) = Pair (merge a c) (merge b d)
+merge x y = Sources (sources (Pair x y))
 
 -- | A counter for ids, the items of each open box (innermost first), and edges.
 data BuildState = BuildState Int [[Item]] [Edge]
@@ -284,14 +325,14 @@ entriesSince before sources = Build $ \s@(BuildState _ _ es) ->
     nubOrdered = foldr (\x acc -> x : filter (/= x) acc) []
 
 connect :: From -> Text -> Build ()
-connect from to = mapM_ (\(f, l) -> edge (Edge f to l Flow)) from
+connect from to = mapM_ (\(f, l) -> edge (Edge f to l Flow)) (sources from)
 
 node :: From -> [Text] -> Build From
 node from label = do
   n <- fresh
   item (ItemNode n StepNode label)
   connect from n
-  pure [(n, Nothing)]
+  pure (Sources [(n, Nothing)])
 
 box :: [Text] -> Build a -> Build (Text, a)
 box label inside = do
@@ -306,28 +347,51 @@ box label inside = do
 build :: Context -> From -> Description -> Build From
 build context from = \case
   Leaf Identity -> pure from
+  -- A known pair's half goes on exactly; otherwise it's like any @arr@.
+  Leaf FirstHalf | Pair a _ <- from -> pure a
+  Leaf SecondHalf | Pair _ b <- from -> pure b
+  Leaf FirstHalf -> half "takeFirst"
+  Leaf SecondHalf -> half "takeSecond"
   Leaf Glue -> case context of
-    InSequence -> pure from
+    -- An @arr@ can take a pair apart any way it likes, so its halves are lost,
+    -- and so is what the edge labels inside it said.
+    InSequence -> pure $ case from of
+      Pair _ _ -> Sources [(n, Nothing) | (n, _) <- sources from]
+      Sources _ -> from
     InBranch -> node from ["arr"]
   Leaf info -> step Nothing info
   Sequence ds -> chain from ds
-  Together ds -> concat <$> mapM (build InBranch from) ds
-  Halves l r -> (<>) <$> build InBranch (labelled "first") l <*> build InBranch (labelled "second") r
-  Branch l r -> (<>) <$> build InBranch (labelled "left") l <*> build InBranch (labelled "right") r
-  ForEach f -> snd <$> box ["each"] (build InSequence from f)
+  Together ds -> pairUp <$> mapM (build InBranch from) ds
+  -- A pair whose halves are known sends each to its flow. Otherwise every
+  -- source might hold either half, so the edges say which half they carry.
+  Halves l r -> case from of
+    Pair a b -> Pair <$> build InBranch a l <*> build InBranch b r
+    _ -> Pair <$> build InBranch (labelled "first") l <*> build InBranch (labelled "second") r
+  Branch l r -> merge <$> build InBranch (labelled "left") l <*> build InBranch (labelled "right") r
+  ForEach f -> Sources . sources . snd <$> box ["each"] (build InSequence (Sources (sources from)) f)
   -- "Again" goes back to where the body starts: the steps the loop's input
   -- flows into. If the body has none, it goes to the box.
   Repeated f -> do
     before <- edgeCount
     (b, exits) <- box ["repeatUntil"] (build InSequence from f)
-    entries <- entriesSince before (map fst from)
+    entries <- entriesSince before (map fst (sources from))
     let targets = if null entries then [b] else entries
-    mapM_ (\(e, _) -> mapM_ (\t -> edge (Edge e t (Just "again") Again)) targets) exits
-    pure exits
+    mapM_ (\(e, _) -> mapM_ (\t -> edge (Edge e t (Just "again") Again)) targets) (sources exits)
+    -- The condition is checked before the first run, so the input can leave
+    -- without going through the body.
+    pure (merge from exits)
   Annotated n (Leaf info) | not (passes (Leaf info)) -> step (Just n) info
   Annotated n f -> snd <$> box (n.name : maybe [] pure n.description) (build InSequence from f)
   where
-    labelled l = [(f, Just l) | (f, _) <- from]
+    labelled l = Sources [(f, Just l) | (f, _) <- sources from]
+    -- A half of a pair the graph can't follow: plumbing, like @arr@.
+    half name = case context of
+      InSequence -> pure from
+      InBranch -> node from [name]
+    pairUp = \case
+      [] -> from
+      [x] -> x
+      x : xs -> Pair x (pairUp xs)
     chain acc = \case
       [] -> pure acc
       x : xs -> build InSequence acc x >>= (`chain` xs)
@@ -344,7 +408,7 @@ build context from = \case
             ( \t -> do
                 n <- fresh
                 item (ItemNode n ToolNode ["tool " <> t.name])
-                mapM_ (\(e, _) -> edge (Edge e n Nothing Uses)) exits
+                mapM_ (\(e, _) -> edge (Edge e n Nothing Uses)) (sources exits)
             )
             tools
         _ -> pure ()
@@ -358,6 +422,8 @@ stepLines name info = kind : maybe [] pure name <> details
     (kind, details) = case info of
       Identity -> ("pass", [])
       Glue -> ("arr", [])
+      FirstHalf -> ("takeFirst", [])
+      SecondHalf -> ("takeSecond", [])
       Effect -> ("act", [])
       DraftInfo instruction _ out _ -> ("draft @" <> typeLabel out, [quoted instruction.text])
       JudgeInfo _ [q] -> ("judge", [questionText q])
@@ -469,6 +535,8 @@ descriptionValue = \case
     leaf = \case
       Identity -> node "pass" []
       Glue -> node "arr" []
+      FirstHalf -> node "takeFirst" []
+      SecondHalf -> node "takeSecond" []
       Effect -> node "act" []
       DraftInfo instruction input out tools ->
         node

@@ -158,9 +158,9 @@ data Order = Order {book :: Text, purchasedDaysAgo :: Int}
 lookupOrder :: Tool IO
 lookupOrder =
   tool @OrderQuery @Order "lookup_order" "Look up a customer's most recent order by their email address" $
-    act $ \(OrderQuery c) ->
-      let n = T.length c
-       in pure (Order (["Dune", "Middlemarch", "The Hobbit", "Beloved"] !! (n `mod` 4)) (n * 3 `mod` 45))
+    act $ \query ->
+      let seed = T.length query.customer
+       in pure (Order (["Dune", "Middlemarch", "The Hobbit", "Beloved"] !! (seed `mod` 4)) (seed * 3 `mod` 45))
 
 data RefundCase = RefundCase {reason :: Text, daysSincePurchase :: Int}
   deriving (Generic, Show)
@@ -170,7 +170,7 @@ instance Contract RefundCase where
     record "A refund request" $
       RefundCase
         <$> required "reason" "Why the customer wants a refund" (.reason)
-        <*> required "daysSincePurchase" "Days since the order was placed" (\(RefundCase _ d) -> d)
+        <*> required "daysSincePurchase" "Days since the order was placed" (.daysSincePurchase)
 
 -- | Jev, as a tool: does a refund request fit the policy?
 refundEligible :: Tool IO
@@ -185,10 +185,12 @@ kitchenSink :: Agentic IO () Report
 kitchenSink =
   draft @[Email] "Write 8 emails to the support address of an online bookshop, as they might arrive in a day. Include one spam email, one refund request and one angry customer."
     >>> (arr length `named` "count the emails" &&& keep 0.5 (yesNo "Is this a genuine email from a customer, not spam?"))
-    >>> second (each triage)
-    >>> second (arr (partition (.urgent)) `named` "split off the urgent tickets")
-    >>> second (each (handle >>> act page `named` "page the on-call team") *** each handle)
-    >>> arr (\(received, (urgent, routine)) -> Day received (received - length urgent - length routine) urgent routine)
+    >>> second
+      ( each triage
+          >>> arr (partition (.urgent)) `named` "split off the urgent tickets"
+          >>> each (handle >>> act page `named` "page the on-call team") *** each handle
+      )
+    >>> arr (\(received :/\ urgent :/\ routine) -> Day received (received - length urgent - length routine) urgent routine)
     >>> draft @Report "Summarise the day's support email for the support lead."
 
 triage :: Agentic IO Email Ticket
@@ -200,12 +202,12 @@ triage =
 handle :: Agentic IO Ticket Handled
 handle =
   ((route >>> polish) &&& draft @Text "Write a one-line log entry for this support ticket.")
-    >>> arr (\((t, r), l) -> Handled t r l)
+    >>> arr (\((ticket, reply), logEntry) -> Handled ticket reply logEntry)
     >>> act send `named` "send the reply"
 
 route :: Agentic IO Ticket (Ticket, Reply)
 route =
-  arr (\t -> if t.about == Refund then Left t else Right t) `named` "refunds to the refund agent"
+  arr (\ticket -> if ticket.about == Refund then Left ticket else Right ticket) `named` "refunds to the refund agent"
     >>> (returnA &&& refundAgent ||| returnA &&& draft @Reply "Write a helpful reply to this customer's email.")
 
 refundAgent :: Agentic IO Ticket Reply
@@ -219,10 +221,10 @@ polish :: Agentic IO (Ticket, Reply) (Ticket, Reply)
 polish =
   note "polish" "Revise until Jev rates the reply polite (≥ 0.9)" $
     rate
-      >>> repeatUntil ((>= 0.9) . (.yes) . snd) (arr fst >>> second (draft @Reply "Make this reply warmer and more polite, keeping what it says.") >>> rate)
-      >>> arr fst
+      >>> repeatUntil ((>= 0.9) . (.yes) . snd) (takeFirst >>> second (draft @Reply "Make this reply warmer and more polite, keeping what it says.") >>> rate)
+      >>> takeFirst
   where
-    rate = returnA &&& (arr ((.text) . snd) >>> judge (yesNo "Is this reply polite and warm?"))
+    rate = returnA &&& (takeSecond >>> arr (.text) >>> judge (yesNo "Is this reply polite and warm?"))
 
 send :: Handled -> IO Handled
 send h = do

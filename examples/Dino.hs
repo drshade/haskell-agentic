@@ -77,15 +77,15 @@ data Poster = Poster {heading :: Text, body :: Text}
 dinoProject :: Agentic IO () Poster
 dinoProject =
   draft @[Creature] "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
-    >>> each classify
+    >>> each (returnA &&& classify)
     >>> arr (partition (clearly Dinosaur 0.8)) `named` "split off the clear dinosaurs (≥ 0.8)"
-    >>> (each (arr fst >>> exhibit) *** arr (map notADinosaur) `named` "note what the others were")
+    >>> (each (takeFirst >>> exhibit) *** arr (map notADinosaur) `named` "note what the others were")
     >>> arr (uncurry Exhibit)
     >>> draft @Poster "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
 
 -- | Jev decides what kind of animal each creature was.
-classify :: Agentic IO Creature (Creature, Choice Kind)
-classify = returnA &&& judge (choice "What kind of animal was this creature?")
+classify :: Agentic IO Creature (Choice Kind)
+classify = judge (choice "What kind of animal was this creature?")
 
 -- | Keep a creature when Jev chose this kind with at least probability @p@.
 clearly :: Kind -> Probability -> (Creature, Choice Kind) -> Bool
@@ -96,7 +96,7 @@ exhibit =
   (returnA &&& draft @DinoPic "Draw an ascii picture of this dinosaur, 10 lines high" 
            &&& draft @TrumpCard "Make a trump card for this dinosaur")
     `named` "exhibit"
-    >>> arr (\(c, (p, t)) -> Entry c p t)
+    >>> arr (\(dinosaur :/\ picture :/\ card) -> Entry dinosaur picture card)
 
 notADinosaur :: (Creature, Choice Kind) -> NotADinosaur
 notADinosaur (c, k) = NotADinosaur c.name k.chosen

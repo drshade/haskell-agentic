@@ -19,15 +19,15 @@ import System.Exit (exitFailure)
 -- ---------------------------------------------------------------------------
 -- Explicit codecs: a record, and a sum with payloads
 
-data Joke = Joke Text Text
+data Joke = Joke {setup :: Text, punchline :: Text}
   deriving (Show, Eq)
 
 instance Contract Joke where
   contract =
     record "A joke" $
       Joke
-        <$> required "setup" "The setup line" (\(Joke s _) -> s)
-        <*> required "punchline" "The line that lands it" (\(Joke _ p) -> p)
+        <$> required "setup" "The setup line" (.setup)
+        <*> required "punchline" "The line that lands it" (.punchline)
 
 data Figure = Circle Double | Rect Double Double
   deriving (Show, Eq)
@@ -157,6 +157,13 @@ main = do
   let tree = renderTree (describe jokeAndFigure)
   check "describe shows the drafts and both tools" (all (`T.isInfixOf` tree) ["draft @Joke", "tool count_letters  act", "tool write_joke  draft @Joke", "draft @Figure"])
 
-  -- 7. All of the above ran in Pure, not IO.
+  -- 7. Plumbing a diagram can follow runs like arr fst and arr snd.
+  let halves = (,) <$> interpret handlers (arr (\x -> (x, x + 1)) >>> takeFirst) (1 :: Int) <*> interpret handlers (arr (\x -> (x, x + 1)) >>> takeSecond) (1 :: Int)
+  check "takeFirst and takeSecond keep their halves" (fst (halves.runPure world0) == (1, 2))
+  let flat :: Int :/\ Text :/\ Bool
+      flat = 1 :/\ "two" :/\ True
+  check "a :/\\ pair builds and matches nested pairs" (flat == (1, ("two", True)) && (case flat of _ :/\ t :/\ _ -> t == "two"))
+
+  -- 8. All of the above ran in Pure, not IO.
   n <- readIORef failures
   if n == 0 then putStrLn "all checks passed" else putStrLn (show n <> " checks failed") >> exitFailure

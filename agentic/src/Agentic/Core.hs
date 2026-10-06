@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 -- | Flows: typed, inspectable descriptions of agentic work.
 module Agentic.Core
@@ -22,6 +23,11 @@ module Agentic.Core
   , repeatUntil
   , note
   , named
+    -- * Plumbing
+  , takeFirst
+  , takeSecond
+  , (:/\)
+  , pattern (:/\)
     -- * Judgement helpers
   , keep
   , gate
@@ -63,6 +69,10 @@ data Step m i o where
     -- ^ The input re-wrapped without changing it ('Left', 'Right'), so that
     -- 'Agentic.Describe.describe' can show it as a pass-through.
   Arr :: (i -> o) -> Step m i o
+  TakeFirst :: Step m (a, b) a
+    -- ^ 'takeFirst': unlike @arr fst@, 'Agentic.Describe.describe' can see
+    -- which half it keeps.
+  TakeSecond :: Step m (a, b) b
   Act :: (i -> m o) -> Step m i o
   Draft :: Codec i -> Codec o -> Instruction -> [Tool m] -> Step m i o
   Judge :: Codec i -> Questions o -> Step m i o
@@ -110,6 +120,29 @@ instance ArrowChoice (Agentic m) where
   right f = Choose (Step (Wrap Left)) (f >>> Step (Wrap Right))
   f +++ g = Choose (f >>> Step (Wrap Left)) (g >>> Step (Wrap Right))
   f ||| g = Choose f g
+
+-- | The first half of a pair. It does what @arr fst@ does, but a diagram can
+-- follow it: after @&&&@ or @***@, it knows which step the half came from.
+takeFirst :: Agentic m (a, b) a
+takeFirst = Step TakeFirst
+
+-- | The second half of a pair, like 'takeFirst'.
+takeSecond :: Agentic m (a, b) b
+takeSecond = Step TakeSecond
+
+infixr 6 :/\
+
+-- | A pair, written so that the nested pairs @&&&@ and @***@ build read flat:
+-- @a &&& b &&& c@ gives an @A :\/\\ B :\/\\ C@, which is @(A, (B, C))@.
+type a :/\ b = (a, b)
+
+-- | Build or match a pair the same way:
+--
+-- > arr (\(creature :/\ picture :/\ card) -> Entry creature picture card)
+pattern (:/\) :: a -> b -> (a, b)
+pattern a :/\ b = (a, b)
+
+{-# COMPLETE (:/\) #-}
 
 -- | An LLM writes an @o@ from the step's input.
 --
