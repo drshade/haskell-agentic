@@ -415,7 +415,7 @@ dot d =
       Again -> ["style=dashed"]
     -- JSON's string escapes are also DOT's.
     str = renderJson . String
-    inner = T.init . T.drop 1 . str
+    inner = T.pack . init . drop 1 . T.unpack . str
 
 -- | Is the node with this id inside the box with that id?
 inBox :: Text -> Text -> [Item] -> Bool
