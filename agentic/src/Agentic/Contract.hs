@@ -43,7 +43,7 @@ module Agentic.Contract
   , OptionSet (..)
   , Option (..)
   , option
-  , described
+  , documentedOptions
   , Enumeration (..)
   , enumeration
 #ifndef __MHS__
@@ -192,7 +192,7 @@ requiredWith name d c get =
           | otherwise -> Left ("missing field " <> name)
     )
   where
-    schema = maybe id documentSchema d (codecSchema c)
+    schema = maybe id documentedSchema d (codecSchema c)
     nullable = case shape (codecSchema c) of
       SNullable _ -> True
       _ -> False
@@ -206,7 +206,7 @@ optional = required
 record :: Text -> ObjectCodec a a -> Codec a
 record d o =
   Codec
-    (documentSchema' (nonEmpty d) (schemaOf (SObject (objectFields o))))
+    (documentedSchema' (nonEmpty d) (schemaOf (SObject (objectFields o))))
     (Object . objectEncode o)
     ( \case
         Object kvs -> objectDecode o kvs
@@ -246,7 +246,7 @@ sumCodec :: Maybe Text -> [Case a] -> Codec a
 sumCodec d cases
   | all (null . caseFields) cases =
       Codec
-        (documentSchema' d (schemaOf (SEnum [(caseTag c, caseDoc c) | c <- cases])))
+        (documentedSchema' d (schemaOf (SEnum [(caseTag c, caseDoc c) | c <- cases])))
         (\a -> maybe Null (String . caseTag) (matching a))
         ( \case
             String t | Just c <- byTag t -> caseDecode c []
@@ -254,7 +254,7 @@ sumCodec d cases
         )
   | otherwise =
       Codec
-        (documentSchema' d (schemaOf (SSum [Variant (caseTag c) (caseDoc c) (caseFields c) | c <- cases])))
+        (documentedSchema' d (schemaOf (SSum [Variant (caseTag c) (caseDoc c) (caseFields c) | c <- cases])))
         ( \a -> case [(caseTag c, kvs) | c <- cases, Just kvs <- [caseEncode c a]] of
             (t, kvs) : _ -> Object (("tag", String t) : kvs)
             [] -> Null
@@ -274,7 +274,7 @@ sumCodec d cases
 
 -- | Describe the whole type.
 documented :: Text -> Codec a -> Codec a
-documented d c = c {codecSchema = documentSchema d (codecSchema c)}
+documented d c = c {codecSchema = documentedSchema d (codecSchema c)}
 
 -- | Describe one field of a record (or of any constructor of a sum). Naming a
 -- field that doesn't exist is an error when the schema is first used.
@@ -289,7 +289,7 @@ field name d c = c {codecSchema = s {shape = update (shape s)}}
       _ -> error ("Agentic.Contract.field: no field named " <> T.unpack name)
     named f = fieldName f == name
     describeField f
-      | named f = f {fieldSchema = documentSchema d (fieldSchema f)}
+      | named f = f {fieldSchema = documentedSchema d (fieldSchema f)}
       | otherwise = f
 
 -- | A constraint the wire schemas can't express. It's stated to the model and
@@ -310,8 +310,8 @@ between lo hi =
     ("between " <> T.pack (show lo) <> " and " <> T.pack (show hi))
     (\a -> a >= lo && a <= hi)
 
-documentSchema' :: Maybe Text -> Schema -> Schema
-documentSchema' = maybe id documentSchema
+documentedSchema' :: Maybe Text -> Schema -> Schema
+documentedSchema' = maybe id documentedSchema
 
 nonEmpty :: Text -> Maybe Text
 nonEmpty t = if T.null t then Nothing else Just t
@@ -434,8 +434,9 @@ class Options a where
 option :: Show a => a -> Text -> Option a
 option v d = Option v (label v) (nonEmpty d)
 
-described :: Text -> [Option a] -> OptionSet a
-described d = OptionSet (nonEmpty d)
+-- | Options with a description of the whole set.
+documentedOptions :: Text -> [Option a] -> OptionSet a
+documentedOptions d = OptionSet (nonEmpty d)
 
 -- | An option's label: what the model sees and answers with. For an
 -- enumeration, 'show' gives the constructor's name.
@@ -454,7 +455,7 @@ instance (Options a, Eq a) => Contract (Enumeration a) where
 enumeration :: forall a. (Options a, Eq a) => Codec a
 enumeration =
   Codec
-    (documentSchema' (optionsDoc set) (schemaOf (SEnum [(optionLabel o, optionDoc o) | o <- opts])))
+    (documentedSchema' (optionsDoc set) (schemaOf (SEnum [(optionLabel o, optionDoc o) | o <- opts])))
     (\a -> maybe Null (String . optionLabel) (find ((== a) . optionValue) opts))
     ( \case
         String t | Just o <- find ((== t) . optionLabel) opts -> Right (optionValue o)

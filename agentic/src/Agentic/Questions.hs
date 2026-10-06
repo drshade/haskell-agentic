@@ -1,7 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
--- | Questions for a System One model such as Jev. Following Jev's terms, a step
--- asks t'Questions' about its input, the /state/.
+-- | Questions for a System One model such as Jev: a step asks t'Questions'
+-- about its input.
 module Agentic.Questions
   ( -- * Questions
     Questions (..)
@@ -11,8 +11,9 @@ module Agentic.Questions
     -- * Answers
   , Probability
   , probability
-  , fromBasisPoints
+  , toProbability
   , basisPoints
+  , fromBasisPoints
   , YesNo (..)
   , Choice (..)
   , Score (..)
@@ -59,11 +60,14 @@ probability :: Probability -> Double
 probability (Probability bp) = fromIntegral bp / 10000
 
 -- | Convert a provider's probability, rounding once (half to even).
-fromBasisPoints :: Double -> Probability
-fromBasisPoints d = clamp (round (d * 10000))
+toProbability :: Double -> Probability
+toProbability d = clamp (round (d * 10000))
 
 basisPoints :: Probability -> Int
 basisPoints (Probability bp) = bp
+
+fromBasisPoints :: Int -> Probability
+fromBasisPoints = clamp
 
 -- ---------------------------------------------------------------------------
 -- Answers
@@ -90,7 +94,7 @@ data Score a = Score
 -- Answers have contracts, so a judgement can be a tool's output.
 
 instance Contract Probability where
-  contract = mapCodec fromBasisPoints probability (contract @Double)
+  contract = mapCodec toProbability probability (contract @Double)
 
 instance Contract YesNo where
   contract = record "A yes/no judgement" (YesNo <$> required "yes" "The probability that the answer is yes" yes)
@@ -130,9 +134,9 @@ data Answer
     -- ^ The position, each level's probability (by index), and the confidence.
   deriving (Eq, Show)
 
--- | What a System One provider receives: the encoded state and the questions.
+-- | What a System One provider receives: the encoded input and the questions.
 data JudgeRequest = JudgeRequest
-  { requestState :: Value
+  { requestInput :: Value
   , requestQuestions :: [QuestionSpec]
   }
   deriving (Eq, Ord, Show)
@@ -140,7 +144,7 @@ data JudgeRequest = JudgeRequest
 -- ---------------------------------------------------------------------------
 -- Questions
 
--- | One or more questions about the same state, sent as one request. Combine
+-- | One or more questions about the same input, sent as one request. Combine
 -- them applicatively:
 --
 -- > judge (Review <$> funny <*> groan)
@@ -181,7 +185,7 @@ choice q = single (AskChoice q (labels opts)) $ \case
   where
     opts = optionList (options @a)
 
--- | Place the state on an 'Options' type's levels, lowest first.
+-- | Place the input on an 'Options' type's levels, lowest first.
 score :: forall a. Options a => Text -> Questions (Score a)
 score q = single (AskScore q (labels opts)) $ \case
   ScoreAnswer pos ps conf ->

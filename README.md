@@ -147,10 +147,10 @@ for the right shape and hoped for the best. Checks the schemas can't express,
 like `between 1 10`, are checked locally, and a failed one goes back to the
 model to try again.
 
-This is the core design assumption: the types ARE the prompt. The state's types
+This is the core design assumption: the types ARE the prompt. The input's types
 are part of what the model reads, and field names carry meaning. A meeting note
 wrapped in a record with `setup` and `punchline` fields looks like a joke before
-the model reads a word. So give each step the state it should judge, and no more.
+the model reads a word. So give each step the input it should judge, and no more.
 
 And describe an enumeration once - Claude and Jev both see the same wording (see
 `Options` below).
@@ -183,7 +183,7 @@ Jev also has `choice` and `score`, over an `Options` type:
 data Groan = Mild | Solid | Unbearable deriving (Generic, Show)
 
 instance Options Groan where
-  options = described "How much the audience groans"
+  options = documentedOptions "How much the audience groans"
     [ option Mild       "A polite smile; most people didn't notice"
     , option Solid      "An audible groan from most of the room"
     , option Unbearable "People get up and leave" ]
@@ -355,9 +355,9 @@ flowchart TD
   n9 --> output
 ```
 
-`describe` returns a plain `Description` you can walk yourself, and `toValue`
-turns it into JSON for UIs and other agents. The tree hides unnamed glue between
-steps, but never a branch.
+`describe` returns a plain `Description` you can walk yourself, and
+`descriptionValue` turns it into JSON for UIs and other agents. The tree hides
+unnamed glue between steps, but never a branch.
 
 ### Naming things
 
@@ -468,7 +468,7 @@ A system prompt for every `draft` is a setting
 
 The library never tells the model how to format its reply - the providers'
 strict structured outputs take care of that. What the model gets is meaning: the
-instruction, the state, and your contracts' descriptions.
+instruction, the input, and your contracts' descriptions.
 
 And there are no sessions to manage. Anything a later step needs goes through
 the types. Memory across runs is yours to own - put it in the flow's types, or
@@ -502,7 +502,7 @@ network:
 testRuntime :: IO (Runtime IO)
 testRuntime = do
   two <- scripted [respond joke]
-  pure runtime { systemOne = alwaysYes 0.95, systemTwo = two }
+  pure runtime { systemOne = fixedAnswers 0.95, systemTwo = two }
 ```
 
 ## History

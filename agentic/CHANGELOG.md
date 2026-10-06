@@ -1,5 +1,20 @@
 # Changelog for agentic
 
+## 0.2.0.3 - 2026-10-06
+
+* `fromBasisPoints` is renamed `toProbability`, the inverse of `probability`:
+  it takes a probability such as 0.9. `fromBasisPoints` now takes basis points,
+  the inverse of `basisPoints`.
+* A step's input is called its input everywhere, not its state: the
+  `Conversation` fields are `input`, `inputSchema` and `outputSchema`,
+  `JudgeRequest`'s is `requestInput`, and `JudgeInfo`'s is `judgeInput`.
+* Attaching a description is `documented…` throughout: `documentSchema` is
+  `documentedSchema`, and `described` is `documentedOptions`.
+* `Agentic.Scripted.alwaysYes` is `fixedAnswers`; it gives yes/no questions
+  whatever probability it's given.
+* `Agentic.Describe.toValue` is `descriptionValue`.
+* `endpoint` takes `Text`, like the other settings.
+
 ## 0.2.0.2 - 2026-10-01
 
 * The core now builds and runs under MicroHs as well as GHC. Generic

@@ -27,10 +27,10 @@ conversation =
   Conversation
     { path = []
     , instruction = "Suggest 3 dinosaurs"
-    , state = Null
-    , stateSchema = schemaOf SNull
+    , input = Null
+    , inputSchema = schemaOf SNull
     , tools = [ToolSpec "search" "Search the fossil database" (codecSchema (contract @Text))]
-    , output = codecSchema (contract @[Text])
+    , outputSchema = codecSchema (contract @[Text])
     , history = []
     }
 
@@ -57,7 +57,7 @@ main = hspec $ Test.Hspec.describe "Agentic.OpenAI" $ do
         )
 
   it "names the schema after its type, and shares repeated types through $defs" $ do
-    let format = at "format" (at "text" (body conversation {output = codecSchema (contract @Board)}))
+    let format = at "format" (at "text" (body conversation {outputSchema = codecSchema (contract @Board)}))
         schema = at "schema" format
     at "name" format `shouldBe` J.String "Board"
     at "top" (at "properties" schema) `shouldBe` fromJust (J.decode "{\"$ref\":\"#/$defs/Row\"}")

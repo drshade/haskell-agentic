@@ -33,7 +33,7 @@ data Kind = Dinosaur | Pterosaur | MarineReptile | Fish | Mammal | Bird | Other
 
 instance Options Kind where
   options =
-    described
+    documentedOptions
       "What kind of animal it was"
       [ option Dinosaur "A dinosaur that isn't a bird, such as Triceratops or Velociraptor"
       , option Pterosaur "A flying reptile, such as Pteranodon. Not a dinosaur."

@@ -13,7 +13,7 @@
 module Agentic.IO.Store
   ( Mode (..)
   , withStore
-  , StoreMiss (..)
+  , StoreError (..)
   ) where
 
 import Agentic.Aeson (fromAeson)
@@ -46,14 +46,19 @@ data Mode
     -- answer) when it can't.
   deriving (Eq, Show)
 
--- | A replayed run asked something the recording doesn't have.
-data StoreMiss = StoreMiss FilePath Text
+data StoreError
+  = StoreMiss FilePath Text
+    -- ^ A replayed run asked something the recording doesn't have.
+  | StoreUnreadable FilePath Text
+    -- ^ The recording has an answer that can't be read back.
   deriving (Show)
 
-instance Exception StoreMiss where
-  displayException (StoreMiss file what) =
-    "The recording " <> file <> " has no answer for " <> T.unpack what
-      <> ". Something upstream changed; record again, or use ReplayOrRecord."
+instance Exception StoreError where
+  displayException = \case
+    StoreMiss file what ->
+      "The recording " <> file <> " has no answer for " <> T.unpack what
+        <> ". Something upstream changed; record again, or use ReplayOrRecord."
+    StoreUnreadable file what -> "The recording " <> file <> " has " <> T.unpack what <> " that can't be read; record again."
 
 -- | Wrap a runtime's System One and System Two with a store in @file@.
 withStore :: Mode -> FilePath -> Runtime IO -> IO (Runtime IO)
@@ -73,15 +78,15 @@ withStore mode file rt = do
             withMVar lock $ \_ -> append file key answer
             pure answer
       one request =
-        lookupOr (judgeKey request) ("a judgement: " <> questionsText request) (encodeAnswers <$> askSystemOne (systemOne rt) request)
-          >>= decodedAs (MalformedAnswers ("unreadable stored answers in " <> T.pack file)) decodeAnswers'
+        lookupOr (judgeKey request) ("a judgement: " <> questionsText request) (encodeStoredAnswers <$> askSystemOne (systemOne rt) request)
+          >>= decodedAs "answers to a judgement" decodeStoredAnswers
       two conversation =
-        lookupOr (turnKey conversation) ("a turn of: " <> instructionText (instruction conversation)) (encodeTurn <$> askSystemTwo (systemTwo rt) conversation)
-          >>= decodedAs (MalformedAnswers ("an unreadable stored turn in " <> T.pack file)) decodeTurn
+        lookupOr (turnKey conversation) ("a turn of: " <> instructionText (instruction conversation)) (encodeStoredTurn <$> askSystemTwo (systemTwo rt) conversation)
+          >>= decodedAs "a turn" decodeStoredTurn
   pure rt {systemOne = SystemOne one, systemTwo = SystemTwo two}
   where
-    decodedAs :: FlowError -> (Value -> Maybe a) -> Value -> IO a
-    decodedAs err decode' = maybe (throwIO err) pure . decode'
+    decodedAs :: Text -> (Value -> Maybe a) -> Value -> IO a
+    decodedAs what decode' = maybe (throwIO (StoreUnreadable file what)) pure . decode'
     questionsText r = T.intercalate "; " (map question (requestQuestions r))
     question = \case
       AskYesNo q -> q
@@ -130,10 +135,10 @@ turnKey c =
     [ ("kind", String "turn")
     , ("path", Array [String (noteName n) | n <- path c])
     , ("instruction", String (instructionText (instruction c)))
-    , ("state", state c)
-    , ("stateSchema", jsonSchema (stateSchema c))
+    , ("input", input c)
+    , ("inputSchema", jsonSchema (inputSchema c))
     , ("tools", Array [Object [("name", String (specName t)), ("description", String (specDescription t)), ("input", jsonSchema (specInput t))] | t <- tools c])
-    , ("output", jsonSchema (output c))
+    , ("outputSchema", jsonSchema (outputSchema c))
     , ("history", Array (map exchange (history c)))
     ]
   where
@@ -145,7 +150,7 @@ turnKey c =
       ToolFailed t -> Object [("failed", String t)]
 
 judgeKey :: JudgeRequest -> Value
-judgeKey r = Object [("kind", String "judgement"), ("state", requestState r), ("questions", Array (map spec (requestQuestions r)))]
+judgeKey r = Object [("kind", String "judgement"), ("input", requestInput r), ("questions", Array (map spec (requestQuestions r)))]
   where
     spec = \case
       AskYesNo q -> Object [("yesNo", String q)]
@@ -156,15 +161,15 @@ judgeKey r = Object [("kind", String "judgement"), ("state", requestState r), ("
 -- ---------------------------------------------------------------------------
 -- Answers
 
-encodeTurn :: Turn -> Value
-encodeTurn (Turn (Raw r) a) = Object [("raw", r), ("action", act a)]
+encodeStoredTurn :: Turn -> Value
+encodeStoredTurn (Turn (Raw r) a) = Object [("raw", r), ("action", act a)]
   where
     act = \case
       CallTools calls -> Object [("callTools", Array [Object [("id", String (callId c)), ("name", String (callName c)), ("input", callInput c)] | c <- calls])]
       Respond v -> Object [("respond", v)]
 
-decodeTurn :: Value -> Maybe Turn
-decodeTurn = \case
+decodeStoredTurn :: Value -> Maybe Turn
+decodeStoredTurn = \case
   Object kvs -> do
     r <- lookupField "raw" kvs
     a <- lookupField "action" kvs
@@ -182,8 +187,8 @@ decodeTurn = \case
       Just (String t) -> Just t
       _ -> Nothing
 
-encodeAnswers :: [Answer] -> Value
-encodeAnswers = Array . map answer
+encodeStoredAnswers :: [Answer] -> Value
+encodeStoredAnswers = Array . map answer
   where
     answer = \case
       YesNoAnswer p -> Object [("yesNo", prob p)]
@@ -191,8 +196,8 @@ encodeAnswers = Array . map answer
       ScoreAnswer pos ps c -> Object [("score", Number pos), ("probabilities", Array [Array [Integer (toInteger i), prob p] | (i, p) <- ps]), ("confidence", prob c)]
     prob = Integer . toInteger . basisPoints
 
-decodeAnswers' :: Value -> Maybe [Answer]
-decodeAnswers' = \case
+decodeStoredAnswers :: Value -> Maybe [Answer]
+decodeStoredAnswers = \case
   Array xs -> traverse answer xs
   _ -> Nothing
   where
@@ -216,7 +221,7 @@ decodeAnswers' = \case
       Integer i -> Just (fromInteger i)
       _ -> Nothing
     prob = \case
-      Integer bp -> Just (fromBasisPoints (fromInteger bp / 10000))
+      Integer bp -> Just (fromBasisPoints (fromInteger bp))
       _ -> Nothing
     number = \case
       Number d -> Just d

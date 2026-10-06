@@ -13,14 +13,14 @@ module Agentic.Describe
   , NodeKind (..)
   , Edge (..)
   , EdgeStyle (..)
-  , toValue
+  , descriptionValue
   ) where
 
 import Agentic.Contract (Codec (..))
 import Agentic.Core
 import Agentic.Questions (QuestionSpec (..), Questions (..))
 import Agentic.Schema (Schema, typeLabel)
-import Agentic.Value (Value (..))
+import Agentic.Value (Value (..), renderJson)
 import Data.List (mapAccumL)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -53,7 +53,7 @@ data StepInfo
       , draftTools :: [ToolInfo]
       }
   | JudgeInfo
-      { judgeState :: Schema
+      { judgeInput :: Schema
       , judgeQuestions :: [QuestionSpec]
       }
 
@@ -413,8 +413,9 @@ dot d =
       Flow -> []
       Uses -> ["style=dotted", "arrowhead=none"]
       Again -> ["style=dashed"]
-    str t = "\"" <> inner t <> "\""
-    inner = concatMapText (\case '"' -> "\\\""; '\\' -> "\\\\"; c -> T.singleton c)
+    -- JSON's string escapes are also DOT's.
+    str = renderJson . String
+    inner = T.init . T.drop 1 . str
 
 -- | Is the node with this id inside the box with that id?
 inBox :: Text -> Text -> [Item] -> Bool
@@ -449,20 +450,20 @@ firstNode b = go
 -- JSON
 
 -- | The description as a JSON-shaped value, for UIs and other agents.
-toValue :: Description -> Value
-toValue = \case
+descriptionValue :: Description -> Value
+descriptionValue = \case
   Leaf info -> leaf info
-  Sequence ds -> node "sequence" [("steps", Array (map toValue ds))]
-  Together ds -> node "together" [("steps", Array (map toValue ds))]
-  Halves l r -> node "halves" [("first", toValue l), ("second", toValue r)]
-  Branch l r -> node "branch" [("left", toValue l), ("right", toValue r)]
-  ForEach d -> node "each" [("step", toValue d)]
-  Repeated d -> node "repeat" [("step", toValue d)]
+  Sequence ds -> node "sequence" [("steps", Array (map descriptionValue ds))]
+  Together ds -> node "together" [("steps", Array (map descriptionValue ds))]
+  Halves l r -> node "halves" [("first", descriptionValue l), ("second", descriptionValue r)]
+  Branch l r -> node "branch" [("left", descriptionValue l), ("right", descriptionValue r)]
+  ForEach d -> node "each" [("step", descriptionValue d)]
+  Repeated d -> node "repeat" [("step", descriptionValue d)]
   Annotated n d ->
     node "note" $
       [("name", String (noteName n))]
         <> maybe [] (\t -> [("description", String t)]) (noteDescription n)
-        <> [("step", toValue d)]
+        <> [("step", descriptionValue d)]
   where
     node kind fields = Object (("kind", String kind) : fields)
     leaf = \case
@@ -478,7 +479,7 @@ toValue = \case
           , ("tools", Array (map tool tools))
           ]
       JudgeInfo input qs ->
-        node "judge" [("state", String (typeLabel input)), ("questions", Array (map question qs))]
+        node "judge" [("input", String (typeLabel input)), ("questions", Array (map question qs))]
     tool t =
       Object
         [ ("name", String (infoName t))
@@ -490,10 +491,6 @@ toValue = \case
       AskYesNo q -> Object [("type", String "yesNo"), ("question", String q)]
       AskChoice q opts -> Object [("type", String "choice"), ("question", String q), ("options", Array [String l | (l, _) <- opts])]
       AskScore q levels -> Object [("type", String "score"), ("question", String q), ("levels", Array [String l | (l, _) <- levels])]
-
--- | 'T.concatMap', which MicroHs's "Data.Text" doesn't provide.
-concatMapText :: (Char -> Text) -> Text -> Text
-concatMapText f = T.concat . map f . T.unpack
 
 -- | Apply a function to a pair's second half. (MicroHs has no Functor instance
 -- for pairs.)

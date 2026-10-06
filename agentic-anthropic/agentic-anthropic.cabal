@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               agentic-anthropic
-version:            0.2.0.2
+version:            0.2.0.3
 synopsis:           Claude as the System Two provider for agentic
 description:
   Runs agentic's draft steps on Claude through the Messages API, with strict structured outputs and tools, and can stand in as System One.

@@ -22,10 +22,10 @@ viaLLM two = SystemOne $ \request -> do
         Conversation
           { path = []
           , instruction = Instruction "Answer each question about the input. Give every probability as a number from 0 to 1."
-          , state = requestState request
-          , stateSchema = schemaOf SNull
+          , input = requestInput request
+          , inputSchema = schemaOf SNull
           , tools = []
-          , output = schemaOf (SObject [Field qid (questionSchema q) True | (qid, q) <- qs])
+          , outputSchema = schemaOf (SObject [Field qid (questionSchema q) True | (qid, q) <- qs])
           , history = []
           }
   turn <- askSystemTwo two conversation
@@ -40,12 +40,12 @@ viaLLM two = SystemOne $ \request -> do
 questionSchema :: QuestionSpec -> Schema
 questionSchema = \case
   AskYesNo q ->
-    documentSchema q (schemaOf (SObject [Field "probabilityYes" (documentSchema "The probability that the answer is yes" (schemaOf SNumber)) True]))
+    documentedSchema q (schemaOf (SObject [Field "probabilityYes" (documentedSchema "The probability that the answer is yes" (schemaOf SNumber)) True]))
   AskChoice q opts -> distribution (q <> " Give each option's probability; they should sum to 1.") opts
   AskScore q levels -> distribution (q <> " The options are ordered levels, lowest first. Give each level's probability; they should sum to 1.") levels
   where
     distribution q opts =
-      documentSchema q (schemaOf (SObject [Field l (documentSchema (maybe l id d) (schemaOf SNumber)) True | (l, d) <- opts]))
+      documentedSchema q (schemaOf (SObject [Field l (documentedSchema (maybe l id d) (schemaOf SNumber)) True | (l, d) <- opts]))
 
 answer :: QuestionSpec -> Value -> Either Text Answer
 answer spec v = case (spec, v) of
@@ -64,6 +64,6 @@ answer spec v = case (spec, v) of
   where
     get k kvs = maybe (Left ("missing " <> k)) Right (lookupField k kvs)
     number = \case
-      Number d -> Right (fromBasisPoints d)
-      Integer n -> Right (fromBasisPoints (fromInteger n))
+      Number d -> Right (toProbability d)
+      Integer n -> Right (toProbability (fromInteger n))
       other -> Left ("expected a probability, got " <> renderJson other)

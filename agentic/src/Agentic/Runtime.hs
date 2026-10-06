@@ -43,11 +43,11 @@ data Conversation = Conversation
   { path :: [Note]
     -- ^ Where this step is in the flow.
   , instruction :: Instruction
-  , state :: Value
+  , input :: Value
     -- ^ The step's input, encoded by its contract.
-  , stateSchema :: Schema
+  , inputSchema :: Schema
   , tools :: [ToolSpec]
-  , output :: Schema
+  , outputSchema :: Schema
     -- ^ The schema of the step's result.
   , history :: [Exchange]
     -- ^ Earlier turns of this step, oldest first. Append-only.

@@ -2,7 +2,7 @@ module Main (main) where
 
 import Agentic
 import Agentic.IO
-import Agentic.Scripted (alwaysYes, replyingWith, respond)
+import Agentic.Scripted (fixedAnswers, replyingWith, respond)
 import Control.Exception (try)
 import Data.IORef
 import Data.Text (Text)
@@ -31,7 +31,7 @@ counting = do
   turns <- newIORef 0
   judgements <- newIORef 0
   let SystemTwo two = replyingWith (const (respond joke))
-      SystemOne one = alwaysYes 0.8
+      SystemOne one = fixedAnswers 0.8
   pure
     ( runtime
         { systemTwo = SystemTwo (\c -> modifyIORef turns (+ 1) >> two c)
@@ -75,7 +75,7 @@ main = hspec $ Test.Hspec.describe "withStore" $ do
     _ <- interpret recording flow "scarecrows"
     replaying <- withStore Replay file offline
     result <- try (interpret replaying flow "penguins")
-    either (\(StoreMiss _ what) -> what) (const "no miss") result `shouldBe` "a turn of: a joke about this"
+    either (\case StoreMiss _ what -> what; StoreUnreadable _ _ -> "unreadable") (const "no miss") result `shouldBe` "a turn of: a joke about this"
 
   it "replays what it has and records what it doesn't" $ do
     file <- fresh "agentic-store-both.jsonl"

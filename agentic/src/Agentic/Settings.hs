@@ -28,7 +28,7 @@ class HasKey c where
   key :: Text -> c -> c
 
 class HasEndpoint c where
-  endpoint :: String -> c -> c
+  endpoint :: Text -> c -> c
 
 -- | How long to wait for a response, in seconds.
 class HasTimeout c where

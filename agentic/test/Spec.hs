@@ -27,7 +27,7 @@ data Groan = Mild | Solid | Unbearable
 
 instance Options Groan where
   options =
-    described
+    documentedOptions
       "How much the audience groans"
       [ option Mild "A polite smile"
       , option Solid "An audible groan"
@@ -45,8 +45,8 @@ instance Contract Rating where
 data Review = Review {funnyAnswer :: YesNo, groanAnswer :: Score Groan}
   deriving (Show, Eq)
 
-described' :: Codec Joke
-described' =
+documentedJoke :: Codec Joke
+documentedJoke =
   record "A joke, split into its parts" $
     Joke
       <$> required "genre" "The style of joke" genre
@@ -69,7 +69,7 @@ joke = Joke "pun" "Why was the scarecrow promoted?" "He was outstanding in his f
 testRuntime :: [Action] -> Probability -> IO (Runtime IO)
 testRuntime turns p = do
   two <- scripted turns
-  pure runtime {systemOne = alwaysYes p, systemTwo = two}
+  pure runtime {systemOne = fixedAnswers p, systemTwo = two}
 
 roundTrips :: (Eq a, Show a) => Codec a -> a -> Expectation
 roundTrips c a = decode c (encode c a) `shouldBe` Right a
@@ -93,7 +93,7 @@ main = hspec $ do
       title (codecSchema (contract @Joke)) `shouldBe` Just "Joke"
 
     it "keeps descriptions written in the codec" $
-      case shape (codecSchema described') of
+      case shape (codecSchema documentedJoke) of
         SObject fs -> map (doc . fieldSchema) fs `shouldBe` map Just ["The style of joke", "The setup line", "The line that lands it"]
         other -> expectationFailure (show other)
 

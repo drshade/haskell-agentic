@@ -25,7 +25,7 @@ data Groan = Mild | Solid | Unbearable
 
 instance Options Groan where
   options =
-    described
+    documentedOptions
       "How much the audience groans"
       [option Mild "A polite smile", option Solid "An audible groan", option Unbearable "People get up and leave"]
 

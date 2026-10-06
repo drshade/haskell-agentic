@@ -46,7 +46,7 @@ data Topic = Refund | Delivery | Recommendation | Complaint | Other
 
 instance Options Topic where
   options =
-    described
+    documentedOptions
       "What the email is about"
       [ option Refund "Wants their money back for an order"
       , option Delivery "Asks where an order is, or reports a delivery problem"
@@ -62,7 +62,7 @@ data Urgency = Routine | Soon | Urgent
 
 instance Options Urgency where
   options =
-    described
+    documentedOptions
       "How quickly the shop should answer"
       [ option Routine "Can wait a day or two"
       , option Soon "Should be answered today"

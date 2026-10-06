@@ -52,15 +52,15 @@ interpret rt = go []
             answers <- askSystemOne (systemOne rt) request
             emit path (Judged request answers)
             answered (decodeAnswers qs answers)
-      Draft input out instruction tools -> do
+      Draft inCodec out instruction tools -> do
         let conversation =
               Conversation
                 { path = path
                 , instruction = instruction
-                , state = encode input x
-                , stateSchema = codecSchema input
+                , input = encode inCodec x
+                , inputSchema = codecSchema inCodec
                 , tools = map toolSpec tools
-                , output = codecSchema out
+                , outputSchema = codecSchema out
                 , history = []
                 }
         emit path (Drafting conversation)
@@ -83,15 +83,13 @@ interpret rt = go []
     runTool :: [Note] -> [Tool m] -> ToolCall -> m ToolResult
     runTool path tools call = do
       emit path (ToolCalled call)
-      result <- case find ((== callName call) . nameOf) tools of
+      result <- case find ((== callName call) . toolName) tools of
         Nothing -> pure (ToolFailed ("there is no tool named " <> callName call))
         Just (Tool name _ input out body) -> case decode input (callInput call) of
           Left problem -> pure (ToolFailed ("invalid input: " <> problem))
           Right i -> ToolOk . encode out <$> go (path <> [Note name Nothing]) body i
       emit path (ToolReturned (callId call) result)
       pure result
-      where
-        nameOf (Tool name _ _ _ _) = name
 
 toolSpec :: Tool m -> ToolSpec
 toolSpec (Tool name description input _ _) = ToolSpec name description (codecSchema input)

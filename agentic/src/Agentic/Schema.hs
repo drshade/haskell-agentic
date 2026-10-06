@@ -7,7 +7,7 @@ module Agentic.Schema
   , Variant (..)
   , Format (..)
   , schemaOf
-  , documentSchema
+  , documentedSchema
   , typeLabel
   , titled
   ) where
@@ -60,8 +60,8 @@ data Format = DateTime | Date | Email | Uri | Uuid
 schemaOf :: Shape -> Schema
 schemaOf = Schema Nothing Nothing []
 
-documentSchema :: Text -> Schema -> Schema
-documentSchema d s = s {doc = Just d}
+documentedSchema :: Text -> Schema -> Schema
+documentedSchema d s = s {doc = Just d}
 
 -- | Name the schema's type, unless it already has a name.
 titled :: Text -> Schema -> Schema

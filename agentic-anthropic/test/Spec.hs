@@ -18,10 +18,10 @@ conversation =
   Conversation
     { path = []
     , instruction = "Suggest 3 dinosaurs"
-    , state = Null
-    , stateSchema = schemaOf SNull
+    , input = Null
+    , inputSchema = schemaOf SNull
     , tools = [ToolSpec "search" "Search the fossil database" (codecSchema (contract @Text))]
-    , output = codecSchema (contract @[Text])
+    , outputSchema = codecSchema (contract @[Text])
     , history = []
     }
 
@@ -48,7 +48,7 @@ main = hspec $ Test.Hspec.describe "Agentic.Anthropic" $ do
         )
 
   it "keeps a record's field order in its schema" $ do
-    let body = renderJson (requestBody anthropic conversation {output = codecSchema (contract @(Text, Text, Text))})
+    let body = renderJson (requestBody anthropic conversation {outputSchema = codecSchema (contract @(Text, Text, Text))})
         at' k = T.length (fst (T.breakOn k body))
     (at' "\"_1\"" < at' "\"_2\"", at' "\"_2\"" < at' "\"_3\"") `shouldBe` (True, True)
 

@@ -7,7 +7,7 @@ module Agentic.Scripted
   , callTools
     -- * System One
   , answering
-  , alwaysYes
+  , fixedAnswers
   ) where
 
 import Agentic.Contract (Codec (..), Contract (..))
@@ -44,8 +44,8 @@ answering f = SystemOne (pure . map f . requestQuestions)
 
 -- | Yes/no questions get probability @p@; choices and scores pick the first
 -- option with certainty.
-alwaysYes :: Applicative m => Probability -> SystemOne m
-alwaysYes p = answering $ \case
+fixedAnswers :: Applicative m => Probability -> SystemOne m
+fixedAnswers p = answering $ \case
   AskYesNo _ -> YesNoAnswer p
   AskChoice _ ((l, _) : _) -> ChoiceAnswer l [(l, 1)] 1
   AskChoice _ [] -> ChoiceAnswer "" [] 0

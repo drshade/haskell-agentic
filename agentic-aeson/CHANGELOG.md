@@ -1,5 +1,9 @@
 # Changelog for agentic-aeson
 
+## 0.2.0.3 - 2026-10-06
+
+* No changes; released alongside agentic 0.2.0.3.
+
 ## 0.2.0.2 - 2026-10-01
 
 * No changes; released alongside agentic 0.2.0.2.

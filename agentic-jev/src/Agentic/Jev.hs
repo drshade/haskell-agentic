@@ -36,7 +36,7 @@ data Jev = Jev
   { model :: Text
   , key :: Maybe Text
     -- ^ Defaults to the @JEV_TOKEN@ environment variable.
-  , endpoint :: String
+  , endpoint :: Text
   , timeout :: Int
     -- ^ Seconds.
   }
@@ -57,7 +57,7 @@ instance HasTimeout Jev where timeout t c = c {timeout = t}
 
 -- | What can go wrong talking to Jev. Thrown in IO.
 data JevError
-  = MissingToken
+  = MissingKey
   | HttpError Int Text
     -- ^ Jev answered with a non-200 status, and this body.
   | UnexpectedResponse Text
@@ -65,16 +65,16 @@ data JevError
 
 instance Exception JevError where
   displayException = \case
-    MissingToken -> "Jev: no token. Set JEV_TOKEN, or use (jev & key ...)."
+    MissingKey -> "Jev: no key. Set JEV_TOKEN, or use (jev & key ...)."
     HttpError status body -> "Jev rejected the request (HTTP " <> show status <> "): " <> T.unpack body
     UnexpectedResponse problem -> "Jev sent a response agentic can't read: " <> T.unpack problem
 
 instance ProvidesSystemOne Jev where
   toSystemOne cfg = do
     token <- maybe (fmap T.pack <$> lookupEnv "JEV_TOKEN") (pure . Just) cfg.key
-    token' <- maybe (throwIO MissingToken) pure token
+    token' <- maybe (throwIO MissingKey) pure token
     manager <- newTlsManager
-    base <- Http.parseRequest cfg.endpoint
+    base <- Http.parseRequest (T.unpack cfg.endpoint)
     pure $ SystemOne $ \request -> do
       let http =
             base
@@ -83,7 +83,7 @@ instance ProvidesSystemOne Jev where
                   [ ("Authorization", "Bearer " <> T.encodeUtf8 token')
                   , ("Content-Type", "application/json")
                   ]
-              , Http.requestBody = Http.RequestBodyBS (T.encodeUtf8 (A.renderJson (requestBody cfg.model request)))
+              , Http.requestBody = Http.RequestBodyBS (T.encodeUtf8 (A.renderJson (requestBody cfg request)))
               , Http.responseTimeout = Http.responseTimeoutMicro (cfg.timeout * 1000000)
               }
       response <- Http.httpLbs http manager
@@ -95,13 +95,13 @@ instance ProvidesSystemOne Jev where
           Left problem -> throwIO (UnexpectedResponse (T.pack problem))
           Right value -> either (throwIO . UnexpectedResponse) pure (decodeResponse request value)
 
--- | The request body: the state, and each question under an id (@q0@, @q1@, …).
+-- | The request body: the input (Jev's @state@), and each question under an id (@q0@, @q1@, …).
 -- It's the core's 'A.Value' so that options keep their order.
-requestBody :: Text -> JudgeRequest -> A.Value
-requestBody name request =
+requestBody :: Jev -> JudgeRequest -> A.Value
+requestBody cfg request =
   A.Object
-    [ ("model", A.String name)
-    , ("state", requestState request)
+    [ ("model", A.String cfg.model)
+    , ("state", requestInput request)
     , ("questions", A.Object [(qid, question q) | (qid, q) <- ided (requestQuestions request)])
     ]
   where
@@ -128,19 +128,19 @@ decodeResponse request = either (Left . T.pack) Right . J.parseEither parse
       answers <- response .: "answers"
       traverse (\(qid, q) -> answers .: Key.fromText qid >>= answer q) (ided (requestQuestions request))
     answer q = J.withObject "answer" $ \a -> case q of
-      AskYesNo _ -> YesNoAnswer . fromBasisPoints <$> a .: "noul"
+      AskYesNo _ -> YesNoAnswer . toProbability <$> a .: "noul"
       AskChoice _ opts -> do
         ps <- a .: "probabilities"
         ChoiceAnswer
           <$> a .: "choice"
-          <*> traverse (\(l, _) -> (l,) . fromBasisPoints <$> ps .: Key.fromText l) opts
-          <*> (fromBasisPoints <$> a .: "confidence")
+          <*> traverse (\(l, _) -> (l,) . toProbability <$> ps .: Key.fromText l) opts
+          <*> (toProbability <$> a .: "confidence")
       AskScore _ levels -> do
         ps <- a .: "probabilities"
         ScoreAnswer
           <$> a .: "score"
-          <*> traverse (\i -> (i,) . fromBasisPoints <$> ps .: Key.fromText (T.pack (show i))) [0 .. length levels - 1]
-          <*> (fromBasisPoints <$> a .: "confidence")
+          <*> traverse (\i -> (i,) . toProbability <$> ps .: Key.fromText (T.pack (show i))) [0 .. length levels - 1]
+          <*> (toProbability <$> a .: "confidence")
 
 ided :: [a] -> [(Text, a)]
 ided = zip ["q" <> T.pack (show n) | n <- [0 :: Int ..]]

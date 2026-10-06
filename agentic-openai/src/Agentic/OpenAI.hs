@@ -48,7 +48,7 @@ data OpenAI = OpenAI
     -- ^ The model's default if unset.
   , key :: Maybe Text
     -- ^ Defaults to the @OPENAI_API_KEY@ environment variable.
-  , endpoint :: String
+  , endpoint :: Text
   , timeout :: Int
     -- ^ Seconds.
   }
@@ -108,7 +108,7 @@ instance ProvidesSystemTwo OpenAI where
   toSystemTwo cfg = do
     key' <- maybe (fmap T.pack <$> lookupEnv "OPENAI_API_KEY") (pure . Just) cfg.key >>= maybe (throwIO MissingKey) pure
     manager <- newTlsManager
-    base <- Http.parseRequest cfg.endpoint
+    base <- Http.parseRequest (T.unpack cfg.endpoint)
     pure $ SystemTwo $ \conversation -> do
       let http =
             base
@@ -148,8 +148,8 @@ requestBody cfg c =
                [ ( "format"
                  , A.Object
                      [ ("type", A.String "json_schema")
-                     , ("name", A.String (schemaName (output c)))
-                     , ("schema", objectSchema (output c))
+                     , ("name", A.String (schemaName (outputSchema c)))
+                     , ("schema", objectSchema (outputSchema c))
                      , ("strict", A.Bool True)
                      ]
                  )
@@ -161,8 +161,8 @@ requestBody cfg c =
       <> maybe [] (\e -> [("reasoning", A.Object [("effort", A.String (effortName e))])]) cfg.effort
       <> maybe [] (\n -> [("max_output_tokens", A.Integer (toInteger n))]) cfg.maxTokens
   where
-    task = message "user" (instructionText (instruction c) <> input)
-    input = case state c of
+    task = message "user" (instructionText (instruction c) <> inputText)
+    inputText = case input c of
       A.Null -> ""
       s -> "\n\nInput:\n" <> A.renderJson s
     tool spec =
@@ -235,7 +235,7 @@ decodeTurn c = either (Left . UnexpectedResponse . T.pack) id . J.parseEither pa
     -- A reply that isn't JSON goes back to the core as text; the output
     -- contract then rejects it and the model gets another go.
     final text = case decodeJson text of
-      Just v -> unwrap (output c) v
+      Just v -> unwrap (outputSchema c) v
       Nothing -> A.String text
     json t = maybe (A.String t) id (decodeJson t)
     decodeJson t = fromAeson <$> J.decode (TL.encodeUtf8 (TL.fromStrict t))

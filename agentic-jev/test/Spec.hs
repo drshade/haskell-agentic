@@ -13,7 +13,7 @@ data Groan = Mild | Solid | Unbearable
   deriving (Generic, Show, Eq)
 
 instance Options Groan where
-  options = described "" [option Mild "A polite smile", option Solid "An audible groan", option Unbearable "People leave"]
+  options = documentedOptions "" [option Mild "A polite smile", option Solid "An audible groan", option Unbearable "People leave"]
 
 request :: JudgeRequest
 request =
@@ -25,7 +25,7 @@ request =
 main :: IO ()
 main = hspec $ Test.Hspec.describe "Agentic.Jev" $ do
   it "builds Jev's request body" $
-    toAeson (requestBody "jev-latest" request)
+    toAeson (requestBody jev request)
       `shouldBe` fromJust
         ( J.decode
             "{\"model\":\"jev-latest\",\

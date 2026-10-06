@@ -51,7 +51,7 @@ data Anthropic = Anthropic
     -- ^ Let the API retry a refused request on a fallback model it picks.
   , key :: Maybe Text
     -- ^ Defaults to the @ANTHROPIC_API_KEY@ environment variable.
-  , endpoint :: String
+  , endpoint :: Text
   , timeout :: Int
     -- ^ Seconds.
   }
@@ -116,7 +116,7 @@ instance ProvidesSystemTwo Anthropic where
   toSystemTwo cfg = do
     key' <- maybe (fmap T.pack <$> lookupEnv "ANTHROPIC_API_KEY") (pure . Just) cfg.key >>= maybe (throwIO MissingKey) pure
     manager <- newTlsManager
-    base <- Http.parseRequest cfg.endpoint
+    base <- Http.parseRequest (T.unpack cfg.endpoint)
     pure $ SystemTwo $ \conversation -> do
       let http =
             base
@@ -156,7 +156,7 @@ requestBody cfg c =
       <> [ ("messages", A.Array (task : concatMap exchange (history c)))
          , ( "output_config"
            , A.Object
-               ( ("format", A.Object [("type", A.String "json_schema"), ("schema", objectSchema (output c))])
+               ( ("format", A.Object [("type", A.String "json_schema"), ("schema", objectSchema (outputSchema c))])
                    : maybe [] (\e -> [("effort", A.String (effortName e))]) cfg.effort
                )
            )
@@ -164,8 +164,8 @@ requestBody cfg c =
          ]
       <> [("fallbacks", A.String "default") | cfg.fallbacks]
   where
-    task = message "user" (A.String (instructionText (instruction c) <> input))
-    input = case state c of
+    task = message "user" (A.String (instructionText (instruction c) <> inputText))
+    inputText = case input c of
       A.Null -> ""
       s -> "\n\nInput:\n" <> A.renderJson s
     tool spec =
@@ -223,7 +223,7 @@ decodeTurn c = either (Left . UnexpectedResponse . T.pack) id . J.parseEither pa
     -- A reply that isn't JSON goes back to the core as text; the output
     -- contract then rejects it and the model gets another go.
     final text = case J.eitherDecode (TL.encodeUtf8 (TL.fromStrict text)) of
-      Right v -> unwrap (output c) (fromAeson v)
+      Right v -> unwrap (outputSchema c) (fromAeson v)
       Left _ -> A.String text
     unwrapInput name v = maybe v (`unwrap` v) (inputSchema name)
     inputSchema :: Text -> Maybe Schema
