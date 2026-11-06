@@ -55,7 +55,7 @@ instance Options Topic where
       , option Other "Anything else"
       ]
 
-deriving via Enumeration Topic instance Contract Topic
+instance Contract Topic where contract = enumeration
 
 data Urgency = Routine | Soon | Urgent
   deriving (Generic, Show, Eq)
@@ -69,7 +69,7 @@ instance Options Urgency where
       , option Urgent "Needs an answer within the hour"
       ]
 
-deriving via Enumeration Urgency instance Contract Urgency
+instance Contract Urgency where contract = enumeration
 
 -- | What Jev says about an email: three questions, one request.
 data Triage = Triage {topic :: Choice Topic, urgency :: Score Urgency, angry :: YesNo}
@@ -101,7 +101,7 @@ instance Contract Subject where
   contract =
     documented "A subject line for the reply" $
       checked "60 characters or fewer" ((<= 60) . T.length . (\(Subject s) -> s)) $
-        mapCodec Subject (\(Subject s) -> s) contract
+        mapContract Subject (\(Subject s) -> s) contract
 
 data Reply = Reply {recipient :: Text, subject :: Subject, text :: Text}
   deriving (Generic, Show, Contract)

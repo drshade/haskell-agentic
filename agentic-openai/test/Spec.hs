@@ -2,7 +2,8 @@ module Main (main) where
 
 import Agentic
 import Agentic.Runtime (Conversation (..))
-import Agentic.Schema (Shape (..))
+import Agentic.Schema (Schema(..), Field(..), Shape (..))
+import Agentic.JsonSchema (objectSchema)
 import Agentic.Aeson (toAeson)
 import Agentic.OpenAI
 import qualified Data.Aeson as J
@@ -22,6 +23,9 @@ data Row = Row {left :: Square, centre :: Square, right :: Square}
 data Board = Board {top :: Row, middle :: Row, bottom :: Row}
   deriving (Generic, Show, Contract)
 
+data Box a = Box { value :: a } deriving (Generic, Contract)
+data Repeated = Repeated { one :: Box Int, two :: Box Int } deriving (Generic, Contract)
+
 conversation :: Conversation
 conversation =
   Conversation
@@ -29,8 +33,8 @@ conversation =
     , instruction = "Suggest 3 dinosaurs"
     , input = Null
     , inputSchema = schemaOf SNull
-    , tools = [ToolSpec "search" "Search the fossil database" ((contract @Text).schema)]
-    , outputSchema = (contract @[Text]).schema
+    , tools = [ToolSpec "search" "Search the fossil database" ((modelContract @Text).schema)]
+    , outputSchema = (modelContract @[Text]).schema
     , history = []
     }
 
@@ -57,11 +61,32 @@ main = hspec $ Test.Hspec.describe "Agentic.OpenAI" $ do
         )
 
   it "names the schema after its type, and shares repeated types through $defs" $ do
-    let format = at "format" (at "text" (body conversation {outputSchema = (contract @Board).schema}))
+    let format = at "format" (at "text" (body conversation {outputSchema = (modelContract @Board).schema}))
         schema = at "schema" format
     at "name" format `shouldBe` J.String "Board"
     at "top" (at "properties" schema) `shouldBe` fromJust (J.decode "{\"$ref\":\"#/$defs/Row\"}")
     KeyMap.keys (case at "$defs" schema of J.Object o -> o; _ -> mempty) `shouldMatchList` ["Row", "Square"]
+
+  it "uses safe shared-definition keys for applied type names" $ do
+    let schema = toAeson (objectSchema (modelContract @Repeated).schema)
+    at "$ref" (at "one" (at "properties" schema)) `shouldBe` J.String "#/$defs/Box_Int"
+    at "$ref" (at "two" (at "properties" schema)) `shouldBe` J.String "#/$defs/Box_Int"
+    at "type" (at "Box_Int" (at "$defs" schema)) `shouldBe` J.String "object"
+
+  it "keeps colliding sanitized names and pointer punctuation distinct" $ do
+    let a = Schema (Just "Box Int") Nothing [] SInteger
+        b = Schema (Just "Box_Int") Nothing [] (SString Nothing)
+        c = Schema (Just "A/B~C") Nothing [] SBool
+        root = schemaOf (SObject [Field n ty True | (n, ty) <- [("a1",a),("a2",a),("b1",b),("b2",b),("c1",c),("c2",c)]])
+        schema = toAeson (objectSchema root)
+        defs = at "$defs" schema
+        props = at "properties" schema
+    at "$ref" (at "a1" props) `shouldBe` J.String "#/$defs/Box_Int"
+    at "$ref" (at "b1" props) `shouldBe` J.String "#/$defs/Box_Int_2"
+    at "$ref" (at "c1" props) `shouldBe` J.String "#/$defs/A_B_C"
+    at "type" (at "Box_Int" defs) `shouldBe` J.String "integer"
+    at "type" (at "Box_Int_2" defs) `shouldBe` J.String "string"
+    at "type" (at "A_B_C" defs) `shouldBe` J.String "boolean"
 
   it "stores nothing, and asks for reasoning it can send back" $ do
     at "store" (body conversation) `shouldBe` J.Bool False
@@ -102,3 +127,7 @@ main = hspec $ Test.Hspec.describe "Agentic.OpenAI" $ do
         truncated = decodeTurn conversation (fromJust (J.decode "{\"status\":\"incomplete\",\"incomplete_details\":{\"reason\":\"max_output_tokens\"},\"output\":[]}"))
     either (\case Refused "No." -> True; _ -> False) (const False) refusal `shouldBe` True
     either (\case Truncated -> True; _ -> False) (const False) truncated `shouldBe` True
+
+-- Test fixtures use known-supported model contracts; production code handles Left.
+modelContract :: Contract a => Codec a
+modelContract = either (error . show) id (compileModel contract)

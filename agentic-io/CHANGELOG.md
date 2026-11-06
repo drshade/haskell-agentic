@@ -1,5 +1,10 @@
 # Changelog for agentic-io
 
+## 0.2.1.0 - ???
+
+* Build against Agentic's structural contracts and fallible model compilation.
+  Provider wire schemas and protocols are unchanged.
+
 ## 0.2.0.5 - 2026-10-06
 
 * No changes; released alongside agentic 0.2.0.5.

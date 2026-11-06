@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               agentic-openai
-version:            0.2.0.5
+version:            0.2.1.0
 synopsis:           OpenAI as the System Two provider for agentic
 description:
   Runs agentic's draft steps on OpenAI models through the Responses API, with strict structured outputs and tools, and can stand in as System One.
@@ -38,8 +38,8 @@ library
   hs-source-dirs:   src
   exposed-modules:  Agentic.OpenAI
   build-depends:
-    , agentic          ==0.2.*
-    , agentic-aeson    ==0.2.*
+    , agentic          >=0.2.1 && <0.3
+    , agentic-aeson    >=0.2.1 && <0.3
     , aeson            >=2.1 && <2.3
     , base             >=4.18 && <5
     , bytestring       >=0.11 && <0.13
@@ -53,9 +53,9 @@ test-suite agentic-openai-test
   hs-source-dirs:   test
   main-is:          Spec.hs
   build-depends:
-    , agentic          ==0.2.*
-    , agentic-aeson    ==0.2.*
-    , agentic-openai   ==0.2.*
+    , agentic          >=0.2.1 && <0.3
+    , agentic-aeson    >=0.2.1 && <0.3
+    , agentic-openai   >=0.2.1 && <0.3
     , aeson            >=2.1 && <2.3
     , base             >=4.18 && <5
     , hspec            >=2.10 && <3
@@ -67,9 +67,9 @@ test-suite agentic-openai-live
   hs-source-dirs:   test-live
   main-is:          Live.hs
   build-depends:
-    , agentic          ==0.2.*
-    , agentic-openai   ==0.2.*
-    , agentic-io       ==0.2.*
+    , agentic          >=0.2.1 && <0.3
+    , agentic-openai   >=0.2.1 && <0.3
+    , agentic-io       >=0.2.1 && <0.3
     , base             >=4.18 && <5
     , hspec            >=2.10 && <3
     , text             >=2.0 && <2.2

@@ -49,6 +49,6 @@ quote s = "\"" <> concatMapText escape s <> "\""
 lookupField :: Text -> [(Text, Value)] -> Maybe Value
 lookupField = lookup
 
--- | 'T.concatMap', which MicroHs's "Data.Text" doesn't provide.
+-- | Map and concatenate text fragments.
 concatMapText :: (Char -> Text) -> Text -> Text
 concatMapText f = T.concat . map f . T.unpack

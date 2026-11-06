@@ -8,6 +8,7 @@ module Agentic.Questions
   , yesNo
   , choice
   , score
+
     -- * Answers
   , Probability
   , probability
@@ -17,6 +18,7 @@ module Agentic.Questions
   , YesNo (..)
   , Choice (..)
   , Score (..)
+
     -- * Wire types
   , QuestionSpec (..)
   , Answer (..)
@@ -24,11 +26,12 @@ module Agentic.Questions
   , decodeAnswers
   ) where
 
-import Agentic.Contract (Contract (..), Option (..), OptionSet (..), Options (..), mapCodec, record, required)
+import Agentic.Contract (Codec (..), Contract (..), Option (..), OptionSet (..), Options (..), ScalarInfo (..), record, required, scalar)
+import Agentic.Schema (Shape (SNumber), schemaOf)
 import Agentic.Value (Value (..))
 import Data.List (find)
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 
 -- ---------------------------------------------------------------------------
 -- Probabilities
@@ -85,7 +88,7 @@ data Choice a = Choice
 
 data Score a = Score
   { position :: Double
-    -- ^ The probability-weighted position, from 0 (the first option) upwards.
+  -- ^ The probability-weighted position, from 0 (the first option) upwards.
   , probabilities :: [(a, Probability)]
   , confidence :: Probability
   }
@@ -94,7 +97,17 @@ data Score a = Score
 -- Answers have contracts, so a judgement can be a tool's output.
 
 instance Contract Probability where
-  contract = mapCodec toProbability probability (contract @Double)
+  contract =
+    scalar (ScalarInfo "Agentic.Questions.Probability" []) $
+      Just $
+        Codec
+          (schemaOf SNumber)
+          (Number . probability)
+          ( \case
+              Number d | not (isNaN d || isInfinite d) -> Right (if d <= 0 then 0 else if d >= 1 then 1 else toProbability d)
+              Integer n -> Right (if n <= 0 then 0 else 1)
+              _ -> Left "expected a finite probability"
+          )
 
 instance Contract YesNo where
   contract = record "A yes/no judgement" (YesNo <$> required "yes" "The probability that the answer is yes" (.yes))
@@ -120,18 +133,18 @@ instance Contract a => Contract (Score a) where
 
 data QuestionSpec
   = AskYesNo Text
-  | AskChoice Text [(Text, Maybe Text)]
-    -- ^ Option labels with their descriptions.
-  | AskScore Text [(Text, Maybe Text)]
-    -- ^ Levels in order, lowest first.
+  | -- | Option labels with their descriptions.
+    AskChoice Text [(Text, Maybe Text)]
+  | -- | Levels in order, lowest first.
+    AskScore Text [(Text, Maybe Text)]
   deriving (Eq, Ord, Show)
 
 data Answer
   = YesNoAnswer Probability
-  | ChoiceAnswer Text [(Text, Probability)] Probability
-    -- ^ The chosen label, every label's probability, and the confidence.
-  | ScoreAnswer Double [(Int, Probability)] Probability
-    -- ^ The position, each level's probability (by index), and the confidence.
+  | -- | The chosen label, every label's probability, and the confidence.
+    ChoiceAnswer Text [(Text, Probability)] Probability
+  | -- | The position, each level's probability (by index), and the confidence.
+    ScoreAnswer Double [(Int, Probability)] Probability
   deriving (Eq, Show)
 
 -- | What a System One provider receives: the encoded input and the questions.
@@ -154,7 +167,7 @@ data Questions a = Questions
   }
 
 instance Functor Questions where
-  fmap f q = q {decoder = fmap f . q.decoder}
+  fmap f q = q{decoder = fmap f . q.decoder}
 
 instance Applicative Questions where
   pure x = Questions [] (\case [] -> Right x; _ -> Left "too many answers")
@@ -182,8 +195,8 @@ choice q = single (AskChoice q (labels opts)) $ \case
   ChoiceAnswer picked ps conf ->
     Choice <$> byLabel opts picked <*> traverse (\(l, p) -> (,p) <$> byLabel opts l) ps <*> pure conf
   other -> Left ("expected a choice answer, got " <> T.pack (show other))
-  where
-    opts = (options @a).options
+ where
+  opts = (options @a).options
 
 -- | Place the input on an 'Options' type's levels, lowest first.
 score :: forall a. Options a => Text -> Questions (Score a)
@@ -191,11 +204,11 @@ score q = single (AskScore q (labels opts)) $ \case
   ScoreAnswer pos ps conf ->
     Score pos <$> traverse (\(i, p) -> (,p) <$> byIndex i) ps <*> pure conf
   other -> Left ("expected a score answer, got " <> T.pack (show other))
-  where
-    opts = (options @a).options
-    byIndex i = case drop i opts of
-      o : _ | i >= 0 -> Right o.value
-      _ -> Left ("no level " <> T.pack (show i))
+ where
+  opts = (options @a).options
+  byIndex i = case drop i opts of
+    o : _ | i >= 0 -> Right o.value
+    _ -> Left ("no level " <> T.pack (show i))
 
 labels :: [Option a] -> [(Text, Maybe Text)]
 labels = map (\o -> (o.label, o.doc))

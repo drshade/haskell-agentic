@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               agentic-jev
-version:            0.2.0.5
+version:            0.2.1.0
 synopsis:           Jev (TypeSafe) as the System One provider for agentic
 description:
   Answers agentic's judgements (yes/no, choice and score questions) with Jev, TypeSafe's System One model, which returns calibrated probabilities.
@@ -37,7 +37,7 @@ library
   hs-source-dirs:   src
   exposed-modules:  Agentic.Jev
   build-depends:
-    , agentic          ==0.2.*
+    , agentic          >=0.2.1 && <0.3
     , aeson            >=2.1 && <2.3
     , base             >=4.18 && <5
     , bytestring       >=0.11 && <0.13
@@ -51,9 +51,9 @@ test-suite agentic-jev-test
   hs-source-dirs:   test
   main-is:          Spec.hs
   build-depends:
-    , agentic          ==0.2.*
-    , agentic-aeson    ==0.2.*
-    , agentic-jev      ==0.2.*
+    , agentic          >=0.2.1 && <0.3
+    , agentic-aeson    >=0.2.1 && <0.3
+    , agentic-jev      >=0.2.1 && <0.3
     , aeson            >=2.1 && <2.3
     , base             >=4.18 && <5
     , hspec            >=2.10 && <3
@@ -64,9 +64,9 @@ test-suite agentic-jev-live
   hs-source-dirs:   test-live
   main-is:          Live.hs
   build-depends:
-    , agentic          ==0.2.*
-    , agentic-io       ==0.2.*
-    , agentic-jev      ==0.2.*
+    , agentic          >=0.2.1 && <0.3
+    , agentic-io       >=0.2.1 && <0.3
+    , agentic-jev      >=0.2.1 && <0.3
     , base             >=4.18 && <5
     , hspec            >=2.10 && <3
     , text             >=2.0 && <2.2

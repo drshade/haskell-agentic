@@ -30,6 +30,7 @@ module Agentic.Runtime
   , FlowError (..)
   ) where
 
+import Agentic.Contract (ProjectionError)
 import Agentic.Core (Instruction, Note)
 import Agentic.Questions (Answer, JudgeRequest)
 import Agentic.Schema (Schema)
@@ -119,6 +120,7 @@ data Happened
 data FlowError
   = NoSystemOne
   | NoSystemTwo
+  | UnsupportedContract [Note] ProjectionError
   | MalformedAnswers Text
   | TurnLimit Int
   deriving (Eq, Show)

@@ -21,7 +21,7 @@ in the providers you actually use:
 
 | Package | What it's for |
 |---|---|
-| `agentic` | flows, contracts, questions, the runtime and the interpreter (depends only on `base` and `text`, and builds with MicroHs too) |
+| `agentic` | flows, contracts, questions, the runtime and the interpreter (depends only on `base` and `text`; GHC 9.6+) |
 | `agentic-jev` | Jev as System One |
 | `agentic-anthropic` | Claude as System Two (or System One) |
 | `agentic-openai` | OpenAI as System Two (or System One) |
@@ -64,8 +64,8 @@ data Step m i o where
   Wrap  :: (i -> o)                                            -> Step m i o  -- Left, Right
   Arr   :: (i -> o)                                            -> Step m i o
   Act   :: (i -> m o)                                          -> Step m i o
-  Draft :: Codec i -> Codec o -> Instruction -> [Tool m]       -> Step m i o
-  Judge :: Codec i -> Questions o                              -> Step m i o
+  Draft :: ContractTree i -> ContractTree o -> Instruction -> [Tool m]       -> Step m i o
+  Judge :: ContractTree i -> Questions o                              -> Step m i o
 
 data Agentic m i o where
   Step   :: Step m i o                     -> Agentic m i o
@@ -159,6 +159,32 @@ the model reads a word. So give each step the input it should judge, and no more
 And describe an enumeration once - Claude and Jev both see the same wording (see
 `Options` below).
 
+### One contract, several representations
+
+A contract is a typed description of the structure. The model codec is one
+interpretation of it; a storage adapter can choose another, with its own
+encoding and validation. You still derive `Contract` once.
+
+Normal `draft`, `judge`, and `tool` calls handle compilation for you. When you
+want a codec directly:
+
+```haskell
+case compileModel (contract @Joke) of
+  Left problem -> print problem
+  Right codec -> print (codec.encode joke)
+```
+
+Custom scalars keep their identity inside records and containers. They can
+supply a default model codec, and another library can supply a different
+projection without changing their definition. `descriptor` exposes the
+structure even when no model representation is available.
+
+`interpret` checks the whole flow before running effects, including unused
+branches and tool results. Unsupported model projections fail there. For an
+offline example with exact decimals and independent storage/model codecs, run
+`cabal run projections` and see `examples/ProjectionExample.hs`. The core now
+requires GHC; MicroHs support has been retired.
+
 ## Is it actually funny?
 
 An LLM is great at writing. Jev is great at judging - quickly, and with a
@@ -192,7 +218,7 @@ instance Options Groan where
     , option Solid      "An audible groan from most of the room"
     , option Unbearable "People get up and leave" ]
 
-deriving via Enumeration Groan instance Contract Groan
+instance Contract Groan where contract = enumeration
 
 groan :: Questions (Score Groan)
 groan = score "How much will the audience groan?"

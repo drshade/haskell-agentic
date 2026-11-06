@@ -1,5 +1,11 @@
 # Changelog for agentic-aeson
 
+## 0.2.1.0 - ???
+
+* Build against Agentic's structural contracts and fallible model compilation.
+  Shared definition keys now sanitize applied type names and allocate distinct
+  keys when different names sanitize or truncate to the same spelling.
+
 ## 0.2.0.5 - 2026-10-06
 
 * No changes; released alongside agentic 0.2.0.5.

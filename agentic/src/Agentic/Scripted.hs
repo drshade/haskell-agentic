@@ -5,12 +5,13 @@ module Agentic.Scripted
   , replyingWith
   , respond
   , callTools
+
     -- * System One
   , answering
   , fixedAnswers
   ) where
 
-import Agentic.Contract (Codec (..), Contract (..))
+import Agentic.Contract (Codec (..), Contract (..), compileModel)
 import Agentic.Questions
 import Agentic.Runtime
 import Agentic.Value (Value (..))
@@ -31,9 +32,13 @@ scripted actions = do
 replyingWith :: Applicative m => (Conversation -> Action) -> SystemTwo m
 replyingWith f = SystemTwo (pure . Turn (Raw Null) . f)
 
--- | A final answer, encoded with its contract.
+-- | A final answer, encoded with its model contract. This test-fixture helper
+-- raises an error for unsupported contracts; use compileModel directly when
+-- constructing responses from contracts that may be unsupported.
 respond :: Contract a => a -> Action
-respond = Respond . contract.encode
+respond a = case compileModel contract of
+  Left e -> error ("Agentic.Scripted.respond: " <> show e)
+  Right c -> Respond (c.encode a)
 
 callTools :: [(Text, Value)] -> Action
 callTools calls = CallTools [ToolCall ("call-" <> name) name input | (name, input) <- calls]

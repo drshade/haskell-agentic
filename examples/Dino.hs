@@ -44,14 +44,14 @@ instance Options Kind where
       , option Other "Anything else: insects, amphibians, crocodile relatives and so on"
       ]
 
-deriving via Enumeration Kind instance Contract Kind
+instance Contract Kind where contract = enumeration
 
 -- | A trump card stat. The contract tells the model the scale and checks it.
 newtype Stat = Stat Int
   deriving (Show)
 
 instance Contract Stat where
-  contract = documented "From 1 (lowest) to 10 (highest)" (mapCodec Stat (\(Stat n) -> n) (between 1 10 contract))
+  contract = documented "From 1 (lowest) to 10 (highest)" (mapContract Stat (\(Stat n) -> n) (between 1 10 contract))
 
 data TrumpCard = TrumpCard {size :: Stat, ferocity :: Stat, speed :: Stat, intelligence :: Stat}
   deriving (Generic, Show, Contract)

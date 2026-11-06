@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               agentic-examples
-version:            0.2.0.5
+version:            0.2.1.0
 synopsis:           The examples from the haskell-agentic README
 description:
   Runnable examples for the agentic packages: the dino project, tic-tac-toe,
@@ -27,10 +27,10 @@ executable dino
   hs-source-dirs:   .
   main-is:          Dino.hs
   build-depends:
-    , agentic           ==0.2.*
-    , agentic-anthropic ==0.2.*
-    , agentic-io        ==0.2.*
-    , agentic-jev       ==0.2.*
+    , agentic           >=0.2.1 && <0.3
+    , agentic-anthropic >=0.2.1 && <0.3
+    , agentic-io        >=0.2.1 && <0.3
+    , agentic-jev       >=0.2.1 && <0.3
     , base              >=4.18 && <5
     , text              >=2.0 && <2.2
 executable review
@@ -47,9 +47,9 @@ executable review
   hs-source-dirs:   .
   main-is:          Review.hs
   build-depends:
-    , agentic           ==0.2.*
-    , agentic-io        ==0.2.*
-    , agentic-jev       ==0.2.*
+    , agentic           >=0.2.1 && <0.3
+    , agentic-io        >=0.2.1 && <0.3
+    , agentic-jev       >=0.2.1 && <0.3
     , base              >=4.18 && <5
     , text              >=2.0 && <2.2
 executable tictactoe
@@ -66,9 +66,9 @@ executable tictactoe
   hs-source-dirs:   .
   main-is:          TicTacToe.hs
   build-depends:
-    , agentic           ==0.2.*
-    , agentic-openai    ==0.2.*
-    , agentic-io        ==0.2.*
+    , agentic           >=0.2.1 && <0.3
+    , agentic-openai    >=0.2.1 && <0.3
+    , agentic-io        >=0.2.1 && <0.3
     , base              >=4.18 && <5
     , text              >=2.0 && <2.2
 executable kitchensink
@@ -85,9 +85,47 @@ executable kitchensink
   hs-source-dirs:   .
   main-is:          KitchenSink.hs
   build-depends:
-    , agentic           ==0.2.*
-    , agentic-anthropic ==0.2.*
-    , agentic-io        ==0.2.*
-    , agentic-jev       ==0.2.*
+    , agentic           >=0.2.1 && <0.3
+    , agentic-anthropic >=0.2.1 && <0.3
+    , agentic-io        >=0.2.1 && <0.3
+    , agentic-jev       >=0.2.1 && <0.3
     , base              >=4.18 && <5
     , text              >=2.0 && <2.2
+-- No providers or credentials: one contract, independent representations.
+executable projections
+  default-language: GHC2021
+  default-extensions:
+    DeriveAnyClass
+    DuplicateRecordFields
+    LambdaCase
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+  hs-source-dirs: .
+  main-is: ProjectionExample.hs
+  ghc-options: -main-is ProjectionExample
+  build-depends:
+    , base
+    , text
+    , agentic >=0.2.1 && <0.3
+
+test-suite projection-test
+  type: exitcode-stdio-1.0
+  default-language: GHC2021
+  default-extensions:
+    DeriveAnyClass
+    DuplicateRecordFields
+    GADTs
+    LambdaCase
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+  hs-source-dirs: test .
+  main-is: ProjectionSpec.hs
+  other-modules: ProjectionExample
+  ghc-options: -Wall
+  build-depends:
+    , base
+    , text
+    , hspec >=2.10 && <3
+    , agentic >=0.2.1 && <0.3

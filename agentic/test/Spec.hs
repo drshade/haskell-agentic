@@ -1,14 +1,14 @@
 module Main (main) where
 
 import Agentic
-import Agentic.Scripted
 import Agentic.Schema (Field (..), Schema (..), Shape (..))
+import Agentic.Scripted
 import Data.IORef
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 import GHC.Generics (Generic)
 import Test.Hspec hiding (describe)
-import qualified Test.Hspec
+import Test.Hspec qualified
 
 -- ---------------------------------------------------------------------------
 -- README types
@@ -34,18 +34,18 @@ instance Options Groan where
       , option Unbearable "People get up and leave"
       ]
 
-deriving via Enumeration Groan instance Contract Groan
+instance Contract Groan where contract = enumeration
 
 newtype Rating = Rating Int
   deriving (Show, Eq)
 
 instance Contract Rating where
-  contract = mapCodec Rating (\(Rating n) -> n) (between 1 10 contract)
+  contract = mapContract Rating (\(Rating n) -> n) (between 1 10 contract)
 
 data Review = Review {funny :: YesNo, groan :: Score Groan}
   deriving (Show, Eq)
 
-documentedJoke :: Codec Joke
+documentedJoke :: ContractTree Joke
 documentedJoke =
   record "A joke, split into its parts" $
     Joke
@@ -69,7 +69,7 @@ joke = Joke "pun" "Why was the scarecrow promoted?" "He was outstanding in his f
 testRuntime :: [Action] -> Probability -> IO (Runtime IO)
 testRuntime turns p = do
   two <- scripted turns
-  pure runtime {systemOne = fixedAnswers p, systemTwo = two}
+  pure runtime{systemOne = fixedAnswers p, systemTwo = two}
 
 roundTrips :: (Eq a, Show a) => Codec a -> a -> Expectation
 roundTrips c a = c.decode (c.encode a) `shouldBe` Right a
@@ -78,33 +78,33 @@ main :: IO ()
 main = hspec $ do
   describe' "Contracts" $ do
     it "round-trips a derived record" $
-      roundTrips contract joke
+      roundTrips modelContract joke
 
     it "round-trips a derived sum as tagged objects" $ do
-      roundTrips contract (OneLiner "I'm on a seafood diet.")
-      contract.encode (OneLiner "x")
+      roundTrips modelContract (OneLiner "I'm on a seafood diet.")
+      modelContract.encode (OneLiner "x")
         `shouldBe` Object [("tag", String "OneLiner"), ("line", String "x")]
 
     it "encodes an Options type as its labels" $ do
-      contract.encode Solid `shouldBe` String "Solid"
-      contract.decode (String "Unbearable") `shouldBe` Right Unbearable
+      modelContract.encode Solid `shouldBe` String "Solid"
+      modelContract.decode (String "Unbearable") `shouldBe` Right Unbearable
 
     it "names derived schemas after their type" $
-      (contract @Joke).schema.title `shouldBe` Just "Joke"
+      (modelContract @Joke).schema.title `shouldBe` Just "Joke"
 
     it "keeps descriptions written in the codec" $
-      case documentedJoke.schema.shape of
+      case (either (error . show) id (compileModel documentedJoke)).schema.shape of
         SObject fs -> map ((.doc) . (.schema)) fs `shouldBe` map Just ["The style of joke", "The setup line", "The line that lands it"]
         other -> expectationFailure (show other)
 
     it "adds descriptions to a derived contract" $
-      case (field "punchline" "No explanation" (contract @Joke)).schema.shape of
+      case (either (error . show) id (compileModel (field "punchline" "No explanation" (contract @Joke)))).schema.shape of
         SObject fs -> map ((.doc) . (.schema)) fs `shouldBe` [Nothing, Nothing, Just "No explanation"]
         other -> expectationFailure (show other)
 
     it "checks constraints the schema can't express" $ do
-      (contract @Rating).decode (Integer 7) `shouldBe` Right (Rating 7)
-      (contract @Rating).decode (Integer 11) `shouldBe` Left "must be between 1 and 10"
+      (modelContract @Rating).decode (Integer 7) `shouldBe` Right (Rating 7)
+      (modelContract @Rating).decode (Integer 11) `shouldBe` Left "must be between 1 and 10"
 
   describe' "Questions" $ do
     it "batches combined questions into one request" $
@@ -149,9 +149,9 @@ main = hspec $ do
       interpret rt (keep 0.9 funny) [joke, joke] `shouldReturn` []
 
     it "gates into branches" $ do
-      rt <- testRuntime [respond joke {genre = "kids"}] 0.5
+      rt <- testRuntime [respond joke{genre = "kids"}] 0.5
       let kidFriendly = gate 0.9 funny >>> (draft @Joke "rewrite this joke for a 10-year-old" ||| returnA)
-      interpret rt kidFriendly joke `shouldReturn` joke {genre = "kids"}
+      interpret rt kidFriendly joke `shouldReturn` joke{genre = "kids"}
 
     it "runs structure: fanout and each" $ do
       rt <- testRuntime [respond joke, respond (Rating 3)] 1
@@ -277,5 +277,9 @@ main = hspec $ do
                    , "└─ tool research  draft @Text  \"research this\""
                    , "   └─ tool research  (see above)"
                    ]
-  where
-    describe' = Test.Hspec.describe
+ where
+  describe' = Test.Hspec.describe
+
+-- Test fixtures use known-supported model contracts; production code handles Left.
+modelContract :: Contract a => Codec a
+modelContract = either (error . show) id (compileModel contract)

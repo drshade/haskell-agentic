@@ -29,13 +29,13 @@ instance Options Groan where
       "How much the audience groans"
       [option Mild "A polite smile", option Solid "An audible groan", option Unbearable "People get up and leave"]
 
-deriving via Enumeration Groan instance Contract Groan
+instance Contract Groan where contract = enumeration
 
 newtype Rating = Rating Int
   deriving (Show, Eq)
 
 instance Contract Rating where
-  contract = mapCodec Rating (\(Rating n) -> n) (between 1 10 contract)
+  contract = mapContract Rating (\(Rating n) -> n) (between 1 10 contract)
 
 main :: IO ()
 main = do

@@ -35,16 +35,14 @@ module Agentic.Core
   , module Control.Arrow
   ) where
 
-import Agentic.Contract (Codec (..), Contract (..), reschema)
+import Agentic.Contract (ContractTree, Contract (..), namedContract)
 import Agentic.Questions (Probability, Questions, YesNo (..))
 import Control.Arrow
 import qualified Control.Category as Category
 import Data.String (IsString (..))
-import Agentic.Schema (titled)
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Typeable (Typeable, typeRep)
-import Data.Proxy (Proxy (..))
+import Data.Typeable (Typeable)
 
 -- | What a model step is asked to do.
 newtype Instruction = Instruction {text :: Text}
@@ -74,8 +72,8 @@ data Step m i o where
     -- which half it keeps.
   TakeSecond :: Step m (a, b) b
   Act :: (i -> m o) -> Step m i o
-  Draft :: Codec i -> Codec o -> Instruction -> [Tool m] -> Step m i o
-  Judge :: Codec i -> Questions o -> Step m i o
+  Draft :: ContractTree i -> ContractTree o -> Instruction -> [Tool m] -> Step m i o
+  Judge :: ContractTree i -> Questions o -> Step m i o
 
 -- | A flow from @i@ to @o@ in effect @m@. Build flows from steps with the
 -- 'Arrow' combinators; run them with 'Agentic.Interpret.interpret'.
@@ -94,7 +92,7 @@ data Agentic m i o where
 data Tool m where
   -- | A name, a description for the model, the input and output contracts, and
   -- the flow to run.
-  Tool :: Text -> Text -> Codec i -> Codec o -> Agentic m i o -> Tool m
+  Tool :: Text -> Text -> ContractTree i -> ContractTree o -> Agentic m i o -> Tool m
 
 toolName :: Tool m -> Text
 toolName (Tool name _ _ _ _) = name
@@ -166,9 +164,9 @@ act = Step . Act
 tool :: forall i o m. (Contract i, Contract o, Typeable i, Typeable o) => Text -> Text -> Agentic m i o -> Tool m
 tool name description = Tool name description (titledContract @i) (titledContract @o)
 
--- | A type's contract, with its schema named after the type if it isn't already.
-titledContract :: forall a. (Contract a, Typeable a) => Codec a
-titledContract = reschema (titled (T.pack (show (typeRep (Proxy @a))))) (contract @a)
+-- | Preserve a step's nominal type identity, including handwritten contracts.
+titledContract :: forall a. (Contract a, Typeable a) => ContractTree a
+titledContract = namedContract (contract @a)
 
 -- | Map a flow over a list. The runtime may run the items concurrently.
 each :: Agentic m a b -> Agentic m [a] [b]
