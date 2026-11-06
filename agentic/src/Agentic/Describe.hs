@@ -16,10 +16,9 @@ module Agentic.Describe
   , descriptionValue
   ) where
 
-import Agentic.Contract (Codec (..))
+import Agentic.Contract (Outline, outline, outlineLabel)
 import Agentic.Core
 import Agentic.Questions (QuestionSpec (..), Questions (..))
-import Agentic.Schema (Schema, typeLabel)
 import Agentic.Value (Value (..), renderJson)
 import Data.List (mapAccumL)
 import Data.Text (Text)
@@ -52,20 +51,20 @@ data StepInfo
     -- ^ @act@: plain code with an effect.
   | DraftInfo
       { instruction :: Instruction
-      , input :: Schema
-      , output :: Schema
+      , input :: Outline
+      , output :: Outline
       , tools :: [ToolInfo]
       }
   | JudgeInfo
-      { input :: Schema
+      { input :: Outline
       , questions :: [QuestionSpec]
       }
 
 data ToolInfo = ToolInfo
   { name :: Text
   , description :: Text
-  , input :: Schema
-  , output :: Schema
+  , input :: Outline
+  , output :: Outline
   , body :: Description
   }
 
@@ -100,12 +99,12 @@ stepInfo = \case
   TakeSecond -> SecondHalf
   Act _ -> Effect
   Draft input out instruction tools ->
-    DraftInfo instruction input.schema out.schema (map toolInfo tools)
-  Judge input qs -> JudgeInfo input.schema qs.specs
+    DraftInfo instruction (outline input) (outline out) (map toolInfo tools)
+  Judge input qs -> JudgeInfo (outline input) qs.specs
 
 toolInfo :: Tool m -> ToolInfo
 toolInfo (Tool name description input out body) =
-  ToolInfo name description input.schema out.schema (describe body)
+  ToolInfo name description (outline input) (outline out) (describe body)
 
 -- ---------------------------------------------------------------------------
 -- The tree view
@@ -425,7 +424,7 @@ stepLines name info = kind : maybe [] pure name <> details
       FirstHalf -> ("takeFirst", [])
       SecondHalf -> ("takeSecond", [])
       Effect -> ("act", [])
-      DraftInfo instruction _ out _ -> ("draft @" <> typeLabel out, [quoted instruction.text])
+      DraftInfo instruction _ out _ -> ("draft @" <> outlineLabel out, [quoted instruction.text])
       JudgeInfo _ [q] -> ("judge", [questionText q])
       JudgeInfo _ qs -> ("judge " <> T.pack (show (length qs)) <> " questions in one request", map questionText qs)
 
@@ -542,25 +541,24 @@ descriptionValue = \case
         node
           "draft"
           [ ("instruction", String instruction.text)
-          , ("input", String (typeLabel input))
-          , ("output", String (typeLabel out))
+          , ("input", String (outlineLabel input))
+          , ("output", String (outlineLabel out))
           , ("tools", Array (map tool tools))
           ]
       JudgeInfo input qs ->
-        node "judge" [("input", String (typeLabel input)), ("questions", Array (map question qs))]
+        node "judge" [("input", String (outlineLabel input)), ("questions", Array (map question qs))]
     tool t =
       Object
         [ ("name", String t.name)
         , ("description", String t.description)
-        , ("input", String (typeLabel t.input))
-        , ("output", String (typeLabel t.output))
+        , ("input", String (outlineLabel t.input))
+        , ("output", String (outlineLabel t.output))
         ]
     question = \case
       AskYesNo q -> Object [("type", String "yesNo"), ("question", String q)]
       AskChoice q opts -> Object [("type", String "choice"), ("question", String q), ("options", Array [String l | (l, _) <- opts])]
       AskScore q levels -> Object [("type", String "score"), ("question", String q), ("levels", Array [String l | (l, _) <- levels])]
 
--- | Apply a function to a pair's second half. (MicroHs has no Functor instance
--- for pairs.)
+-- | Apply a function to a pair's second half.
 onSnd :: (b -> c) -> (a, b) -> (a, c)
 onSnd f (a, b) = (a, f b)

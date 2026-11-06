@@ -1,5 +1,40 @@
 # Changelog for agentic
 
+## 0.2.1.0 - ???
+
+* `Contract` now produces a typed `Structure`, shared by generic derivation
+  and handwritten builders. `outline` exposes nominal/applied identities,
+  constructor/field order and style, and extensible scalar parameters.
+* `compileModel` and open typed `compileWith` produce fallible codecs. Scalar
+  definitions can supply model defaults; independent adapters can override both
+  scalar and structural representations, including upstream types.
+* Flow interpretation preflights all contracts and tool bodies before effects
+  or provider calls. Unsupported projections raise structured
+  `UnsupportedContract [Note] ProjectionError` failures;
+  discovery remains usable. Lossy nested model optionals are rejected.
+* Structural mappings use `mapStructure`; compiled mappings retain `mapCodec`.
+  Replace `deriving via Enumeration T` with `contract = enumeration` in an
+  explicit `Contract T` instance. Flow descriptions now carry `Outline`.
+  Direct codec consumers must call `compileModel` (or another interpreter)
+  before accessing `.schema`, `.encode`, or `.decode`. `reschema` modifies
+  compiled codecs; `documented`, `field`, and `checked` modify contract trees.
+  Generic traversal helpers now produce typed trees, cases and fields rather
+  than compiled codecs. Handwritten nominal contracts can use
+  `nominal`; generic derivation preserves their identity automatically.
+* Expose compiled builders in `Agentic.Codec` and reusable
+  `compileFieldsWith`/`compileCaseWith` helpers. Sum cases use existential payloads
+  with total matching; singleton constructors retain product structure.
+* Retire MicroHs support in favor of GHC generics and type evidence. Keep the
+  handwritten-contract workflow suite on GHC.
+* Add independent-projection acceptance fixtures under `agentic/test`, covering
+  exact values, malformed scalars, nested containers and preflight failures.
+* `Outline` omits representation-only mappings. `OutlineField`, `OutlineCase`
+  and existential `Case` expose named record fields. Applicative fields use
+  `Pure`, `Apply` and `Field`; compiled sum cases are `CaseCodec`.
+* `field` applies its annotation immediately and reports an absent field at
+  first evaluation. Codec-level annotation/check builders are no longer public.
+* Share the test-fixture `modelContract` helper through `Agentic.Scripted`.
+
 ## 0.2.0.5 - 2026-10-06
 
 * `takeFirst` and `takeSecond` do what `arr fst` and `arr snd` do, but a

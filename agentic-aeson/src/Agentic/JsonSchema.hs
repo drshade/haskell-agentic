@@ -29,13 +29,13 @@ jsonSchema = schemaWith []
 
 -- | Like 'jsonSchema', but any schema named in @shared@ becomes a @$ref@ into
 -- @$defs@.
-schemaWith :: [Text] -> Schema -> Value
+schemaWith :: [(Text, Text)] -> Schema -> Value
 schemaWith shared s = case s.title of
-  Just t | t `elem` shared -> Object [("$ref", String ("#/$defs/" <> t))]
+  Just t | Just key <- lookup t shared -> Object [("$ref", String ("#/$defs/" <> key))]
   _ -> definition shared s
 
 -- | A schema written out, though the schemas inside it may still be references.
-definition :: [Text] -> Schema -> Value
+definition :: [(Text, Text)] -> Schema -> Value
 definition shared s = withDescription (body s.shape)
   where
     sub = schemaWith shared
@@ -95,8 +95,8 @@ wrap s = case s.shape of
 -- object with a single @value@ field holding it. A named type that appears more
 -- than once, identically, is written once under @$defs@ and referenced.
 --
--- TBD: Recursively defined schemas will hang here. A recursive type's derived
--- schema contains itself, so walking it never ends.
+-- Input schemas must be finite. Contract discovery and compilation have the
+-- same restriction.
 objectSchema :: Schema -> Value
 objectSchema s = case root of
   Object kvs | not (null defs) -> Object (kvs <> [("$defs", Object defs)])
@@ -105,9 +105,26 @@ objectSchema s = case root of
     root
       | wrap s = object [("value", schemaWith shared s)]
       | otherwise = definition shared s
-    shared = sharedNames s
-    defs = [(t, definition shared d) | t <- shared, Just d <- [lookup t named']]
+    shared = definitionKeys (sharedNames s)
+    defs = [(key, definition shared d) | (t, key) <- shared, Just d <- [lookup t named']]
     named' = [(t, d) | d <- nested s, Just t <- [d.title]]
+
+-- Applied type names contain punctuation. Allocate safe definition keys without
+-- conflating names that sanitize to the same spelling (or truncate equally).
+definitionKeys :: [Text] -> [(Text, Text)]
+definitionKeys = go []
+  where
+    go _ [] = []
+    go used (name:names) =
+      let base = schemaName (Schema (Just name) Nothing [] SNull)
+          key = fresh used base 1
+      in (name, key) : go (key:used) names
+    fresh used base n
+      | key `elem` used = fresh used base (n + 1)
+      | otherwise = key
+      where
+        suffix = "_" <> T.pack (show (n :: Integer))
+        key = if n == 1 then base else T.take (64 - T.length suffix) base <> suffix
 
 -- | Names of the types inside a schema (not the schema itself) that appear more
 -- than once and are identical everywhere they appear, in order of appearance.

@@ -5,15 +5,15 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
--- | The core, without GHC-only features: explicit codecs, ordinary combinators,
--- and a pure monad in place of IO. The same file runs under GHC (as the
--- agentic-portable-test suite) and under MicroHs (in CI).
+-- | Handwritten contracts, ordinary combinators, and a pure monad in place
+-- of IO. Kept as the agentic-portable-test workflow regression suite on GHC.
 module Main (main) where
 
 import Agentic
+import Agentic.Scripted (modelContract)
 import Data.IORef (modifyIORef, newIORef, readIORef)
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 import System.Exit (exitFailure)
 
 -- ---------------------------------------------------------------------------
@@ -39,12 +39,12 @@ instance Contract Figure where
       [ constructor "Circle" "A circle" isCircle (Circle <$> required "radius" "" radius)
       , constructor "Rect" "A rectangle" isRect (Rect <$> required "width" "" width <*> required "height" "" height)
       ]
-    where
-      isCircle = \case Circle _ -> True; _ -> False
-      isRect = \case Rect _ _ -> True; _ -> False
-      radius = \case Circle r -> r; _ -> 0
-      width = \case Rect w _ -> w; _ -> 0
-      height = \case Rect _ h -> h; _ -> 0
+   where
+    isCircle = \case Circle _ -> True; _ -> False
+    isRect = \case Rect _ _ -> True; _ -> False
+    radius = \case Circle r -> r; _ -> 0
+    width = \case Rect w _ -> w; _ -> 0
+    height = \case Rect _ h -> h; _ -> 0
 
 -- ---------------------------------------------------------------------------
 -- A pure monad: a script of model turns, and a log of what happened
@@ -64,31 +64,32 @@ instance Monad Pure where
   Pure g >>= k = Pure (\w -> let (a, w1) = g w in (k a).runPure w1)
 
 say :: Text -> Pure ()
-say t = Pure (\w -> ((), w {logged = w.logged <> [t]}))
+say t = Pure (\w -> ((), w{logged = w.logged <> [t]}))
 
 -- | The handlers: scripted turns, fixed judgements, and every event recorded.
 handlers :: Runtime Pure
 handlers =
   (runtimeWith (\e -> error ("flow error: " <> show e)))
     { systemTwo = SystemTwo $ \_ -> Pure $ \w -> case w.script of
-        a : rest -> (Turn (Raw Null) a, w {script = rest})
+        a : rest -> (Turn (Raw Null) a, w{script = rest})
         [] -> error "the script ran out of turns"
     , systemOne = SystemOne $ \request -> pure (map answer request.questions)
-    , observe = \e -> Pure (\w -> ((), w {events = w.events <> [e.happened]}))
+    , observe = \e -> Pure (\w -> ((), w{events = w.events <> [e.happened]}))
     }
-  where
-    answer = \case
-      AskYesNo _ -> YesNoAnswer 0.9
-      AskChoice _ ((l, _) : _) -> ChoiceAnswer l [(l, 1)] 1
-      AskChoice _ [] -> ChoiceAnswer "" [] 0
-      AskScore _ _ -> ScoreAnswer 1 [(1, 1)] 1
+ where
+  answer = \case
+    AskYesNo _ -> YesNoAnswer 0.9
+    AskChoice _ ((l, _) : _) -> ChoiceAnswer l [(l, 1)] 1
+    AskChoice _ [] -> ChoiceAnswer "" [] 0
+    AskScore _ _ -> ScoreAnswer 1 [(1, 1)] 1
 
 -- ---------------------------------------------------------------------------
 -- The flows
 
 countLetters :: Tool Pure
-countLetters = tool @Text @Int "count_letters" "Count the letters in some text" $
-  act (\t -> say ("count_letters ran on " <> t) >> pure (T.length t))
+countLetters =
+  tool @Text @Int "count_letters" "Count the letters in some text" $
+    act (\t -> say ("count_letters ran on " <> t) >> pure (T.length t))
 
 writeJoke :: Tool Pure
 writeJoke = tool @Text @Joke "write_joke" "Write a joke about a topic" (draft @Joke "Write a joke about this topic")
@@ -114,20 +115,20 @@ main = do
         if ok then pure () else modifyIORef failures (+ 1)
 
   -- 1. Explicit codecs for a record and a payload-bearing sum.
-  check "a record round-trips through its codec" (contract.decode (contract.encode joke) == Right joke)
-  check "a sum with payloads round-trips" (contract.decode (contract.encode (Rect 2 3)) == Right (Rect 2 3))
-  check "a sum encodes its constructor as a tag" (contract.encode (Circle 1) == Object [("tag", String "Circle"), ("radius", Number 1)])
-  check "a record missing a field is rejected" (either (const True) (const False) ((contract @Joke).decode (Object [("setup", String "x")])))
+  check "a record round-trips through its codec" (modelContract.decode (modelContract.encode joke) == Right joke)
+  check "a sum with payloads round-trips" (modelContract.decode (modelContract.encode (Rect 2 3)) == Right (Rect 2 3))
+  check "a sum encodes its constructor as a tag" (modelContract.encode (Circle 1) == Object [("tag", String "Circle"), ("radius", Number 1)])
+  check "a record missing a field is rejected" (either (const True) (const False) ((modelContract @Joke).decode (Object [("setup", String "x")])))
 
   let world0 =
         World
           { script =
               [ CallTools [ToolCall "c1" "count_letters" (String "scarecrow")]
               , CallTools [ToolCall "c2" "write_joke" (String "farms")]
-              , Respond (contract.encode joke) -- answers the nested write_joke draft
+              , Respond (modelContract.encode joke) -- answers the nested write_joke draft
               , Respond (Object [("setup", String "only a setup")]) -- invalid: no punchline
-              , Respond (contract.encode joke) -- the correction
-              , Respond (contract.encode (Rect 2 3)) -- the shape
+              , Respond (modelContract.encode joke) -- the correction
+              , Respond (modelContract.encode (Rect 2 3)) -- the shape
               ]
           , logged = []
           , events = []
@@ -143,7 +144,7 @@ main = do
 
   -- 3. A nested drafting tool.
   check "the nested tool ran its own draft" (length [() | Drafting _ <- seen] == 3)
-  check "the nested draft's result went back as the tool's result" (any (\case ToolReturned "c2" (ToolOk v) -> contract.decode v == Right joke; _ -> False) seen)
+  check "the nested draft's result went back as the tool's result" (any (\case ToolReturned "c2" (ToolOk v) -> modelContract.decode v == Right joke; _ -> False) seen)
 
   -- 4. Invalid output, then a corrected response.
   check "the invalid output was rejected" (length [() | OutputRejected _ <- seen] == 1)

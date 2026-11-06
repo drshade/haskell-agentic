@@ -19,15 +19,16 @@ module Agentic
   , module Agentic.Settings
   ) where
 
-import Agentic.Contract
+import Agentic.Contract (Case, Structure, Fields)
+import Agentic.Contract hiding (Case (..), Structure (..), Fields (..))
 import Agentic.Core
 import Agentic.Describe
 import Agentic.Interpret
 import Agentic.Questions
-import Agentic.Runtime hiding (Conversation (..))
 import Agentic.Runtime (Conversation)
-import Agentic.Schema hiding (Field (..), Format (..), Schema (..), Shape (..), Variant (..))
+import Agentic.Runtime hiding (Conversation (..))
 import Agentic.Schema (Field, Format, Schema, Shape, Variant)
+import Agentic.Schema hiding (Field (..), Format (..), Schema (..), Shape (..), Variant (..))
 import Agentic.Settings
 import Agentic.Value
 import Agentic.ViaLLM

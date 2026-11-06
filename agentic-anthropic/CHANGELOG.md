@@ -1,5 +1,10 @@
 # Changelog for agentic-anthropic
 
+## 0.2.1.0 - ???
+
+* Follow Agentic's `Structure`/`Outline` API and fallible model compilation.
+  Provider wire schemas and protocols are unchanged.
+
 ## 0.2.0.5 - 2026-10-06
 
 * No changes; released alongside agentic 0.2.0.5.

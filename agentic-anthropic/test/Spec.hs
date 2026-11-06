@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Agentic
+import Agentic.Scripted (modelContract)
 import Agentic.Runtime (Conversation (..))
 import Agentic.Schema (Shape (..))
 import Agentic.Aeson (toAeson)
@@ -20,8 +21,8 @@ conversation =
     , instruction = "Suggest 3 dinosaurs"
     , input = Null
     , inputSchema = schemaOf SNull
-    , tools = [ToolSpec "search" "Search the fossil database" ((contract @Text).schema)]
-    , outputSchema = (contract @[Text]).schema
+    , tools = [ToolSpec "search" "Search the fossil database" ((modelContract @Text).schema)]
+    , outputSchema = (modelContract @[Text]).schema
     , history = []
     }
 
@@ -48,7 +49,7 @@ main = hspec $ Test.Hspec.describe "Agentic.Anthropic" $ do
         )
 
   it "keeps a record's field order in its schema" $ do
-    let body = renderJson (requestBody anthropic conversation {outputSchema = (contract @(Text, Text, Text)).schema})
+    let body = renderJson (requestBody anthropic conversation {outputSchema = (modelContract @(Text, Text, Text)).schema})
         at' k = T.length (fst (T.breakOn k body))
     (at' "\"_1\"" < at' "\"_2\"", at' "\"_2\"" < at' "\"_3\"") `shouldBe` (True, True)
 

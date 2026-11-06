@@ -33,7 +33,7 @@ newtype Rating = Rating Int
   deriving (Show, Eq)
 
 instance Contract Rating where
-  contract = mapCodec Rating (\(Rating n) -> n) (between 1 10 contract)
+  contract = mapStructure Rating (\(Rating n) -> n) (between 1 10 contract)
 
 main :: IO ()
 main = do
