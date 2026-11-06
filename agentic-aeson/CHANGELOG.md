@@ -2,7 +2,7 @@
 
 ## 0.2.1.0 - ???
 
-* Build against Agentic's structural contracts and fallible model compilation.
+* Follow Agentic's `Structure`/`Outline` API and fallible model compilation.
   Shared definition keys now sanitize applied type names and allocate distinct
   keys when different names sanitize or truncate to the same spelling.
 

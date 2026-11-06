@@ -16,7 +16,7 @@ module Agentic.Describe
   , descriptionValue
   ) where
 
-import Agentic.Contract (Descriptor, descriptor, descriptorLabel)
+import Agentic.Contract (Outline, outline, outlineLabel)
 import Agentic.Core
 import Agentic.Questions (QuestionSpec (..), Questions (..))
 import Agentic.Value (Value (..), renderJson)
@@ -51,20 +51,20 @@ data StepInfo
     -- ^ @act@: plain code with an effect.
   | DraftInfo
       { instruction :: Instruction
-      , input :: Descriptor
-      , output :: Descriptor
+      , input :: Outline
+      , output :: Outline
       , tools :: [ToolInfo]
       }
   | JudgeInfo
-      { input :: Descriptor
+      { input :: Outline
       , questions :: [QuestionSpec]
       }
 
 data ToolInfo = ToolInfo
   { name :: Text
   , description :: Text
-  , input :: Descriptor
-  , output :: Descriptor
+  , input :: Outline
+  , output :: Outline
   , body :: Description
   }
 
@@ -99,12 +99,12 @@ stepInfo = \case
   TakeSecond -> SecondHalf
   Act _ -> Effect
   Draft input out instruction tools ->
-    DraftInfo instruction (descriptor input) (descriptor out) (map toolInfo tools)
-  Judge input qs -> JudgeInfo (descriptor input) qs.specs
+    DraftInfo instruction (outline input) (outline out) (map toolInfo tools)
+  Judge input qs -> JudgeInfo (outline input) qs.specs
 
 toolInfo :: Tool m -> ToolInfo
 toolInfo (Tool name description input out body) =
-  ToolInfo name description (descriptor input) (descriptor out) (describe body)
+  ToolInfo name description (outline input) (outline out) (describe body)
 
 -- ---------------------------------------------------------------------------
 -- The tree view
@@ -424,7 +424,7 @@ stepLines name info = kind : maybe [] pure name <> details
       FirstHalf -> ("takeFirst", [])
       SecondHalf -> ("takeSecond", [])
       Effect -> ("act", [])
-      DraftInfo instruction _ out _ -> ("draft @" <> descriptorLabel out, [quoted instruction.text])
+      DraftInfo instruction _ out _ -> ("draft @" <> outlineLabel out, [quoted instruction.text])
       JudgeInfo _ [q] -> ("judge", [questionText q])
       JudgeInfo _ qs -> ("judge " <> T.pack (show (length qs)) <> " questions in one request", map questionText qs)
 
@@ -541,18 +541,18 @@ descriptionValue = \case
         node
           "draft"
           [ ("instruction", String instruction.text)
-          , ("input", String (descriptorLabel input))
-          , ("output", String (descriptorLabel out))
+          , ("input", String (outlineLabel input))
+          , ("output", String (outlineLabel out))
           , ("tools", Array (map tool tools))
           ]
       JudgeInfo input qs ->
-        node "judge" [("input", String (descriptorLabel input)), ("questions", Array (map question qs))]
+        node "judge" [("input", String (outlineLabel input)), ("questions", Array (map question qs))]
     tool t =
       Object
         [ ("name", String t.name)
         , ("description", String t.description)
-        , ("input", String (descriptorLabel t.input))
-        , ("output", String (descriptorLabel t.output))
+        , ("input", String (outlineLabel t.input))
+        , ("output", String (outlineLabel t.output))
         ]
     question = \case
       AskYesNo q -> Object [("type", String "yesNo"), ("question", String q)]

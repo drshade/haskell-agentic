@@ -35,7 +35,7 @@ module Agentic.Core
   , module Control.Arrow
   ) where
 
-import Agentic.Contract (ContractTree, Contract (..), namedContract)
+import Agentic.Contract (Structure, Contract (..), nominal)
 import Agentic.Questions (Probability, Questions, YesNo (..))
 import Control.Arrow
 import qualified Control.Category as Category
@@ -72,8 +72,8 @@ data Step m i o where
     -- which half it keeps.
   TakeSecond :: Step m (a, b) b
   Act :: (i -> m o) -> Step m i o
-  Draft :: ContractTree i -> ContractTree o -> Instruction -> [Tool m] -> Step m i o
-  Judge :: ContractTree i -> Questions o -> Step m i o
+  Draft :: Structure i -> Structure o -> Instruction -> [Tool m] -> Step m i o
+  Judge :: Structure i -> Questions o -> Step m i o
 
 -- | A flow from @i@ to @o@ in effect @m@. Build flows from steps with the
 -- 'Arrow' combinators; run them with 'Agentic.Interpret.interpret'.
@@ -92,7 +92,7 @@ data Agentic m i o where
 data Tool m where
   -- | A name, a description for the model, the input and output contracts, and
   -- the flow to run.
-  Tool :: Text -> Text -> ContractTree i -> ContractTree o -> Agentic m i o -> Tool m
+  Tool :: Text -> Text -> Structure i -> Structure o -> Agentic m i o -> Tool m
 
 toolName :: Tool m -> Text
 toolName (Tool name _ _ _ _) = name
@@ -165,8 +165,8 @@ tool :: forall i o m. (Contract i, Contract o, Typeable i, Typeable o) => Text -
 tool name description = Tool name description (titledContract @i) (titledContract @o)
 
 -- | Preserve a step's nominal type identity, including handwritten contracts.
-titledContract :: forall a. (Contract a, Typeable a) => ContractTree a
-titledContract = namedContract (contract @a)
+titledContract :: forall a. (Contract a, Typeable a) => Structure a
+titledContract = nominal (contract @a)
 
 -- | Map a flow over a list. The runtime may run the items concurrently.
 each :: Agentic m a b -> Agentic m [a] [b]

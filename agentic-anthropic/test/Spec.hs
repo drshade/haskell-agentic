@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Agentic
+import Agentic.Scripted (modelContract)
 import Agentic.Runtime (Conversation (..))
 import Agentic.Schema (Shape (..))
 import Agentic.Aeson (toAeson)
@@ -91,7 +92,3 @@ main = hspec $ Test.Hspec.describe "Agentic.Anthropic" $ do
       `shouldBe` True
   where
     _unused = json
-
--- Test fixtures use known-supported model contracts; production code handles Left.
-modelContract :: Contract a => Codec a
-modelContract = either (error . show) id (compileModel contract)

@@ -64,8 +64,8 @@ data Step m i o where
   Wrap  :: (i -> o)                                            -> Step m i o  -- Left, Right
   Arr   :: (i -> o)                                            -> Step m i o
   Act   :: (i -> m o)                                          -> Step m i o
-  Draft :: ContractTree i -> ContractTree o -> Instruction -> [Tool m]       -> Step m i o
-  Judge :: ContractTree i -> Questions o                              -> Step m i o
+  Draft :: Structure i -> Structure o -> Instruction -> [Tool m]       -> Step m i o
+  Judge :: Structure i -> Questions o                              -> Step m i o
 
 data Agentic m i o where
   Step   :: Step m i o                     -> Agentic m i o
@@ -176,14 +176,12 @@ case compileModel (contract @Joke) of
 
 Custom scalars keep their identity inside records and containers. They can
 supply a default model codec, and another library can supply a different
-projection without changing their definition. `descriptor` exposes the
+projection without changing their definition. `outline` exposes the
 structure even when no model representation is available.
 
 `interpret` checks the whole flow before running effects, including unused
-branches and tool results. Unsupported model projections fail there. For an
-offline example with exact decimals and independent storage/model codecs, run
-`cabal run projections` and see `examples/ProjectionExample.hs`. The core now
-requires GHC; MicroHs support has been retired.
+branches and tool results. Unsupported model projections fail there. The core
+now requires GHC; MicroHs support has been retired.
 
 ## Is it actually funny?
 

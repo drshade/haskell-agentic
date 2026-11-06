@@ -19,8 +19,8 @@ module Agentic
   , module Agentic.Settings
   ) where
 
-import Agentic.Contract (Case, ContractTree, Fields)
-import Agentic.Contract hiding (Case (..), ContractTree (..), Fields (..))
+import Agentic.Contract (Case, Structure, Fields)
+import Agentic.Contract hiding (Case (..), Structure (..), Fields (..))
 import Agentic.Core
 import Agentic.Describe
 import Agentic.Interpret

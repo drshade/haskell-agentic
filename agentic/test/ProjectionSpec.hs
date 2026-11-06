@@ -5,15 +5,17 @@ module Main (main) where
 
 import Agentic hiding (model)
 import Agentic.Codec qualified as C
-import Agentic.Contract (Case (..), ContractTree (..), Fields (..))
-import Agentic.Schema (Field (..), Schema (..), Shape (..), Variant (..))
-import Control.Exception (try)
+import Agentic.Contract (Case (..), Fields (..), Structure (..))
+import Agentic.Schema (Schema (..), Shape (..), Variant (..))
+import Agentic.Schema qualified as Schema
+import Agentic.Scripted (modelContract)
+import Control.Exception (evaluate, try)
 import Data.Either (isLeft)
 import Data.Fixed (E2, Fixed (..))
 import Data.IORef
 import Data.Text (Text)
 import GHC.Generics (Generic)
-import ProjectionExample hiding (main)
+import ProjectionExample
 import Test.Hspec hiding (describe)
 import Test.Hspec qualified as H
 import Type.Reflection
@@ -43,7 +45,7 @@ main = hspec $ do
   H.describe "independent projections" $ do
     it "compiles one derived Sample to storage and model codecs" $ do
       let stored = good (storage (contract @Sample))
-          model = good (compileModel (contract @Sample))
+          model = modelContract @Sample
       stored.encode sample `shouldBe` Object [("key", String "sample-1"), ("amount", String "12.34"), ("confidence", String "8500")]
       model.encode sample `shouldBe` Object [("key", String "sample-1"), ("amount", String "12.34"), ("confidence", Number 0.85)]
       roundTrip stored sample
@@ -58,7 +60,7 @@ main = hspec $ do
         [Number 12.34, String "12.345", String "01.00", String "NaN", String "-0.00", String "1e2"]
       identifierCodec.decode (String "") `shouldSatisfy` isLeft
     it "validates storage probability before clamping, independently of model behavior" $ do
-      let model = good (compileModel (contract @Probability))
+      let model = modelContract @Probability
       probabilityStorage.decode (String "8500") `shouldBe` Right (fromBasisPoints 8500)
       mapM_
         (\v -> probabilityStorage.decode v `shouldSatisfy` isLeft)
@@ -87,13 +89,13 @@ main = hspec $ do
       isLeft (compileModel (contract @(Maybe (Maybe Int)))) `shouldBe` True
       isLeft (compileModel (Optional (documented "wrapper" (contract @Wrapper)))) `shouldBe` True
       isLeft (compileModel (contract @(Maybe ()))) `shouldBe` True
-      isLeft (compileModel (Optional (checked "anything" (const True) (mapContract id id (documented "nullable" (contract @(Maybe Int))))))) `shouldBe` True
+      isLeft (compileModel (Optional (checked "anything" (const True) (mapStructure id id (documented "nullable" (contract @(Maybe Int))))))) `shouldBe` True
     it "lets storage choose unit as an empty record" $
       (good (storage (contract @()))).encode () `shouldBe` Object []
   H.describe "structural overrides" $ do
     it "stores positional wrappers with tags while models remain transparent" $ do
       let stored = good (storage (contract @Age))
-          model = good (compileModel (contract @Age))
+          model = modelContract @Age
       stored.encode (Age 42) `shouldBe` Object [("tag", String "Age"), ("_1", String "42")]
       model.encode (Age 42) `shouldBe` Integer 42
       stored.decode (Object [("tag", String "Other"), ("_1", String "42")]) `shouldSatisfy` isLeft
@@ -101,10 +103,10 @@ main = hspec $ do
       let stored = good (storage (contract @EmptyRoot))
       stored.encode EmptyRoot `shouldBe` Object []
       roundTrip stored EmptyRoot
-      (good (compileModel (contract @EmptyRoot))).encode EmptyRoot `shouldBe` String "EmptyRoot"
+      (modelContract @EmptyRoot).encode EmptyRoot `shouldBe` String "EmptyRoot"
     it "moves sum payloads under a payload object independently of the model layout" $ do
       let stored = good (storage (contract @Payload))
-          model = good (compileModel (contract @Payload))
+          model = modelContract @Payload
       stored.encode (Amount (MkFixed 1234)) `shouldBe` Object [("tag", String "Amount"), ("payload", Object [("_1", String "12.34")])]
       model.encode (Amount (MkFixed 1234)) `shouldBe` Object [("tag", String "Amount"), ("_1", String "12.34")]
       roundTrip stored (Amount (MkFixed 1234))
@@ -112,52 +114,68 @@ main = hspec $ do
       let stored = good (storage (field "_1" "quantity" (contract @Payload)))
       roundTrip stored (Amount (MkFixed 1234))
       case stored.schema.shape of
-        SSum (_ : Variant "Amount" _ [Field "payload" (Schema _ _ _ (SObject [Field "_1" amount _])) _] : _) ->
+        SSum (_ : Variant "Amount" _ [Schema.Field "payload" (Schema _ _ _ (SObject [Schema.Field "_1" amount _])) _] : _) ->
           amount.doc `shouldBe` Just "quantity"
+        other -> expectationFailure (show other)
+    it "rejects a missing field as soon as the annotation is evaluated" $
+      evaluate (field "missing" "quantity" (contract @Sample))
+        `shouldThrow` errorCall "Agentic.Contract.field: no field named missing"
+    it "applies repeated field annotations immediately, with the last one winning" $
+      case outline (field "key" "second" (field "key" "first" (contract @Sample))) of
+        ONamed _ (ORecord _ (keyField : _)) -> do
+          keyField.name `shouldBe` "key"
+          keyField.doc `shouldBe` Just "second"
+          keyField.structure `shouldBe` outline (contract @FactId)
         other -> expectationFailure (show other)
     it "compiles existential cases without exposing nonmatching payload getters" $ do
       let c :: Case (Either Int Text)
           c =
             Case
-              (Constructor "Left" PositionalFields)
-              Nothing
-              (\case Left n -> Just n; Right _ -> Nothing)
-              Left
-              (FieldNode "_1" Nothing (contract @Int) id)
-          compiled :: C.Case (Either Int Text)
+              { constructor = Constructor "Left" PositionalFields
+              , doc = Nothing
+              , match = \case Left n -> Just n; Right _ -> Nothing
+              , inject = Left
+              , fields = Field "_1" Nothing (contract @Int) id
+              }
+          compiled :: C.CaseCodec (Either Int Text)
           compiled = good (compileCaseWith compileModel c)
       compiled.encode (Right "not this case") `shouldBe` Nothing
       compiled.encode (Left 3) `shouldBe` Just [("_1", Integer 3)]
       compiled.decode [("_1", Integer 3)] `shouldBe` Right (Left 3)
     it "accepts whole in-range model Numbers for Int and rejects overflow" $ do
-      let c = good (compileModel (contract @Int))
+      let c = modelContract @Int
       c.decode (Number 3.0) `shouldBe` Right 3
       c.decode (Number 3.5) `shouldSatisfy` isLeft
       c.decode (Integer (toInteger (maxBound :: Int) + 1)) `shouldSatisfy` isLeft
   H.describe "discovery" $ do
+    it "omits representation mappings from outlines" $ do
+      let original = contract @Sample
+          mapped = mapStructure id id (mapStructure id id original)
+      outline mapped `shouldBe` outline original
+      outline (nominal original) `shouldBe` ONamed (SomeTypeRep (typeRep @Sample)) (outline original)
     it "retains applied identity and scalar parameters" $ do
-      descriptor (contract @(Box (Fixed E2))) `shouldNotBe` descriptor (contract @(Box Probability))
-      leaves (descriptor (contract @Sample))
+      outline (contract @(Box (Fixed E2))) `shouldNotBe` outline (contract @(Box Probability))
+      leaves (outline (contract @Sample))
         `shouldBe` [ ScalarInfo "example.FactId" []
                    , ScalarInfo "Data.Fixed.Fixed" [("resolution", "100")]
                    , ScalarInfo "Agentic.Questions.Probability" []
                    ]
     it "preserves nominal wrappers and aliases without flattening them to scalars" $ do
-      descriptor (contract @Alias) `shouldBe` descriptor (contract @Age)
-      case descriptor (contract @Age) of
-        NamedDescriptor rep tree
-          | RecordDescriptor (Constructor "Age" PositionalFields) [FieldDescriptor "_1" _ _] <- structural tree ->
+      outline (contract @Alias) `shouldBe` outline (contract @Age)
+      case outline (contract @Age) of
+        ONamed rep tree
+          | ORecord (Constructor "Age" PositionalFields) [OutlineField "_1" _ _] <- tree ->
               rep `shouldBe` SomeTypeRep (typeRep @Age)
         other -> expectationFailure (show other)
     it "describes a singleton nullary type as a product" $
-      case descriptor (contract @EmptyRoot) of
-        NamedDescriptor _ tree -> structural tree `shouldBe` RecordDescriptor (Constructor "EmptyRoot" PositionalFields) []
+      case outline (contract @EmptyRoot) of
+        ONamed _ tree -> tree `shouldBe` ORecord (Constructor "EmptyRoot" PositionalFields) []
         other -> expectationFailure (show other)
     it "keeps constructor declaration order and positional payload metadata" $ do
-      case descriptor (contract @Payload) of
-        NamedDescriptor _ tree
-          | SumDescriptor cs <- structural tree ->
-              [con | CaseDescriptor con _ _ <- cs]
+      case outline (contract @Payload) of
+        ONamed _ tree
+          | OSum cs <- tree ->
+              [con | OutlineCase con _ _ <- cs]
                 `shouldBe` [Constructor "Empty" PositionalFields, Constructor "Amount" PositionalFields, Constructor "Confidence" PositionalFields]
         other -> expectationFailure (show other)
   H.describe "preflight" $ do
@@ -189,19 +207,14 @@ main = hspec $ do
       preflight (draftWith @Text @() @IO [inputTool] "test") `shouldSatisfy` isLeft
       preflight (draftWith @Text @() @IO [bodyTool] "test") `shouldSatisfy` isLeft
 
-leaves :: Descriptor -> [ScalarInfo]
+leaves :: Outline -> [ScalarInfo]
 leaves = \case
-  ScalarDescriptor _ info -> [info]
-  NamedDescriptor _ c -> leaves c
-  RecordDescriptor _ fs -> concat [leaves c | FieldDescriptor _ _ c <- fs]
-  SumDescriptor cs -> concat [leaves c | CaseDescriptor _ _ fs <- cs, FieldDescriptor _ _ c <- fs]
-  ListDescriptor c -> leaves c
-  OptionalDescriptor c -> leaves c
-  UnitDescriptor -> []
-  MappedDescriptor c -> leaves c
-  CheckedDescriptor _ c -> leaves c
-  DocumentedDescriptor _ c -> leaves c
-
-structural :: Descriptor -> Descriptor
-structural (MappedDescriptor c) = structural c
-structural c = c
+  OScalar _ info -> [info]
+  ONamed _ c -> leaves c
+  ORecord _ fs -> concat [leaves c | OutlineField _ _ c <- fs]
+  OSum cs -> concat [leaves c | OutlineCase _ _ fs <- cs, OutlineField _ _ c <- fs]
+  OList c -> leaves c
+  OOptional c -> leaves c
+  OUnit -> []
+  OChecked _ c -> leaves c
+  ODocumented _ c -> leaves c

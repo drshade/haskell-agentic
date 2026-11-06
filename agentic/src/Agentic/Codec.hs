@@ -10,13 +10,8 @@ module Agentic.Codec
   , record
   , requiredWith
   , lmapObject
-  , Case (..)
+  , CaseCodec (..)
   , sumOf
-  , constructor
-  , documented
-  , field
-  , checked
-  , between
   ) where
 
 import Agentic.Schema
@@ -107,7 +102,7 @@ record d o =
 -- Sums
 
 -- | One constructor of a sum type.
-data Case a = Case
+data CaseCodec a = CaseCodec
   { tag :: Text
   , doc :: Maybe Text
   , fields :: [Field]
@@ -115,24 +110,12 @@ data Case a = Case
   , decode :: [(Text, Value)] -> Either Text a
   }
 
--- | A constructor: its tag, a description, how to recognise it, and its fields.
---
--- The supplied getters must be defined wherever the predicate returns True.
-constructor :: Text -> Text -> (a -> Bool) -> ObjectCodec a a -> Case a
-constructor tag d matches o =
-  Case
-    tag
-    (nonEmpty d)
-    o.fields
-    (\a -> if matches a then Just (o.encode a) else Nothing)
-    o.decode
-
 -- | A sum type. If no constructor has fields, it's encoded as an enumeration of
 -- tags; otherwise each value is an object with a @tag@ field.
-sumOf :: Text -> [Case a] -> Codec a
+sumOf :: Text -> [CaseCodec a] -> Codec a
 sumOf d = sumCodec (nonEmpty d)
 
-sumCodec :: Maybe Text -> [Case a] -> Codec a
+sumCodec :: Maybe Text -> [CaseCodec a] -> Codec a
 sumCodec d cases
   | all (null . (.fields)) cases =
       Codec
@@ -158,50 +141,6 @@ sumCodec d cases
  where
   matching a = find (\c -> isJust (c.encode a)) cases
   byTag t = find ((== t) . (.tag)) cases
-
--- ---------------------------------------------------------------------------
--- Adjusting contracts
-
--- | Describe the whole type.
-documented :: Text -> Codec a -> Codec a
-documented d = reschema (documentedSchema d)
-
--- | Describe one field of a record (or of any constructor of a sum). Naming a
--- field that doesn't exist is an error when the schema is first used.
-field :: Text -> Text -> Codec a -> Codec a
-field name d = reschema (\s -> s{shape = update s.shape})
- where
-  update = \case
-    SObject fs | any named fs -> SObject (map describeField fs)
-    SSum vs
-      | any (any named . (.fields)) vs ->
-          SSum [Variant t vd (map describeField vfs) | Variant t vd vfs <- vs]
-    _ -> error ("Agentic.Contract.field: no field named " <> T.unpack name)
-  named f = f.name == name
-  describeField f@(Field n s r)
-    | named f = Field n (documentedSchema d s) r
-    | otherwise = f
-
--- | A constraint the wire schemas can't express. It's stated to the model and
--- checked locally; a value that fails it goes back to the model.
-checked :: Text -> (a -> Bool) -> Codec a -> Codec a
-checked rule ok c =
-  Codec
-    (s{checks = s.checks <> [rule]})
-    c.encode
-    ( \v -> do
-        a <- c.decode v
-        if ok a then Right a else Left ("must be " <> rule)
-    )
- where
-  s = c.schema
-
--- | Validate inclusive bounds on decoded values and document the rule.
-between :: (Ord a, Show a) => a -> a -> Codec a -> Codec a
-between lo hi =
-  checked
-    ("between " <> T.pack (show lo) <> " and " <> T.pack (show hi))
-    (\a -> a >= lo && a <= hi)
 
 documentedSchema' :: Maybe Text -> Schema -> Schema
 documentedSchema' = maybe id documentedSchema

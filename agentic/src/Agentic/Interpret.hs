@@ -4,7 +4,7 @@ module Agentic.Interpret
   , preflight
   ) where
 
-import Agentic.Contract (Codec (..), ContractTree, ProjectionError (..), compileModel)
+import Agentic.Contract (Codec (..), Structure, ProjectionError (..), compileModel)
 import Agentic.Core
 import Agentic.Questions (JudgeRequest (..), Questions (..), decodeAnswers)
 import Agentic.Runtime
@@ -91,7 +91,7 @@ interpret rt flow input = case preflight flow of
    where
     answered = either (failWith rt . MalformedAnswers) pure
 
-  compile :: [Note] -> ContractTree a -> m (Codec a)
+  compile :: [Note] -> Structure a -> m (Codec a)
   compile path = either (failWith rt . UnsupportedContract path) pure . compileModel
 
   compileTool :: [Note] -> Tool m -> m (CompiledTool m)

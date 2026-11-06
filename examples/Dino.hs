@@ -51,7 +51,7 @@ newtype Stat = Stat Int
   deriving (Show)
 
 instance Contract Stat where
-  contract = documented "From 1 (lowest) to 10 (highest)" (mapContract Stat (\(Stat n) -> n) (between 1 10 contract))
+  contract = documented "From 1 (lowest) to 10 (highest)" (mapStructure Stat (\(Stat n) -> n) (between 1 10 contract))
 
 data TrumpCard = TrumpCard {size :: Stat, ferocity :: Stat, speed :: Stat, intelligence :: Stat}
   deriving (Generic, Show, Contract)

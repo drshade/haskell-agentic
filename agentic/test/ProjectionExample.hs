@@ -5,13 +5,13 @@
 {-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- | A standalone adapter example. All storage conventions are local to this
+-- | An independent adapter fixture. All storage conventions are local to this
 -- module; Agentic owns neither the identifier nor this storage protocol.
 module ProjectionExample where
 
 import Agentic hiding (model)
-import Agentic.Codec (Case (..), ObjectCodec (..))
-import Agentic.Contract (ContractTree (..))
+import Agentic.Codec (CaseCodec (..), ObjectCodec (..))
+import Agentic.Contract (Structure (..))
 import Agentic.Schema (Field (..), Shape (..), Variant (..))
 import Data.Fixed (E2, Fixed (..), showFixed)
 import Data.Text (Text)
@@ -73,10 +73,10 @@ probabilityStorage = Codec integerText.schema (integerText.encode . toInteger . 
 -- | An independent projection for upstream and downstream leaves. Named types,
 -- mappings, validation and lists reuse the compiler's traversal.
 -- Overrides are typed, and return the schema together with its matching codec.
-storage :: ContractTree a -> Either ProjectionError (Codec a)
+storage :: Structure a -> Either ProjectionError (Codec a)
 storage = compileWith storageRules
 
-storageRules :: forall a. ContractTree a -> Maybe (Either ProjectionError (Codec a))
+storageRules :: forall a. Structure a -> Maybe (Either ProjectionError (Codec a))
 storageRules = \case
   Scalar info modelDefault -> Just $ case () of
     _
@@ -145,14 +145,3 @@ storageRules = \case
   _ -> Nothing
  where
   defaultCodec info = maybe (Left (ProjectionError [] ("unsupported storage scalar " <> info.name))) Right
-
-main :: IO ()
-main = do
-  print (descriptor (contract @Sample))
-  case (storage (contract @Sample), compileModel (contract @Sample)) of
-    (Right stored, Right model) -> do
-      print (renderJson (stored.encode sample))
-      print (renderJson (model.encode sample))
-      print (stored.decode (stored.encode sample) == Right sample)
-    (Left e, _) -> fail (show e)
-    (_, Left e) -> fail (show e)

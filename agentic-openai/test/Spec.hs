@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Agentic
+import Agentic.Scripted (modelContract)
 import Agentic.Runtime (Conversation (..))
 import Agentic.Schema (Schema(..), Field(..), Shape (..))
 import Agentic.JsonSchema (objectSchema)
@@ -127,7 +128,3 @@ main = hspec $ Test.Hspec.describe "Agentic.OpenAI" $ do
         truncated = decodeTurn conversation (fromJust (J.decode "{\"status\":\"incomplete\",\"incomplete_details\":{\"reason\":\"max_output_tokens\"},\"output\":[]}"))
     either (\case Refused "No." -> True; _ -> False) (const False) refusal `shouldBe` True
     either (\case Truncated -> True; _ -> False) (const False) truncated `shouldBe` True
-
--- Test fixtures use known-supported model contracts; production code handles Left.
-modelContract :: Contract a => Codec a
-modelContract = either (error . show) id (compileModel contract)

@@ -101,7 +101,7 @@ instance Contract Subject where
   contract =
     documented "A subject line for the reply" $
       checked "60 characters or fewer" ((<= 60) . T.length . (\(Subject s) -> s)) $
-        mapContract Subject (\(Subject s) -> s) contract
+        mapStructure Subject (\(Subject s) -> s) contract
 
 data Reply = Reply {recipient :: Text, subject :: Subject, text :: Text}
   deriving (Generic, Show, Contract)

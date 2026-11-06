@@ -40,12 +40,12 @@ newtype Rating = Rating Int
   deriving (Show, Eq)
 
 instance Contract Rating where
-  contract = mapContract Rating (\(Rating n) -> n) (between 1 10 contract)
+  contract = mapStructure Rating (\(Rating n) -> n) (between 1 10 contract)
 
 data Review = Review {funny :: YesNo, groan :: Score Groan}
   deriving (Show, Eq)
 
-documentedJoke :: ContractTree Joke
+documentedJoke :: Structure Joke
 documentedJoke =
   record "A joke, split into its parts" $
     Joke
@@ -279,7 +279,3 @@ main = hspec $ do
                    ]
  where
   describe' = Test.Hspec.describe
-
--- Test fixtures use known-supported model contracts; production code handles Left.
-modelContract :: Contract a => Codec a
-modelContract = either (error . show) id (compileModel contract)

@@ -10,6 +10,7 @@
 module Main (main) where
 
 import Agentic
+import Agentic.Scripted (modelContract)
 import Data.IORef (modifyIORef, newIORef, readIORef)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -167,7 +168,3 @@ main = do
   -- 8. All of the above ran in Pure, not IO.
   n <- readIORef failures
   if n == 0 then putStrLn "all checks passed" else putStrLn (show n <> " checks failed") >> exitFailure
-
--- Test fixtures use known-supported model contracts; production code handles Left.
-modelContract :: Contract a => Codec a
-modelContract = either (error . show) id (compileModel contract)

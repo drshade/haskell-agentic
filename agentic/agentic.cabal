@@ -80,3 +80,16 @@ test-suite agentic-portable-test
     , agentic
     , base
     , text
+
+-- Independent projection adapters and acceptance fixtures.
+test-suite agentic-projection-test
+  import:           shared
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          ProjectionSpec.hs
+  other-modules:    ProjectionExample
+  build-depends:
+    , agentic          >=0.2.1 && <0.3
+    , base             >=4.18 && <5
+    , hspec            >=2.10 && <3
+    , text             >=2.0 && <2.2
