@@ -1,6 +1,6 @@
 # Changelog for agentic
 
-## 0.2.1.0 - ???
+## 0.2.1.0 - 2026-11-06
 
 * `Contract` now produces a typed `Structure`, shared by generic derivation
   and handwritten builders. `outline` exposes nominal/applied identities,

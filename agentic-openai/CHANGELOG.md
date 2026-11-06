@@ -1,6 +1,6 @@
 # Changelog for agentic-openai
 
-## 0.2.1.0 - ???
+## 0.2.1.0 - 2026-11-06
 
 * Follow Agentic's `Structure`/`Outline` API and fallible model compilation.
   Provider wire schemas and protocols are unchanged.
