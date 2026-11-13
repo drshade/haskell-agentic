@@ -1,0 +1,10 @@
+digraph flow {
+  compound=true;
+  node [shape=box, style=rounded, fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  input [label="input", shape=oval];
+  n_flow_0 [label="judge 2 questions in one request\nyes/no \"Would a 10-year-old laugh at this joke?\"\nscore on 3 levels \"How much will the audience groan?\""];
+  output [label="output", shape=oval];
+  input -> n_flow_0;
+  n_flow_0 -> output;
+}

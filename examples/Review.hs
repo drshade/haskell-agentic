@@ -1,5 +1,5 @@
 -- | Jev judges a joke, for real. Needs JEV_TOKEN, in the environment or .env.
-module Main (main) where
+module Review where
 
 import Agentic
 import Control.Exception (throwIO)
@@ -42,5 +42,6 @@ main = do
   T.putStrLn $ "\n" <> mermaid description
   T.putStrLn $ dot description
   rt <- pure runtime >>= withSystemOne jev
-  result <- interpret rt review (Joke "Why was the scarecrow promoted?" "He was outstanding in his field.")
+  result <- interpret rt review
+    (Joke "Why was the scarecrow promoted?" "He was outstanding in his field.")
   print result

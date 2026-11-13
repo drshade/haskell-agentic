@@ -1,0 +1,22 @@
+digraph flow {
+  compound=true;
+  node [shape=box, style=rounded, fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  input [label="input", shape=oval];
+  subgraph cluster_n_flow_0 {
+    label="play until the game ends";
+    style=rounded;
+    subgraph cluster_n_flow_note_0 {
+      label="repeatUntil";
+      style=rounded;
+      n_flow_note_repeat_seq_0_0 [label="draft @Game\n\"Play the next move!\""];
+      n_flow_note_repeat_seq_1_note_0 [label="act\nprint the board"];
+    }
+  }
+  output [label="output", shape=oval];
+  input -> n_flow_note_repeat_seq_0_0;
+  n_flow_note_repeat_seq_0_0 -> n_flow_note_repeat_seq_1_note_0;
+  n_flow_note_repeat_seq_1_note_0 -> n_flow_note_repeat_seq_0_0 [label="again", style=dashed];
+  input -> output;
+  n_flow_note_repeat_seq_1_note_0 -> output;
+}

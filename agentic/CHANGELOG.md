@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+* Rework Dino around an explicit exhibit choice; add generated example diagrams
+  to the README and a gallery, with scripted checks for both branches.
+
 * Add `flowGraphValue` for complete graph encoding: nested items, explicit kind
   and style tags, edges, selection IDs, address mappings and body relations.
 * Add `exceptTScope` to lift observation scopes through `ExceptT`. Body errors

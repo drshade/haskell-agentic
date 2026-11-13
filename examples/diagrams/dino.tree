@@ -1,0 +1,10 @@
+draft @[Creature]  "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
+each
+├─ judge  choice of 6 "What kind of animal was this creature?"  (keeping its input)
+├─ arr  dinosaur or other creature
+└─ choose an exhibit  branch
+   ├─ left → exhibit  together  (keeping its input)
+   │  ├─ draft @DinoPic  "Draw an ascii picture of this dinosaur, 10 lines high"
+   │  └─ draft @TrumpCard  "Make a trump card for this dinosaur"
+   └─ right → draft @FactCard  not a dinosaur fact card  "Make a short Not a dinosaur! fact card for a grade 5 class. Name this creature, explain what kind of animal it was and why it was not a dinosaur."
+draft @Poster  "Create a grade 5 poster from these exhibit entries. Keep the dinosaur pictures and trump cards, and give the other prehistoric creatures a Not a dinosaur! corner."

@@ -1,7 +1,7 @@
 -- | A model plays tic-tac-toe against itself: given the game so far, it plays
 -- the next move, until it says the game has ended. Needs OPENAI_API_KEY, in the
 -- environment or .env.
-module Main (main) where
+module TicTacToe where
 
 import Agentic
 import Control.Exception (throwIO)
@@ -31,7 +31,10 @@ nextMove :: Agentic IO Game Game
 nextMove = draft @Game "Play the next move!"
 
 game :: Agentic IO Game Game
-game = repeatUntil ((== Ended) . (.state)) (nextMove >>> act printBoard `named` "print the board") `named` "play until the game ends"
+game =
+  repeatUntil ((== Ended) . (.state))
+    (nextMove >>> act printBoard `named` "print the board")
+    `named` "play until the game ends"
 
 printBoard :: Game -> IO Game
 printBoard g = T.putStrLn (render g.board <> "\n") >> pure g

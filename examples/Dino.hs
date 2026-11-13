@@ -3,14 +3,13 @@
 --
 -- It prints the flow's description, then runs it with Claude and Jev. Needs
 -- ANTHROPIC_API_KEY and JEV_TOKEN, in the environment or .env.
-module Main (main) where
+module Dino where
 
 import Agentic
 import Control.Exception (throwIO)
 import Agentic.Anthropic (anthropic)
 import Agentic.IO (concurrently, loadDotEnv)
 import Agentic.Jev (jev)
-import Data.List (partition)
 import Data.Text (Text)
 import qualified Data.Text.IO as T
 import GHC.Generics (Generic)
@@ -29,19 +28,20 @@ instance Contract Creature where
         <*> required "about" "One sentence on what it was and how it lived" (.about)
 
 -- | What kind of animal a creature was. Jev chooses one, with probabilities.
-data Kind = Dinosaur | Pterosaur | MarineReptile | Fish | Mammal | Bird | Other
+data Kind = Dinosaur | Pterosaur | MarineReptile | Fish | Mammal | Other
   deriving (Generic, Show, Eq)
 
 instance Options Kind where
   options =
     documentedOptions
       "What kind of animal it was"
-      [ option Dinosaur "A dinosaur that isn't a bird, such as Triceratops or Velociraptor"
+      [ option Dinosaur "A dinosaur, including birds, such as Triceratops, Velociraptor or \
+        \Archaeopteryx"
       , option Pterosaur "A flying reptile, such as Pteranodon. Not a dinosaur."
-      , option MarineReptile "A swimming reptile, such as a plesiosaur, ichthyosaur or mosasaur. Not a dinosaur."
+      , option MarineReptile "A swimming reptile, such as a plesiosaur, ichthyosaur or mosasaur. \
+        \Not a dinosaur."
       , option Fish "A fish, such as Dunkleosteus or a prehistoric shark"
       , option Mammal "A mammal, such as a woolly mammoth or sabre-toothed cat"
-      , option Bird "A bird, including early birds such as Archaeopteryx"
       , option Other "Anything else: insects, amphibians, crocodile relatives and so on"
       ]
 
@@ -52,7 +52,9 @@ newtype Stat = Stat Int
   deriving (Show)
 
 instance Contract Stat where
-  contract = documented "From 1 (lowest) to 10 (highest)" (mapStructure Stat (\(Stat n) -> n) (between 1 10 contract))
+  contract =
+    documented "From 1 (lowest) to 10 (highest)" $
+      mapStructure Stat (\(Stat n) -> n) (between 1 10 contract)
 
 data TrumpCard = TrumpCard {size :: Stat, ferocity :: Stat, speed :: Stat, intelligence :: Stat}
   deriving (Generic, Show, Contract)
@@ -63,10 +65,16 @@ data DinoPic = DinoPic {asciiPic :: Text}
 data Entry = Entry {dinosaur :: Creature, picture :: DinoPic, card :: TrumpCard}
   deriving (Generic, Show, Contract)
 
-data NotADinosaur = NotADinosaur {creature :: Text, actually :: Kind}
+data NotADinosaur = NotADinosaur {creature :: Creature, actually :: Kind}
   deriving (Generic, Show, Contract)
 
-data Exhibit = Exhibit {dinosaurs :: [Entry], notDinosaurs :: [NotADinosaur]}
+data FactCard = FactCard {heading :: Text, explanation :: Text}
+  deriving (Generic, Show, Contract)
+
+data ExhibitEntry = DinosaurExhibit Entry | OtherExhibit FactCard
+  deriving (Generic, Show, Contract)
+
+data Exhibit = Exhibit {entries :: [ExhibitEntry]}
   deriving (Generic, Show, Contract)
 
 data Poster = Poster {heading :: Text, body :: Text}
@@ -77,30 +85,44 @@ data Poster = Poster {heading :: Text, body :: Text}
 
 dinoProject :: Agentic IO () Poster
 dinoProject =
-  draft @[Creature] "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
-    >>> each (returnA &&& classify)
-    >>> arr (partition (clearly Dinosaur 0.8)) `named` "split off the clear dinosaurs (≥ 0.8)"
-    >>> (each (takeFirst >>> exhibit) *** arr (map notADinosaur) `named` "note what the others were")
-    >>> arr (uncurry Exhibit)
-    >>> draft @Poster "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
+  draft @[Creature] "Name 10 prehistoric creatures a grade 5 class might have heard of. \
+    \Include a mix of kinds, not only dinosaurs."
+    >>> each creatureExhibit
+    >>> arr Exhibit
+    >>> draft @Poster "Create a grade 5 poster from these exhibit entries. Keep the dinosaur \
+      \pictures and trump cards, and give the other prehistoric creatures a \
+      \Not a dinosaur! corner."
 
--- | Jev decides what kind of animal each creature was.
-classify :: Agentic IO Creature (Choice Kind)
-classify = judge (choice "What kind of animal was this creature?")
+-- | Classify once, then run only the chosen kind of exhibit.
+creatureExhibit :: Agentic IO Creature ExhibitEntry
+creatureExhibit =
+  classify
+    >>> arr route `named` "dinosaur or other creature"
+    >>> ((exhibit >>> arr DinosaurExhibit) ||| (factCard >>> arr OtherExhibit))
+          `named` "choose an exhibit"
 
--- | Keep a creature when Jev chose this kind with at least probability @p@.
-clearly :: Kind -> Probability -> (Creature, Choice Kind) -> Bool
-clearly kind p (_, c) = c.chosen == kind && maybe False (>= p) (lookup kind c.probabilities)
+-- | Jev decides what kind of animal each creature was, keeping the creature.
+classify :: Agentic IO Creature (Creature, Choice Kind)
+classify = returnA &&& judge (choice "What kind of animal was this creature?")
+
+-- | Follow the chosen kind. Low confidence is not evidence of a different kind.
+route :: (Creature, Choice Kind) -> Either Creature NotADinosaur
+route (c, k)
+  | k.chosen == Dinosaur = Left c
+  | otherwise = Right (NotADinosaur c k.chosen)
+
+factCard :: Agentic IO NotADinosaur FactCard
+factCard = draft @FactCard "Make a short Not a dinosaur! fact card for a grade 5 class. Name this \
+  \creature, explain what kind of animal it was and why it was not a \
+  \dinosaur."
+  `named` "not a dinosaur fact card"
 
 exhibit :: Agentic IO Creature Entry
 exhibit =
-  (returnA &&& draft @DinoPic "Draw an ascii picture of this dinosaur, 10 lines high" 
+  (returnA &&& draft @DinoPic "Draw an ascii picture of this dinosaur, 10 lines high"
            &&& draft @TrumpCard "Make a trump card for this dinosaur")
     `named` "exhibit"
     >>> arr (\(dinosaur :/\ picture :/\ card) -> Entry dinosaur picture card)
-
-notADinosaur :: (Creature, Choice Kind) -> NotADinosaur
-notADinosaur (c, k) = NotADinosaur c.name k.chosen
 
 -- ---------------------------------------------------------------------------
 
@@ -112,7 +134,7 @@ main = do
   T.putStrLn $ "\n" <> mermaid description
   T.putStrLn $ dot description
   rt <- pure (concurrently runtime)
-              >>= withSystemOne jev 
+              >>= withSystemOne jev
               >>= withSystemTwo (anthropic & effort Low)
   poster <- interpret rt dinoProject ()
   T.putStrLn $ "\n" <> poster.heading <> "\n\n" <> poster.body

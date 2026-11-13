@@ -110,7 +110,12 @@ data Reply = Reply {recipient :: Text, subject :: Subject, text :: Text}
 data Handled = Handled {ticket :: Ticket, reply :: Reply, logEntry :: Text}
   deriving (Generic, Show, Contract)
 
-data Day = Day {received :: Int, spamDropped :: Int, urgentTickets :: [Handled], routineTickets :: [Handled]}
+data Day = Day
+  { received :: Int
+  , spamDropped :: Int
+  , urgentTickets :: [Handled]
+  , routineTickets :: [Handled]
+  }
   deriving (Generic, Show)
 
 instance Contract Day where
@@ -118,12 +123,18 @@ instance Contract Day where
     record "A day of support email" $
       Day
         <$> required "received" "How many emails arrived, spam included" (.received)
-        <*> required "spamDropped" "How many of them were spam, and dropped without a reply" (.spamDropped)
+        <*> required "spamDropped"
+          "How many of them were spam, and dropped without a reply" (.spamDropped)
         <*> required "urgentTickets" "Tickets that needed an answer quickly" (.urgentTickets)
         <*> required "routineTickets" "Everything else" (.routineTickets)
 
 -- | The day's report. Claude writes the content; code lays it out.
-data Report = Report {headline :: Text, urgent :: [TicketSummary], routine :: [TicketSummary], forTheLead :: [Text]}
+data Report = Report
+  { headline :: Text
+  , urgent :: [TicketSummary]
+  , routine :: [TicketSummary]
+  , forTheLead :: [Text]
+  }
   deriving (Generic, Show)
 
 instance Contract Report where
@@ -133,7 +144,8 @@ instance Contract Report where
         <$> required "headline" "One sentence on how the day went" (.headline)
         <*> required "urgent" "One entry per urgent ticket" (.urgent)
         <*> required "routine" "One entry per routine ticket" (.routine)
-        <*> required "forTheLead" "Things the support lead should do, most important first" (.forTheLead)
+        <*> required "forTheLead"
+          "Things the support lead should do, most important first" (.forTheLead)
 
 data TicketSummary = TicketSummary {who :: Text, gist :: Text}
   deriving (Generic, Show)
@@ -142,8 +154,10 @@ instance Contract TicketSummary where
   contract =
     record "A ticket, summarised" $
       TicketSummary
-        <$> required "customer" "The customer's name, or their email address if there's no name" (.who)
-        <*> required "gist" "What they wanted and what the reply did, in one or two sentences" (.gist)
+        <$> required "customer"
+          "The customer's name, or their email address if there's no name" (.who)
+        <*> required "gist"
+          "What they wanted and what the reply did, in one or two sentences" (.gist)
 
 -- ---------------------------------------------------------------------------
 -- The refund agent's tools
@@ -158,10 +172,13 @@ data Order = Order {book :: Text, purchasedDaysAgo :: Int}
 -- worked out from their address.
 lookupOrder :: Tool IO
 lookupOrder =
-  tool @OrderQuery @Order "lookup_order" "Look up a customer's most recent order by their email address" $
+  tool @OrderQuery @Order "lookup_order"
+    "Look up a customer's most recent order by their email address" $
     act $ \query ->
       let seed = T.length query.customer
-       in pure (Order (["Dune", "Middlemarch", "The Hobbit", "Beloved"] !! (seed `mod` 4)) (seed * 3 `mod` 45))
+       in pure (Order
+            (["Dune", "Middlemarch", "The Hobbit", "Beloved"] !! (seed `mod` 4))
+            (seed * 3 `mod` 45))
 
 data RefundCase = RefundCase {reason :: Text, daysSincePurchase :: Int}
   deriving (Generic, Show)
@@ -176,28 +193,35 @@ instance Contract RefundCase where
 -- | Jev, as a tool: does a refund request fit the policy?
 refundEligible :: Tool IO
 refundEligible =
-  tool @RefundCase @YesNo "refund_eligible" "Check a refund request against the shop's refund policy" $
-    judge (yesNo "Our policy: refunds within 30 days of purchase, for damaged books or books that weren't what was ordered. Does this request fit the policy?")
+  tool @RefundCase @YesNo "refund_eligible"
+    "Check a refund request against the shop's refund policy" $
+    judge (yesNo "Our policy: refunds within 30 days of purchase, for damaged books or \
+      \books that weren't what was ordered. Does this request fit the policy?")
 
 -- ---------------------------------------------------------------------------
 -- The flow
 
 kitchenSink :: Agentic IO () Report
 kitchenSink =
-  draft @[Email] "Write 8 emails to the support address of an online bookshop, as they might arrive in a day. Include one spam email, one refund request and one angry customer."
-    >>> (arr length `named` "count the emails" &&& keep 0.5 (yesNo "Is this a genuine email from a customer, not spam?"))
+  draft @[Email] "Write 8 emails to the support address of an online bookshop, as they \
+    \might arrive in a day. Include one spam email, one refund request and \
+    \one angry customer."
+    >>> (arr length `named` "count the emails"
+          &&& keep 0.5 (yesNo "Is this a genuine email from a customer, not spam?"))
     >>> second
       ( each triage
           >>> arr (partition (.urgent)) `named` "split off the urgent tickets"
           >>> each (handle >>> act page `named` "page the on-call team") *** each handle
       )
-    >>> arr (\(received :/\ urgent :/\ routine) -> Day received (received - length urgent - length routine) urgent routine)
+    >>> arr (\(received :/\ urgent :/\ routine) ->
+          Day received (received - length urgent - length routine) urgent routine)
     >>> draft @Report "Summarise the day's support email for the support lead."
 
 triage :: Agentic IO Email Ticket
 triage =
   (returnA &&& judge triageQuestions)
-    >>> note "triage policy" "Urgent if Jev scores it above Soon, or the customer is angry" (arr decide)
+    >>> note "triage policy"
+          "Urgent if Jev scores it above Soon, or the customer is angry" (arr decide)
 
 -- | Reply, polish, send, and log it.
 handle :: Agentic IO Ticket Handled
@@ -208,24 +232,34 @@ handle =
 
 route :: Agentic IO Ticket (Ticket, Reply)
 route =
-  arr (\ticket -> if ticket.about == Refund then Left ticket else Right ticket) `named` "refunds to the refund agent"
-    >>> (returnA &&& refundAgent ||| returnA &&& draft @Reply "Write a helpful reply to this customer's email.")
+  arr (\ticket -> if ticket.about == Refund then Left ticket else Right ticket)
+    `named` "refunds to the refund agent"
+    >>> (returnA &&& refundAgent
+          ||| returnA &&& draft @Reply "Write a helpful reply to this customer's email.")
 
 refundAgent :: Agentic IO Ticket Reply
 refundAgent =
   draftWith @Reply
     [lookupOrder, refundEligible]
-    "This customer wants a refund. Look up their order, check the request against the refund policy, and write a reply that tells them the outcome."
+    "This customer wants a refund. Look up their order, check the request \
+      \against the refund policy, and write a reply that tells them the \
+      \outcome."
 
 -- | Revise the reply until Jev rates it polite.
 polish :: Agentic IO (Ticket, Reply) (Ticket, Reply)
 polish =
   note "polish" "Revise until Jev rates the reply polite (≥ 0.9)" $
     rate
-      >>> repeatUntil ((>= 0.9) . (.yes) . snd) (takeFirst >>> second (draft @Reply "Make this reply warmer and more polite, keeping what it says.") >>> rate)
+      >>> repeatUntil ((>= 0.9) . (.yes) . snd)
+        ( takeFirst
+            >>> second
+              (draft @Reply "Make this reply warmer and more polite, keeping what it says.")
+            >>> rate
+        )
       >>> takeFirst
   where
-    rate = returnA &&& (takeSecond >>> arr (.text) >>> judge (yesNo "Is this reply polite and warm?"))
+    rate = returnA
+      &&& (takeSecond >>> arr (.text) >>> judge (yesNo "Is this reply polite and warm?"))
 
 send :: Handled -> IO Handled
 send h = do
@@ -259,7 +293,8 @@ render r =
     [r.headline, ""]
       <> section "Urgent" (map ticket r.urgent)
       <> section "Routine" (map ticket r.routine)
-      <> section "For the lead" [T.pack (show i) <> ". " <> a | (i, a) <- zip [1 :: Int ..] r.forTheLead]
+      <> section "For the lead"
+        [T.pack (show i) <> ". " <> a | (i, a) <- zip [1 :: Int ..] r.forTheLead]
   where
     section _ [] = []
     section title items = [title] <> map ("  " <>) items <> [""]
