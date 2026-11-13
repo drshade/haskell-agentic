@@ -3,7 +3,7 @@ name:               agentic
 version:            0.2.1.0
 synopsis:           Composable, inspectable agentic workflows mixing LLMs and Jev
 description:
-  Typed agentic workflows built from Arrow combinators. A flow is a description: you can describe it as a tree, Mermaid or Graphviz before running anything, then interpret it against System One (Jev) and System Two (an LLM) providers. This is the core: flows, contracts, questions, the runtime and the interpreter. It depends only on base and text.
+  Typed agentic workflows built from Arrow combinators. A flow is a description: you can describe it as a tree, Mermaid or Graphviz before running anything, then interpret it against System One (Jev) and System Two (an LLM) providers. This is the core: flows, contracts, questions, the runtime and the interpreter. It depends only on base, text and transformers.
 license:            BSD-2-Clause
 license-file:       LICENSE
 author:             Tom Wells
@@ -63,16 +63,18 @@ library
   build-depends:
     , base  >=4.18 && <5
     , text  >=2.0  && <2.2
+    , transformers >=0.6 && <0.7
 
 test-suite agentic-test
   import:           shared
   type:             exitcode-stdio-1.0
   hs-source-dirs:   test
   main-is:          Spec.hs
-  other-modules:    RecursionSpec ObservationSpec ObservationModel GraphValueSpec
+  other-modules:    RecursionSpec ObservationSpec ObservationModel GraphValueSpec ExceptScopeSpec
   build-depends:
     , agentic          >=0.2.1 && <0.3
     , base             >=4.18 && <5
+    , transformers >=0.6 && <0.7
     , hspec  >=2.10 && <3
     , text             >=2.0 && <2.2
 -- Handwritten contracts and interpreter behavior in a pure monad.

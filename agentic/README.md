@@ -21,7 +21,7 @@ in the providers you actually use:
 
 | Package | What it's for |
 |---|---|
-| `agentic` | flows, contracts, questions, the runtime and the interpreter (depends only on `base` and `text`; GHC 9.6+) |
+| `agentic` | flows, contracts, questions, the runtime and the interpreter (depends only on `base`, `text` and `transformers`; GHC 9.6+) |
 | `agentic-jev` | Jev as System One |
 | `agentic-anthropic` | Claude as System Two (or System One) |
 | `agentic-openai` | OpenAI as System Two (or System One) |
@@ -624,6 +624,21 @@ A few things that will bite you:
 - Addresses belong to the graph they came from. Store them together, and don't
   match them across versions of a flow.
 - A provider's call ids can repeat, so never key on them alone.
+
+For a flow in `ExceptT`, lift the hook so a `Left` shows up as `Failed` on
+every scope it passes through:
+
+```haskell
+import Control.Monad.Trans.Except (ExceptT, runExceptT, throwE)
+
+rt :: Runtime (ExceptT FlowError IO)
+rt = (runtimeWith throwE) { scope = exceptTScope ioScope }
+-- runExceptT (interpret rt flow input)
+```
+
+One `exceptTScope` per `ExceptT` layer. And one oddity - if a timeout lands
+while a failure is being reported, you can get the original `Left` back
+(`Just (Left e)`), rather than a timeout.
 
 It isn't free either - every node pays a little even with no observer, and a
 plumbing-heavy `each` emits a lot of events.

@@ -236,9 +236,16 @@ spec = H.describe "execution observations" $ do
         flow = act (\() -> raise NoSystemOne) :: Agentic Trace () ()
         Trace (result,es) = interpret rt flow ()
         graph = flowGraph (either (error . show) id (describe flow))
-        hook = Scope $ \enter returned exited body -> enter >> case body of
-          Trace (Left problem, events) -> Trace (Right (), events) >> exited Failed Nothing >> raise problem
-          Trace (Right value, events) -> Trace (Right (), events) >> returned value >> pure value
+        hook = Scope $ \enter returned exited body -> enter >>= \case
+          Left r -> pure r
+          Right () -> case body of
+            Trace (Left problem, events) ->
+              let Trace (_, reports) = exited Failed Nothing
+              in Trace (Left problem, events <> reports)
+            Trace (Right (Left r), events) ->
+              let Trace (_, reports) = exited Failed Nothing
+              in Trace (Right r, events <> reports)
+            Trace (Right (Right value), events) -> Trace (Right (), events) >> returned value
         Trace (hooked,hs) = interpret rt{scope=hook} flow ()
     result `shouldBe` Left NoSystemOne
     map (.happened) es `shouldBe` [Entered Nothing,Entered Nothing]
