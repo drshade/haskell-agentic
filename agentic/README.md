@@ -96,7 +96,11 @@ data Joke = Joke { genre :: Text, setup :: Text, punchline :: Text }
   deriving (Generic, Show, Contract)
 
 ghci> run (draft @Joke "a joke please") ()
-Joke {genre = "Dad joke", setup = "Why did the scarecrow win an award?", punchline = "Because he was outstanding in his field."}
+Joke
+  { genre = "Dad joke"
+  , setup = "Why did the scarecrow win an award?"
+  , punchline = "Because he was outstanding in his field."
+  }
 ```
 
 The step's input becomes the model's context, so you never have to inject it
@@ -109,7 +113,8 @@ data BetterJoke
   | KnockKnock { whosThere :: Text, punchline :: Text }
   deriving (Generic, Show, Contract)
 
-ghci> run (draft @BetterJoke "convert this joke") (Joke "knock-knock" "Knock knock. Who's there? Boo." "Don't cry, it's only a joke!")
+ghci> let joke = Joke "knock-knock" "Knock knock. Who's there? Boo." "Don't cry, it's only a joke!"
+ghci> run (draft @BetterJoke "convert this joke") joke
 KnockKnock {whosThere = "Boo", punchline = "Don't cry, it's only a joke!"}
 ```
 
@@ -135,7 +140,10 @@ instance Contract BetterJoke where
     , constructor "OneLiner" "A single line" isOneLiner $
         OneLiner <$> required "line" "" (.line)
     , constructor "KnockKnock" "The classic call-and-response" isKnockKnock $
-        KnockKnock <$> required "whosThere" "" (.whosThere) <*> required "punchline" "" (.punchline) ]
+        KnockKnock
+          <$> required "whosThere" "" (.whosThere)
+          <*> required "punchline" "" (.punchline)
+    ]
 ```
 
 (Or derive it and add descriptions after: `genericContract & field "punchline" "..."`.)
@@ -237,13 +245,17 @@ as it likes, and the step finishes when it responds with the output type.
 
 ```haskell
 research :: Agentic IO Text Dino
-research = draftWith [fossilSearch, reliable] "Research this dinosaur. Cite a source for every claim."
+research =
+  draftWith [fossilSearch, reliable]
+    "Research this dinosaur. Cite a source for every claim."
 
 fossilSearch :: Tool IO
 fossilSearch = tool "search" "Search the fossil database" (act searchFossils)
 
 reliable :: Tool IO
-reliable = tool "is_reliable" "Is this source trustworthy?" (judge (yesNo "Is this a reliable scientific source?"))
+reliable =
+  tool "is_reliable" "Is this source trustworthy?" $
+    judge (yesNo "Is this a reliable scientific source?")
 ```
 
 A tool's body is just another `Agentic` - an effect, a Jev judgement, a pipeline,
@@ -252,7 +264,9 @@ or a whole other agent. There's no separate tool system, so anything fancier
 
 ```haskell
 deleteRecord :: Tool IO
-deleteRecord = tool "delete" "Delete a fossil record" (act confirmWithHuman >>> act deleteIfApproved)
+deleteRecord =
+  tool "delete" "Delete a fossil record"
+    (act confirmWithHuman >>> act deleteIfApproved)
 ```
 
 ### Recursive tools
@@ -303,24 +317,45 @@ knowing:
 ## Example: The dino project
 
 A grade 5 project - and a flow that mixes both kinds of model. Claude suggests
-ten prehistoric creatures. Jev sorts the dinosaurs from the rest (pterosaurs and
-plesiosaurs are the classic "not actually dinosaurs" - sorry kids). Code keeps
-the clear dinosaurs. Claude draws each one and makes its trump card, then makes a
-poster with a corner for the creatures that weren't dinosaurs.
+ten prehistoric creatures. Jev classifies each one, then the flow chooses its
+exhibit. A dinosaur gets an ASCII picture and a trump card, made side by side.
+Another kind of creature gets a short "Not a dinosaur!" fact card. Claude
+combines all the entries into one poster.
 
 ```haskell
 dinoProject :: Agentic IO () Poster
 dinoProject =
-  draft @[Creature] "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
-    >>> each classify
-    >>> arr (partition (clearly Dinosaur 0.8)) `named` "split off the clear dinosaurs (≥ 0.8)"
-    >>> (each (takeFirst >>> exhibit) *** arr (map notADinosaur) `named` "note what the others were")
-    >>> arr (uncurry Exhibit)
-    >>> draft @Poster "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
+  draft @[Creature] "Name 10 prehistoric creatures a grade 5 class might have heard of. \
+    \Include a mix of kinds, not only dinosaurs."
+    >>> each creatureExhibit
+    >>> arr Exhibit
+    >>> draft @Poster "Create a grade 5 poster from these exhibit entries. Keep the dinosaur \
+      \pictures and trump cards, and give the other prehistoric creatures a \
+      \Not a dinosaur! corner."
 
--- Jev decides what kind of animal each creature was.
+-- | Classify once, then run only the chosen kind of exhibit.
+creatureExhibit :: Agentic IO Creature ExhibitEntry
+creatureExhibit =
+  classify
+    >>> arr route `named` "dinosaur or other creature"
+    >>> ((exhibit >>> arr DinosaurExhibit) ||| (factCard >>> arr OtherExhibit))
+          `named` "choose an exhibit"
+
+-- | Jev decides what kind of animal each creature was, keeping the creature.
 classify :: Agentic IO Creature (Creature, Choice Kind)
 classify = returnA &&& judge (choice "What kind of animal was this creature?")
+
+-- | Follow the chosen kind. Low confidence is not evidence of a different kind.
+route :: (Creature, Choice Kind) -> Either Creature NotADinosaur
+route (c, k)
+  | k.chosen == Dinosaur = Left c
+  | otherwise = Right (NotADinosaur c k.chosen)
+
+factCard :: Agentic IO NotADinosaur FactCard
+factCard = draft @FactCard "Make a short Not a dinosaur! fact card for a grade 5 class. Name this \
+  \creature, explain what kind of animal it was and why it was not a \
+  \dinosaur."
+  `named` "not a dinosaur fact card"
 
 exhibit :: Agentic IO Creature Entry
 exhibit =
@@ -330,13 +365,15 @@ exhibit =
     >>> arr (\(dinosaur :/\ picture :/\ card) -> Entry dinosaur picture card)
 ```
 
+`route` makes the choice explicit: `Left` is a dinosaur, `Right` is another
+kind of creature. `|||` runs only that side. Both sides produce an
+`ExhibitEntry`, tagged as `DinosaurExhibit` or `OtherExhibit`, so the poster
+receives one ordered list in `Exhibit.entries`. Birds count as dinosaurs here.
+
 `a &&& b &&& c` builds the nested pair `(a, (b, c))`, and `:/\` matches it
 without the brackets: `dinosaur :/\ picture :/\ card`. It works as a type too.
-
-The trump card's stats use a `Stat` contract that checks 1 to 10, so every card
-uses the same scale. And the poster is drafted from a named `Exhibit` record
-rather than a tuple, so Claude sees `dinosaurs` and `notDinosaurs` instead of
-`_1` and `_2`. The whole thing is in `examples/Dino.hs`.
+The trump card's `Stat` contract checks 1 to 10, so every card uses the same
+scale. The whole example, including its types, is in `examples/Dino.hs`.
 
 You could also write `exhibit` with `proc` notation, since `Agentic` is an
 `Arrow`:
@@ -372,50 +409,52 @@ ghci> d <- either throwIO pure (describe dinoProject)
 ghci> print d
 draft @[Creature]  "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
 each
-└─ judge  choice of 7 "What kind of animal was this creature?"  (keeping its input)
-arr  split off the clear dinosaurs (≥ 0.8)
-both halves
-├─ first → each
-│  └─ exhibit  together  (keeping its input)
-│     ├─ draft @DinoPic  "Draw an ascii picture of this dinosaur, 10 lines high"
-│     └─ draft @TrumpCard  "Make a trump card for this dinosaur"
-└─ second → arr  note what the others were
-draft @Poster  "Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were."
+├─ judge  choice of 6 "What kind of animal was this creature?"  (keeping its input)
+├─ arr  dinosaur or other creature
+└─ choose an exhibit  branch
+   ├─ left → exhibit  together  (keeping its input)
+   │  ├─ draft @DinoPic  "Draw an ascii picture of this dinosaur, 10 lines high"
+   │  └─ draft @TrumpCard  "Make a trump card for this dinosaur"
+   └─ right → draft @FactCard  not a dinosaur fact card  "Make a short Not a dinosaur! fact card for a grade 5 class. Name this creature, explain what kind of animal it was and why it was not a dinosaur."
+draft @Poster  "Create a grade 5 poster from these exhibit entries. Keep the dinosaur pictures and trump cards, and give the other prehistoric creatures a Not a dinosaur! corner."
 ```
 
 `mermaid` and `dot` draw the same flow as a diagram of how the data moves
 (GitHub draws Mermaid inline, and Graphviz renders `dot` offline). Here's the
-dino project:
+dino project. The diamond chooses an exhibit; its left edge leads to the
+parallel dinosaur drafts, and its right edge leads to the fact card:
 
 ```mermaid
 flowchart TD
   input(["input"])
-  n0["draft @[Creature]<br/>#quot;Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs.#quot;"]
-  subgraph n1["each"]
-    n2["judge<br/>choice of 7 #quot;What kind of animal was this creature?#quot;"]
-  end
-  n3["arr<br/>split off the clear dinosaurs (≥ 0.8)"]
-  subgraph n4["each"]
-    subgraph n5["exhibit"]
-      n6["draft @DinoPic<br/>#quot;Draw an ascii picture of this dinosaur, 10 lines high#quot;"]
-      n7["draft @TrumpCard<br/>#quot;Make a trump card for this dinosaur#quot;"]
+  n_flow_seq_0_0["draft @[Creature]<br/>#quot;Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs.#quot;"]
+  subgraph n_flow_seq_1_seq_0_0["each"]
+    n_flow_seq_1_seq_0_each_seq_0_fan_1_0["judge<br/>choice of 6 #quot;What kind of animal was this creature?#quot;"]
+    n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0["arr<br/>dinosaur or other creature"]
+    n_flow_seq_1_seq_0_each_seq_1_seq_1_note_0{"choose an exhibit"}
+    entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0((" "))
+    subgraph n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_0["exhibit"]
+      n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_0_0["draft @DinoPic<br/>#quot;Draw an ascii picture of this dinosaur, 10 lines high#quot;"]
+      n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_1_0["draft @TrumpCard<br/>#quot;Make a trump card for this dinosaur#quot;"]
     end
+    n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_1_seq_0_note_0["draft @FactCard<br/>not a dinosaur fact card<br/>#quot;Make a short Not a dinosaur! fact card for a grade 5 class. Name this creature, explain what kind of animal it was and why it was not a dinosaur.#quot;"]
   end
-  n8["arr<br/>note what the others were"]
-  n9["draft @Poster<br/>#quot;Create a poster of these dinosaurs for a grade 5 class. Add a corner about the creatures that weren't dinosaurs, and what they were.#quot;"]
+  n_flow_seq_1_seq_1_seq_1_0["draft @Poster<br/>#quot;Create a grade 5 poster from these exhibit entries. Keep the dinosaur pictures and trump cards, and give the other prehistoric creatures a Not a dinosaur! corner.#quot;"]
   output(["output"])
-  input --> n0
-  n0 --> n2
-  n0 --> n3
-  n2 --> n3
-  n3 -->|first| n6
-  n3 -->|first| n7
-  n3 -->|second| n8
-  n3 --> n9
-  n6 --> n9
-  n7 --> n9
-  n8 --> n9
-  n9 --> output
+  input --> n_flow_seq_0_0
+  n_flow_seq_0_0 --> n_flow_seq_1_seq_0_each_seq_0_fan_1_0
+  n_flow_seq_0_0 --> n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0
+  n_flow_seq_1_seq_0_each_seq_0_fan_1_0 --> n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0
+  n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0 --> n_flow_seq_1_seq_0_each_seq_1_seq_1_note_0
+  n_flow_seq_1_seq_0_each_seq_1_seq_1_note_0 -->|left| entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0
+  entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0 --> n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_0_0
+  entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0 --> n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_1_0
+  n_flow_seq_1_seq_0_each_seq_1_seq_1_note_0 -->|right| n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_1_seq_0_note_0
+  entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0 --> n_flow_seq_1_seq_1_seq_1_0
+  n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_0_0 --> n_flow_seq_1_seq_1_seq_1_0
+  n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_1_0 --> n_flow_seq_1_seq_1_seq_1_0
+  n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_1_seq_0_note_0 --> n_flow_seq_1_seq_1_seq_1_0
+  n_flow_seq_1_seq_1_seq_1_0 --> output
 ```
 
 `describe` returns `Either FlowError Description`. Invalid recursion and excessive
@@ -440,11 +479,10 @@ An `arr` or an `act` is opaque to `describe`, so you name it. `named` binds as
 tightly as function application, so it names exactly the expression before it:
 
 ```haskell
-    >>> arr (partition (clearly Dinosaur 0.8)) `named` "split off the clear dinosaurs (≥ 0.8)"
+    >>> arr route `named` "dinosaur or other creature"
 ```
 
-Without it, the one step that decides which creatures make the poster would be
-invisible. Bracket a bigger sub-flow to name all of it, and use `note` to add a
+Without it, the code that routes creatures to their exhibits would be invisible. Bracket a bigger sub-flow to name all of it, and use `note` to add a
 description too. Names also tag every trace event, so they stay useful well
 after the flow is written. My rule of thumb: an instruction is written for the
 model, and a name is written for whoever's watching.
@@ -459,13 +497,17 @@ data Square = Blank | X | O
 data Row = Row {left :: Square, centre :: Square, right :: Square}
 data Board = Board {top :: Row, middle :: Row, bottom :: Row}
 data State = Playing | Ended
-data Game = Game {board :: Board, state :: State}   -- all deriving (Generic, Show, Contract)
+data Game = Game {board :: Board, state :: State}
+-- all deriving (Generic, Show, Contract)
 
 nextMove :: Agentic IO Game Game
 nextMove = draft @Game "Play the next move!"
 
 game :: Agentic IO Game Game
-game = repeatUntil ((== Ended) . state) (nextMove >>> act printBoard `named` "print the board") `named` "play until the game ends"
+game =
+  repeatUntil ((== Ended) . (.state))
+    (nextMove >>> act printBoard `named` "print the board")
+    `named` "play until the game ends"
 ```
 
 Notice the instruction doesn't explain the rules. It doesn't need to! The types
@@ -478,9 +520,34 @@ play until the game ends  repeatUntil
 └─ act  print the board
 ```
 
+The loop is small enough to see at a glance. The `again` edge goes back for
+another move; the bypass lets an already-ended game leave without playing:
+
+```mermaid
+flowchart TD
+  input(["input"])
+  subgraph n_flow_0["play until the game ends"]
+    subgraph n_flow_note_0["repeatUntil"]
+      n_flow_note_repeat_seq_0_0["draft @Game<br/>#quot;Play the next move!#quot;"]
+      n_flow_note_repeat_seq_1_note_0["act<br/>print the board"]
+    end
+  end
+  output(["output"])
+  input --> n_flow_note_repeat_seq_0_0
+  n_flow_note_repeat_seq_0_0 --> n_flow_note_repeat_seq_1_note_0
+  n_flow_note_repeat_seq_1_note_0 -.->|again| n_flow_note_repeat_seq_0_0
+  input --> output
+  n_flow_note_repeat_seq_1_note_0 --> output
+```
+
 `repeatUntil` is the only loop in the language, and it checks its condition
 before each round. `cabal run tictactoe` plays a game on OpenAI, where the dino
 project runs on Claude - same flow code either way.
+
+The [other example diagrams](https://github.com/drshade/haskell-agentic/blob/main/examples/diagrams/README.md)
+include the small Jev review and the much larger KitchenSink flow. KitchenSink
+has its own page so the full combination of tools, loops and choices doesn't
+swamp this walkthrough.
 
 ## Example: The kitchen sink
 

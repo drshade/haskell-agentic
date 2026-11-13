@@ -11,7 +11,7 @@ maintainer:         drshade@gmail.com
 copyright:          2026 Tom Wells
 category:           AI
 build-type:         Simple
-extra-source-files: diagrams/*.mmd diagrams/*.dot
+extra-source-files: diagrams/*.mmd diagrams/*.dot diagrams/*.tree diagrams/README.md
 tested-with:        GHC ==9.6.7 || ==9.8.4 || ==9.10.3 || ==9.12.2 || ==9.14.1
 
 executable dino
@@ -24,7 +24,7 @@ executable dino
     NoFieldSelectors
     OverloadedRecordDot
     OverloadedStrings
-  ghc-options:      -Wall
+  ghc-options:      -Wall -main-is Dino
   hs-source-dirs:   .
   main-is:          Dino.hs
   build-depends:
@@ -44,7 +44,7 @@ executable review
     NoFieldSelectors
     OverloadedRecordDot
     OverloadedStrings
-  ghc-options:      -Wall
+  ghc-options:      -Wall -main-is Review
   hs-source-dirs:   .
   main-is:          Review.hs
   build-depends:
@@ -63,7 +63,7 @@ executable tictactoe
     NoFieldSelectors
     OverloadedRecordDot
     OverloadedStrings
-  ghc-options:      -Wall
+  ghc-options:      -Wall -main-is TicTacToe
   hs-source-dirs:   .
   main-is:          TicTacToe.hs
   build-depends:
@@ -93,7 +93,7 @@ executable kitchensink
     , base              >=4.18 && <5
     , text              >=2.0 && <2.2
 
--- Pure graph projection; importing KitchenSink never runs its providers.
+-- Scripted dino behavior and pure graph projection; no provider calls.
 test-suite diagram-test
   type:             exitcode-stdio-1.0
   default-language: GHC2021
@@ -108,9 +108,10 @@ test-suite diagram-test
   ghc-options:      -Wall
   hs-source-dirs:   .
   main-is:          DiagramSpec.hs
-  other-modules:    KitchenSink
+  other-modules:    KitchenSink Dino TicTacToe Review DinoSpec
   build-depends:
     , agentic           ==0.2.*
+    , agentic-openai    ==0.2.*
     , agentic-anthropic ==0.2.*
     , agentic-io        ==0.2.*
     , agentic-jev       ==0.2.*

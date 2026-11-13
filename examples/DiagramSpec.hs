@@ -9,6 +9,10 @@ import Data.Text (Text)
 import Data.Text.IO qualified as T
 import Data.List (nub)
 import KitchenSink (kitchenSink)
+import Dino (dinoProject)
+import DinoSpec qualified
+import TicTacToe (game)
+import Review (review)
 import System.Environment (getArgs)
 
 leftAfterFanout :: Agentic IO Int (Either (Int,Int) Int)
@@ -30,6 +34,7 @@ choiceInRepeat = repeatUntil (>=3) (arr Left >>> (arr (+1) ||| returnA))
 main :: IO ()
 main = do
   args <- getArgs
+  DinoSpec.check
   let check name description = do
         d <- either throwIO pure description
         let graph = flowGraph d
@@ -48,13 +53,16 @@ main = do
           && all ((`notElem` dots) . snd) graph.addressItems
           && length (map fst nodes) == length (nub (map fst nodes)))
           (fail (name <> ": invalid decision routing or item identity"))
-        let outputs = [("mmd",mermaid d),("dot",dot d)]
+        let outputs = [("mmd",mermaid d),("dot",dot d)] <> [("tree",renderTree d) | name == "dino"]
         mapM_ (\(extension,actual) -> case args of
           ["--write",directory] -> T.writeFile (directory <> "/" <> name <> "." <> extension) actual
           [] -> do
             expected <- T.readFile ("diagrams/" <> name <> "." <> extension)
             unless (actual == expected) (fail (name <> "." <> extension <> " differs; inspect the rendering before regenerating"))
           _ -> fail "usage: diagram-test [--write directory]") outputs
+  check "dino" (describe dinoProject)
+  check "tictactoe" (describe game)
+  check "review" (describe review)
   check "kitchen-sink" (describe kitchenSink)
   check "left-after-fanout" (describe leftAfterFanout)
   check "choice-with-bypasses" (describe choiceWithBypasses)

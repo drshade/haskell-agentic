@@ -1,0 +1,14 @@
+flowchart TD
+  input(["input"])
+  subgraph n_flow_0["play until the game ends"]
+    subgraph n_flow_note_0["repeatUntil"]
+      n_flow_note_repeat_seq_0_0["draft @Game<br/>#quot;Play the next move!#quot;"]
+      n_flow_note_repeat_seq_1_note_0["act<br/>print the board"]
+    end
+  end
+  output(["output"])
+  input --> n_flow_note_repeat_seq_0_0
+  n_flow_note_repeat_seq_0_0 --> n_flow_note_repeat_seq_1_note_0
+  n_flow_note_repeat_seq_1_note_0 -.->|again| n_flow_note_repeat_seq_0_0
+  input --> output
+  n_flow_note_repeat_seq_1_note_0 --> output

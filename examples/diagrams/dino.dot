@@ -1,0 +1,38 @@
+digraph flow {
+  compound=true;
+  node [shape=box, style=rounded, fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  input [label="input", shape=oval];
+  n_flow_seq_0_0 [label="draft @[Creature]\n\"Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs.\""];
+  subgraph cluster_n_flow_seq_1_seq_0_0 {
+    label="each";
+    style=rounded;
+    n_flow_seq_1_seq_0_each_seq_0_fan_1_0 [label="judge\nchoice of 6 \"What kind of animal was this creature?\""];
+    n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0 [label="arr\ndinosaur or other creature"];
+    n_flow_seq_1_seq_0_each_seq_1_seq_1_note_0 [label="choose an exhibit", shape=diamond, style=solid];
+    entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0 [label="", shape=point, width=0.06];
+    subgraph cluster_n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_0 {
+      label="exhibit";
+      style=rounded;
+      n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_0_0 [label="draft @DinoPic\n\"Draw an ascii picture of this dinosaur, 10 lines high\""];
+      n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_1_0 [label="draft @TrumpCard\n\"Make a trump card for this dinosaur\""];
+    }
+    n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_1_seq_0_note_0 [label="draft @FactCard\nnot a dinosaur fact card\n\"Make a short Not a dinosaur! fact card for a grade 5 class. Name this creature, explain what kind of animal it was and why it was not a dinosaur.\""];
+  }
+  n_flow_seq_1_seq_1_seq_1_0 [label="draft @Poster\n\"Create a grade 5 poster from these exhibit entries. Keep the dinosaur pictures and trump cards, and give the other prehistoric creatures a Not a dinosaur! corner.\""];
+  output [label="output", shape=oval];
+  input -> n_flow_seq_0_0;
+  n_flow_seq_0_0 -> n_flow_seq_1_seq_0_each_seq_0_fan_1_0;
+  n_flow_seq_0_0 -> n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0;
+  n_flow_seq_1_seq_0_each_seq_0_fan_1_0 -> n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0;
+  n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0 -> n_flow_seq_1_seq_0_each_seq_1_seq_1_note_0;
+  n_flow_seq_1_seq_0_each_seq_1_seq_1_note_0 -> entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0 [label="left"];
+  entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0 -> n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_0_0;
+  entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0 -> n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_1_0;
+  n_flow_seq_1_seq_0_each_seq_1_seq_1_note_0 -> n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_1_seq_0_note_0 [label="right"];
+  entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0 -> n_flow_seq_1_seq_1_seq_1_0;
+  n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_0_0 -> n_flow_seq_1_seq_1_seq_1_0;
+  n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_1_0 -> n_flow_seq_1_seq_1_seq_1_0;
+  n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_1_seq_0_note_0 -> n_flow_seq_1_seq_1_seq_1_0;
+  n_flow_seq_1_seq_1_seq_1_0 -> output;
+}

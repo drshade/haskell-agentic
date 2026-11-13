@@ -1,0 +1,30 @@
+flowchart TD
+  input(["input"])
+  n_flow_seq_0_0["draft @[Creature]<br/>#quot;Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs.#quot;"]
+  subgraph n_flow_seq_1_seq_0_0["each"]
+    n_flow_seq_1_seq_0_each_seq_0_fan_1_0["judge<br/>choice of 6 #quot;What kind of animal was this creature?#quot;"]
+    n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0["arr<br/>dinosaur or other creature"]
+    n_flow_seq_1_seq_0_each_seq_1_seq_1_note_0{"choose an exhibit"}
+    entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0((" "))
+    subgraph n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_0["exhibit"]
+      n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_0_0["draft @DinoPic<br/>#quot;Draw an ascii picture of this dinosaur, 10 lines high#quot;"]
+      n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_1_0["draft @TrumpCard<br/>#quot;Make a trump card for this dinosaur#quot;"]
+    end
+    n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_1_seq_0_note_0["draft @FactCard<br/>not a dinosaur fact card<br/>#quot;Make a short Not a dinosaur! fact card for a grade 5 class. Name this creature, explain what kind of animal it was and why it was not a dinosaur.#quot;"]
+  end
+  n_flow_seq_1_seq_1_seq_1_0["draft @Poster<br/>#quot;Create a grade 5 poster from these exhibit entries. Keep the dinosaur pictures and trump cards, and give the other prehistoric creatures a Not a dinosaur! corner.#quot;"]
+  output(["output"])
+  input --> n_flow_seq_0_0
+  n_flow_seq_0_0 --> n_flow_seq_1_seq_0_each_seq_0_fan_1_0
+  n_flow_seq_0_0 --> n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0
+  n_flow_seq_1_seq_0_each_seq_0_fan_1_0 --> n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0
+  n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0 --> n_flow_seq_1_seq_0_each_seq_1_seq_1_note_0
+  n_flow_seq_1_seq_0_each_seq_1_seq_1_note_0 -->|left| entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0
+  entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0 --> n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_0_0
+  entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0 --> n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_1_0
+  n_flow_seq_1_seq_0_each_seq_1_seq_1_note_0 -->|right| n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_1_seq_0_note_0
+  entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0 --> n_flow_seq_1_seq_1_seq_1_0
+  n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_0_0 --> n_flow_seq_1_seq_1_seq_1_0
+  n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_note_fan_1_fan_1_0 --> n_flow_seq_1_seq_1_seq_1_0
+  n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_1_seq_0_note_0 --> n_flow_seq_1_seq_1_seq_1_0
+  n_flow_seq_1_seq_1_seq_1_0 --> output
