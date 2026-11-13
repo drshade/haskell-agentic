@@ -16,6 +16,8 @@ import Data.Text (Text)
 -- | Run a flow with a runtime. The root is entered before static preparation;
 -- a failure-capable scope reports a preflight error there, with no flow node
 -- entered. Invalid structure need not have a usable captured graph.
+-- Let concrete callers specialise the monad operations around each scope.
+{-# INLINABLE interpret #-}
 interpret :: forall m i o. Monad m => Runtime m -> Agentic m i o -> i -> m o
 interpret rt flow input = within root Nothing RunNode [] Nothing Nothing (const Completed) (const Nothing) $
   case staticFlow flow >>= (\plan -> validate plan >> pure plan) of
@@ -25,10 +27,11 @@ interpret rt flow input = within root Nothing RunNode [] Nothing Nothing (const 
   root = Occurrence rootAddress []
   emit key parent kind path happened payload = rt.observe (Event key parent kind path happened payload)
   within :: forall a. Occurrence -> Maybe Occurrence -> NodeType -> [Note] -> Maybe Int -> Maybe EventPayload -> (a -> Outcome) -> (a -> Maybe EventPayload) -> m a -> m a
-  within key parent kind path total entryPayload outcome payload = scopeWith rt.scope
-    (emit key parent kind path (Entered total) entryPayload)
-    (\a -> emit key parent kind path (Returned (outcome a)) (payload a))
+  within key parent kind path total entryPayload outcome payload action = scopeWith rt.scope
+    (Right () <$ emit key parent kind path (Entered total) entryPayload)
+    (\a -> emit key parent kind path (Returned (outcome a)) (payload a) >> pure a)
     (emit key parent kind path)
+    (Right <$> action)
   run plan = go plan [] root [] flow input
    where
     go :: forall a b. StaticFlow -> [ContextFrame] -> Occurrence -> [Note] -> Agentic m a b -> a -> m b

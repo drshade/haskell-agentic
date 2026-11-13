@@ -1,5 +1,5 @@
--- | A small JSON-shaped value. The core owns this type so that it depends only on
--- @base@ and @text@; provider packages convert to and from their wire libraries.
+-- | A small JSON-shaped value without a JSON-library dependency. Provider
+-- packages convert to and from their wire libraries.
 module Agentic.Value
   ( Value (..)
   , renderJson

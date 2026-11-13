@@ -4,6 +4,14 @@
 
 * Add `flowGraphValue` for complete graph encoding: nested items, explicit kind
   and style tags, edges, selection IDs, address mappings and body relations.
+* Add `exceptTScope` to lift observation scopes through `ExceptT`. Body errors
+  report `Failed` and retain their original values; callback short circuits,
+  base exceptions and cancellation respect the supplied scope's boundaries.
+  Core now depends on `transformers`.
+* Change the `Scope` protocol to distinguish entry aborts, explicit body
+  failures and normal results. Failure reporting cannot replace an observable
+  primary failure, including cancellation during that report; a surrounding
+  timeout can therefore return the original `Left` instead of timing out.
 
 * Replace the old event envelope with occurrence keys, explicit parents, loop
   and call frames, lifecycle outcomes, selections, and resolved tool targets.

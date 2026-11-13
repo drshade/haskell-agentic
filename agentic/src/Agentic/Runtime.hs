@@ -45,6 +45,7 @@ module Agentic.Runtime
   , Scope (..)
   , scopeWith
   , ioScope
+  , exceptTScope
   , FlowError (..)
   ) where
 
@@ -55,6 +56,8 @@ import Agentic.Questions (Answer, JudgeRequest)
 import Agentic.Schema (Schema)
 import Agentic.Value (Value (..))
 import Control.Exception (Exception, SomeException, SomeAsyncException, AsyncException (..), catch, fromException, mask, throwIO, try)
+import Control.Monad (void)
+import Control.Monad.Trans.Except (ExceptT (..), runExceptT)
 import Data.Text (Text)
 
 -- ---------------------------------------------------------------------------
@@ -259,16 +262,27 @@ summaryValue e = Object
     EachNode -> "each"; RepeatNode -> "repeat"; NoteNode -> "note"; CallNode -> "call"
 
 -- | A scope hook owns entry, protected execution, and one terminal notification.
--- The callbacks are outside the protected body. Implementations must preserve
--- exceptions and must not demand the body's returned value.
--- Call entry once before the body; on success call returned once; on exceptional
--- exit call exited at most once. Never call both terminal callbacks, retry a
--- callback, or catch a callback exception as though it came from the body.
+-- Entry returns @Right ()@ to proceed or @Left r@ to abort without running the
+-- body or a terminal callback. The body returns @Right a@ on success or @Left r@
+-- for an explicit failure. On success, call returned once to obtain the final
+-- result; on explicit failure, attempt @exited Failed Nothing@ once and return
+-- the original @r@. Base-monad exceptional exits are the hook's responsibility.
+--
+-- Notifications are outside the protected body. Never call both terminal
+-- callbacks, retry a callback, or mistake a notification failure for a body
+-- failure. Entry and normal-return notification failures propagate; failure
+-- reporting must preserve the primary failure against any reporting failure
+-- the hook can observe. Do not force @a@ or @r@ beyond the Either discriminator.
+-- Lift the hook through each short-circuiting layer whose failures it must see.
 newtype Scope m = Scope
-  { runScope :: forall a. m () -> (a -> m ()) -> (Happened -> Maybe EventPayload -> m ()) -> m a -> m a
+  { runScope :: forall a r.
+      m (Either r ()) ->
+      (a -> m r) ->
+      (Happened -> Maybe EventPayload -> m ()) ->
+      m (Either r a) -> m r
   }
 
-scopeWith :: Scope m -> m () -> (a -> m ()) -> (Happened -> Maybe EventPayload -> m ()) -> m a -> m a
+scopeWith :: Scope m -> m (Either r ()) -> (a -> m r) -> (Happened -> Maybe EventPayload -> m ()) -> m (Either r a) -> m r
 scopeWith (Scope f) = f
 
 -- | IO observes all exceptional exits. 'SomeAsyncException' means cancellation,
@@ -277,23 +291,55 @@ scopeWith (Scope f) = f
 -- prevent notification. Notifications run masked (interruptible
 -- operations remain interruptible); the body runs in the caller's mask state.
 -- Interrupted notification is incomplete delivery: no retry or second terminal.
--- Even cancellation during an exit report yields to the original exception.
+-- Even cancellation during an exit report yields to the original exception or
+-- explicit @Left@ result. Thus a timeout interrupting a blocked failure report
+-- can return the original failure (e.g. @Just (Left e)@), rather than @Nothing@.
+-- Cancellation during the body or a normal-return report is not suppressed.
 ioScope :: Scope IO
 ioScope = Scope $ \enter returned exited body -> mask $ \restore -> do
-  enter
-  result <- try (restore body)
-  case result of
-    Right a -> returned a >> pure a
-    Left (e :: SomeException) -> do
-      exited (classify e) (Just (ExceptionPayload e)) `catch` \(_ :: SomeException) -> pure ()
-      throwIO e
+  let report = reportWith exited
+  entered <- enter
+  case entered of
+    Left r -> pure r
+    Right () -> do
+      result <- try (restore body)
+      case result of
+        Right (Right a) -> returned a
+        Right (Left r) -> report Failed Nothing >> pure r
+        Left (e :: SomeException) -> do
+          report (classify e) (Just (ExceptionPayload e))
+          throwIO e
  where
+  reportWith exited happened payload =
+    exited happened payload `catch` \(_ :: SomeException) -> pure ()
   classify e = case fromException e :: Maybe AsyncException of
     Just StackOverflow -> Failed
     Just HeapOverflow -> Failed
     _ -> case fromException e :: Maybe SomeAsyncException of
       Just _ -> Cancelled
       Nothing -> Failed
+
+-- | Observe 'ExceptT' short circuits using the base hook's protected execution
+-- and failure-reporting boundary. A body @Left e@ reports 'Failed' with no
+-- payload and preserves @e@; no 'Show' or exception instance is needed.
+-- Entry @Left@ prevents execution, and normal-return @Left@ propagates without
+-- a second terminal. Exit-report @Left@ is discarded in favour of the body's
+-- original failure. Base exceptions and cancellation retain the base hook's
+-- semantics (including the failure-report cancellation rule of 'ioScope').
+-- Apply this once per 'ExceptT' layer; it cannot expose failures hidden by an
+-- unadapted base monad.
+exceptTScope :: Monad m => Scope m -> Scope (ExceptT e m)
+exceptTScope base = Scope $ \enter returned exited body -> ExceptT $
+  scopeWith base
+    (lower <$> runExceptT enter)
+    (runExceptT . returned)
+    (\h payload -> void (runExceptT (exited h payload)))
+    (lower <$> runExceptT body)
+ where
+  lower = \case
+    Left e -> Left (Left e)
+    Right (Left r) -> Left (Right r)
+    Right (Right a) -> Right a
 
 -- | Errors the core raises itself. Provider errors are the provider's own.
 data FlowError
@@ -347,7 +393,10 @@ failWith Runtime {failure = f} = f
 runtime :: Runtime IO
 runtime = (runtimeWith throwIO) {scope = ioScope}
 
--- | A runtime in any monad, given how it raises errors.
+-- | A runtime in any monad, given how it raises errors. Its default scope
+-- observes ordinary returns and explicit protocol failures only; it cannot
+-- catch base exceptions or short circuits. Use 'ioScope' for IO, or e.g.
+-- @exceptTScope ioScope@ for @ExceptT e IO@.
 runtimeWith :: Monad m => (forall a. FlowError -> m a) -> Runtime m
 runtimeWith raise =
   Runtime
@@ -355,7 +404,11 @@ runtimeWith raise =
     , systemTwo = SystemTwo (const (raise NoSystemTwo))
     , parallel = sequence
     , observe = const (pure ())
-    , scope = Scope (\enter returned _ body -> enter >> body >>= \a -> returned a >> pure a)
+    , scope = Scope (\enter returned exited body -> enter >>= \case
+        Left r -> pure r
+        Right () -> body >>= \case
+          Left r -> exited Failed Nothing >> pure r
+          Right a -> returned a)
     , failure = raise
     }
 
