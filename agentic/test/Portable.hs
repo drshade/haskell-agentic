@@ -49,7 +49,7 @@ instance Contract Figure where
 -- ---------------------------------------------------------------------------
 -- A pure monad: a script of model turns, and a log of what happened
 
-data World = World {script :: [Action], logged :: [Text], events :: [Happened]}
+data World = World {script :: [Action], logged :: [Text], events :: [Event]}
 
 newtype Pure a = Pure {runPure :: World -> (a, World)}
 
@@ -74,7 +74,7 @@ handlers =
         a : rest -> (Turn (Raw Null) a, w{script = rest})
         [] -> error "the script ran out of turns"
     , systemOne = SystemOne $ \request -> pure (map answer request.questions)
-    , observe = \e -> Pure (\w -> ((), w{events = w.events <> [e.happened]}))
+    , observe = \e -> Pure (\w -> ((), w{events = w.events <> [e]}))
     }
  where
   answer = \case
@@ -139,19 +139,19 @@ main = do
 
   -- 2. A scripted tool call runs its typed body, and the draft continues.
   check "the tool's typed body ran with the model's input" (world.logged == ["count_letters ran on scarecrow"])
-  check "the tool's typed result went back to the model" (any (\case ToolReturned "c1" (ToolOk (Integer 9)) -> True; _ -> False) seen)
+  check "the tool's typed result went back to the model" (any (\e -> case e.payload of Just (ResultPayload (ToolOk (Integer 9))) -> True; _ -> False) seen)
   check "the draft continued to a typed response" (result == (joke, Rect 2 3))
 
   -- 3. A nested drafting tool.
-  check "the nested tool ran its own draft" (length [() | Drafting _ <- seen] == 3)
-  check "the nested draft's result went back as the tool's result" (any (\case ToolReturned "c2" (ToolOk v) -> modelContract.decode v == Right joke; _ -> False) seen)
+  check "the nested tool ran its own draft" (length [() | e <- seen, Drafting <- [e.happened]] == 3)
+  check "the nested draft's result went back as the tool's result" (any (\e -> case e.payload of Just (ResultPayload (ToolOk v)) -> modelContract.decode v == Right joke; _ -> False) seen)
 
   -- 4. Invalid output, then a corrected response.
-  check "the invalid output was rejected" (length [() | OutputRejected _ <- seen] == 1)
+  check "the invalid output was rejected" (length [() | e <- seen, OutputRejected _ <- [e.happened]] == 1)
   check "every scripted turn was used" (null world.script)
 
   -- 5. An applicative judgement batch: two questions, one request.
-  check "two questions went in one request" ([length r.questions | Judged r _ <- seen] == [2])
+  check "two questions went in one request" ([length r.questions | e <- seen, Just (JudgePayload r _) <- [e.payload]] == [2])
   check "the answers decoded to typed values" (verdict == (YesNo 0.9, YesNo 0.9))
 
   -- 6. Describing the flow invokes no handlers: describe has no runtime to call.
@@ -175,7 +175,7 @@ main = do
         }
       (recursiveResult, recursiveEnd) = (interpret handlers recursiveFlow "x").runPure recursiveWorld
   check "explicit recursion works in a pure monad past 100 calls"
-    (recursiveResult == "done" && null recursiveEnd.script && length [() | ToolReturned _ _ <- recursiveEnd.events] == 126)
+    (recursiveResult == "done" && null recursiveEnd.script && length [() | e <- recursiveEnd.events, Returned CallOk <- [e.happened]] == 126)
 
   -- 9. All of the above ran in Pure, not IO.
   n <- readIORef failures

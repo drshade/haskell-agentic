@@ -1,5 +1,6 @@
 module Main (main) where
 
+import ObservationIO qualified
 import Agentic
 import Agentic.IO
 import Agentic.Runtime (Conversation (..))
@@ -62,6 +63,7 @@ fresh name = do
 
 main :: IO ()
 main = hspec $ do
+  ObservationIO.spec
   recursionSpec
   storeSpec
 

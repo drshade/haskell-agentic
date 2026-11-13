@@ -57,6 +57,7 @@ library
     Agentic.Value
     Agentic.ViaLLM
   other-modules:
+    Agentic.Internal.Address
     Agentic.Internal.Core
     Agentic.Internal.Static
   build-depends:
@@ -68,7 +69,7 @@ test-suite agentic-test
   type:             exitcode-stdio-1.0
   hs-source-dirs:   test
   main-is:          Spec.hs
-  other-modules:    RecursionSpec
+  other-modules:    RecursionSpec ObservationSpec ObservationModel
   build-depends:
     , agentic          >=0.2.1 && <0.3
     , base             >=4.18 && <5
@@ -97,3 +98,10 @@ test-suite agentic-projection-test
     , base             >=4.18 && <5
     , hspec            >=2.10 && <3
     , text             >=2.0 && <2.2
+
+benchmark observation-overhead
+  import:           shared
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   bench
+  main-is:          Observations.hs
+  build-depends:    agentic, base, text, directory

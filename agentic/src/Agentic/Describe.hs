@@ -12,6 +12,7 @@ module Agentic.Describe
   , dot
   , flowGraph
   , FlowGraph (..)
+  , BodyRelation (..)
   , Item (..)
   , NodeKind (..)
   , Edge (..)
@@ -22,19 +23,23 @@ module Agentic.Describe
 import Agentic.Contract (Outline, outline, outlineLabel)
 import Agentic.Core
 import Agentic.Internal.Static qualified as S
-import Agentic.Internal.Static (Address, addressText)
-import Agentic.Runtime (FlowError)
+import Agentic.Internal.Address
+import Agentic.Runtime (FlowError, EdgeId (..), Side (..))
 import Agentic.Questions (QuestionSpec (..), Questions (..))
 import Agentic.Value (Value (..), renderJson)
+import Data.List (isPrefixOf, maximumBy, nub)
+import Data.Ord (comparing)
 import Data.Text (Text)
 import qualified Data.Text as T
 
 data Description
-  = Leaf StepInfo
+  = Located Address Description
+  | FirstOnly Description
+  | Leaf StepInfo
   | Sequence [Description]
-    -- ^ @a >>> b >>> c@, flattened.
+    -- ^ Composition, retaining structural addresses.
   | Together [Description]
-    -- ^ @a &&& b &&& c@, flattened.
+    -- ^ Parallel composition, retaining structural addresses.
   | Halves Description Description
     -- ^ @a *** b@: one flow on each half of a pair.
   | Branch Description Description
@@ -89,23 +94,16 @@ describe :: Agentic m i o -> Either FlowError Description
 describe = fmap fromStatic . S.staticFlow
 
 fromStatic :: S.StaticFlow -> Description
-fromStatic = \case
+fromStatic flow = Located flow.address $ case flow.shape of
   S.SStep s -> Leaf (stepInfo s)
-  S.SSeq f g -> Sequence (sequenced (fromStatic f) <> sequenced (fromStatic g))
-  S.SFanout f g -> Together (fromStatic f : together (fromStatic g))
+  S.SSeq f g -> Sequence [fromStatic f, fromStatic g]
+  S.SFanout f g -> Together [fromStatic f, fromStatic g]
   S.SSplit f g -> Halves (fromStatic f) (fromStatic g)
-  S.SFirst f -> Halves (fromStatic f) (Leaf Identity)
+  S.SFirst f -> FirstOnly (fromStatic f)
   S.SChoose f g -> Branch (fromStatic f) (fromStatic g)
   S.SEach f -> ForEach (fromStatic f)
   S.SRepeat f -> Repeated (fromStatic f)
   S.SNoted n f -> Annotated n (fromStatic f)
- where
-  sequenced = \case
-    Sequence ds -> ds
-    d -> [d]
-  together = \case
-    Together ds -> ds
-    d -> [d]
 
 stepInfo :: S.StaticStep -> StepInfo
 stepInfo = \case
@@ -137,10 +135,28 @@ data Tree = Node Text [Tree]
 -- hidden, but a branch is never hidden: inside @&&&@, @***@ and @|||@ it shows
 -- as @arr@ (or @pass@), and a pass-through beside a step keeps its input.
 renderTree :: Description -> Text
-renderTree = T.intercalate "\n" . concatMap (draw "" "") . trees
+renderTree = T.intercalate "\n" . concatMap (draw "" "") . trees . displayTree
+
+-- Flatten only the human tree; the captured description retains every address.
+displayTree :: Description -> Description
+displayTree = \case
+  Located _ d -> displayTree d
+  FirstOnly d -> Halves (displayTree d) (Leaf Identity)
+  Sequence ds -> Sequence (concatMap (flatten . displayTree) ds)
+    where flatten (Sequence xs) = xs; flatten d = [d]
+  Together ds -> Together (concatMap (flatten . displayTree) ds)
+    where flatten (Together xs) = xs; flatten d = [d]
+  Halves l r -> Halves (displayTree l) (displayTree r)
+  Branch l r -> Branch (displayTree l) (displayTree r)
+  ForEach d -> ForEach (displayTree d)
+  Repeated d -> Repeated (displayTree d)
+  Annotated n d -> Annotated n (displayTree d)
+  d -> d
 
 trees :: Description -> [Tree]
 trees = \case
+  Located _ d -> trees (displayTree d)
+  FirstOnly d -> trees (displayTree (FirstOnly d))
   Leaf Identity -> []
   Leaf Glue -> []
   Leaf FirstHalf -> []
@@ -191,6 +207,7 @@ trees = \case
 -- | How a branch that's only plumbing shows in the tree view.
 plumbing :: Description -> Text
 plumbing = \case
+  Located _ d -> plumbing d
   d | passes d -> "pass"
   Leaf FirstHalf -> "takeFirst"
   Leaf SecondHalf -> "takeSecond"
@@ -200,6 +217,7 @@ plumbing = \case
 -- | Does this part of a flow only pass its input through?
 passes :: Description -> Bool
 passes = \case
+  Located _ d -> passes d
   Leaf Identity -> True
   Sequence ds -> all passes ds
   Annotated _ d -> passes d
@@ -233,7 +251,18 @@ draw lead childLead (Node t cs) = (lead <> t) : go cs
 data FlowGraph = FlowGraph
   { items :: [Item]
   , edges :: [Edge]
+  , addressItems :: [(Address, Text)]
+    -- ^ Every captured address mapped to an item, including hidden aliases.
+    -- The logical root is the fallback; Mermaid and DOT do not draw its box.
+  , bodies :: [BodyRelation]
   }
+
+-- | A loop body, or a possible call target with its binding-site address.
+data BodyRelation = BodyRelation
+  { owner :: Address
+  , binding :: Maybe Address
+  , bodyRoot :: Address
+  } deriving (Eq, Show)
 
 -- | A node, or a box of items.
 data Item
@@ -250,20 +279,67 @@ data Edge = Edge
     -- ^ A node, or a box's id.
   , label :: Maybe Text
   , style :: EdgeStyle
+  , referenceTarget :: Maybe Address
+    -- ^ Definition address for a recursive Reference edge; never inferred from its label.
+  , selections :: [EdgeId]
+    -- ^ Logical selection edges represented by this rendered edge.
   }
 
-data EdgeStyle = Flow | Uses | Again
+data EdgeStyle = Flow | Uses | Again | Reference
+  deriving (Eq, Show)
 
 -- | The flow's graph, from @input@ to @output@.
 flowGraph :: Description -> FlowGraph
-flowGraph d = case flow.runBuild (BuildState 0 [[]] []) of
-  (_, BuildState _ open edges) -> FlowGraph (reverse (concat open)) (reverse edges)
-  where
-    flow = do
-      item (ItemNode "input" Terminal ["input"])
-      exits <- build InSequence (Sources [("input", Nothing)]) d
-      item (ItemNode "output" Terminal ["output"])
-      connect exits "output"
+flowGraph d = FlowGraph finalItems finalEdges mapping relations
+ where
+  (_, state) = flow.runBuild (BuildState 0 [[]] [] flowAddress [])
+  finalItems = ItemBox (itemId rootAddress 0) ["run"] (reverse (concat state.open)) : []
+  rawMapping = (rootAddress, itemId rootAddress 0) : state.mapped
+  (addresses, relations) = structure d
+  mapping = [(a, resolve a) | a <- rootAddress : addresses]
+  resolve a@(Address path) = case lookup a rawMapping of
+    Just i -> i
+    Nothing -> case [(p,i) | (Address p,i) <- rawMapping, p `isPrefixOf` path] of
+      [] -> itemId rootAddress 0
+      candidates -> snd (maximumBy (comparing (length . fst)) candidates)
+  finalEdges = reverse state.links
+  flow = do
+    item (ItemNode "input" Terminal ["input"])
+    exits <- build InSequence (Sources [("input", Nothing, [])]) d
+    item (ItemNode "output" Terminal ["output"])
+    connect exits "output"
+
+-- All positions survive the display projection, including synthetic call scopes.
+structure :: Description -> ([Address], [BodyRelation])
+structure = go flowAddress
+ where
+  both (as,bs) (cs,ds) = (as <> cs, bs <> ds)
+  many = foldr both ([],[]) . map (go flowAddress)
+  go a = \case
+    Located address d -> let (as,bs) = go address d in (address:as,bs)
+    FirstOnly d -> go a d
+    Sequence ds -> many ds
+    Together ds -> many ds
+    Halves l r -> both (go a l) (go a r)
+    Branch l r -> both (go a l) (go a r)
+    ForEach d -> loop a d
+    Repeated d -> loop a d
+    Annotated _ d -> go a d
+    Leaf (DraftInfo _ _ _ ts) ->
+      let call = child a CallScope
+          (as,bs) = foldr both ([],[]) (map tool ts)
+       in (call:as, [BodyRelation call (Just t.address) (target t) | t <- ts] <> bs)
+    Leaf _ -> ([],[])
+  loop a d@(Located b _) = let (as,bs) = go a d in (as,BodyRelation a Nothing b:bs)
+  loop a d = go a d
+  tool t = case t.body of
+    ToolFlow d -> go t.address d
+    ToolGroup _ ts -> let (as,bs) = foldr both ([],[]) (map tool ts) in (t.address:as,bs)
+    ToolReference _ -> ([t.address],[])
+  target t = case t.body of
+    ToolFlow _ -> t.address
+    ToolReference a -> a
+    ToolGroup k ts -> target (ts !! k)
 
 -- | Where a description sits: unnamed glue between steps is plumbing, but a
 -- branch that's only glue is still a branch.
@@ -272,11 +348,11 @@ data Context = InSequence | InBranch
 -- | Where the next step's input comes from: nodes, each with an optional edge
 -- label, or a pair (after @&&&@ or @***@) whose halves are known separately, so
 -- a later @first@, @second@ or @***@ wires each half to its own flow.
-data From = Sources [(Text, Maybe Text)] | Pair From From
+data From = Sources [(Text, Maybe Text, [EdgeId])] | Pair From From
 
 -- | Every node a 'From' draws on, once each. A node reached by routes with
 -- different labels (both sides of a @|||@) keeps one unlabelled edge.
-sources :: From -> [(Text, Maybe Text)]
+sources :: From -> [(Text, Maybe Text, [EdgeId])]
 sources = dedupe . go
   where
     go = \case
@@ -284,9 +360,10 @@ sources = dedupe . go
       Pair a b -> go a <> go b
     dedupe = \case
       [] -> []
-      (n, l) : rest ->
-        let others = [l' | (n', l') <- rest, n' == n]
-         in (n, if all (== l) others then l else Nothing) : dedupe [x | x@(n', _) <- rest, n' /= n]
+      (n, l, ids) : rest ->
+        let others = [(l',more) | (n',l',more) <- rest, n' == n]
+         in (n, if all ((== l) . fst) others then l else Nothing, nub (ids <> concatMap snd others))
+              : dedupe [x | x@(n',_,_) <- rest, n' /= n]
 
 -- | The two sides of a @|||@ joining again: where both made a pair, so does
 -- the join.
@@ -295,7 +372,10 @@ merge (Pair a b) (Pair c d) = Pair (merge a c) (merge b d)
 merge x y = Sources (sources (Pair x y))
 
 -- | A counter for ids, the items of each open box (innermost first), and edges.
-data BuildState = BuildState Int [[Item]] [Edge]
+data BuildState = BuildState
+  { next :: Int, open :: [[Item]], links :: [Edge]
+  , current :: Address, mapped :: [(Address, Text)]
+  }
 
 newtype Build a = Build {runBuild :: BuildState -> (a, BuildState)}
 
@@ -309,50 +389,61 @@ instance Applicative Build where
 instance Monad Build where
   Build g >>= k = Build (\s -> let (a, s1) = g s in (k a).runBuild s1)
 
+itemId :: Address -> Int -> Text
+itemId a n = "n_" <> T.replace "/" "_" (addressText a) <> "_" <> T.pack (show n)
+
 fresh :: Build Text
-fresh = Build (\(BuildState n open es) -> ("n" <> T.pack (show n), BuildState (n + 1) open es))
+fresh = Build $ \s ->
+  let i = itemId s.current s.next
+   in (i, s {next = s.next + 1, mapped = (s.current,i):s.mapped})
+
+located :: Address -> Build a -> Build a
+located a (Build f) = Build $ \s ->
+  let (result, out) = f s {current = a, next = 0}
+   in (result, out {current = s.current, next = s.next})
 
 item :: Item -> Build ()
-item i = Build $ \case
-  BuildState n (current : outer) es -> ((), BuildState n ((i : current) : outer) es)
-  BuildState n [] es -> ((), BuildState n [[i]] es)
+item i = Build $ \s -> ((), s {open = case s.open of
+  current:outer -> (i:current):outer
+  [] -> [[i]]})
 
 edge :: Edge -> Build ()
-edge e = Build (\(BuildState n open es) -> ((), BuildState n open (e : es)))
+edge e = Build (\s -> ((), s {links = e:s.links}))
 
 edgeCount :: Build Int
-edgeCount = Build (\s@(BuildState _ _ es) -> (length es, s))
+edgeCount = Build (\s -> (length s.links,s))
 
--- | The nodes that edges added since @before@ lead into from these sources.
 entriesSince :: Int -> [Text] -> Build [Text]
-entriesSince before sources = Build $ \s@(BuildState _ _ es) ->
-  let new = reverse (take (length es - before) es)
-   in (nubOrdered [e.to | e <- new, e.from `elem` sources], s)
-  where
-    nubOrdered = foldr (\x acc -> x : filter (/= x) acc) []
+entriesSince before sources = Build $ \s ->
+  let new = reverse (take (length s.links - before) s.links)
+   in (foldr (\x acc -> x : filter (/= x) acc) [] [e.to | e <- new, e.from `elem` sources],s)
 
 connect :: From -> Text -> Build ()
-connect from to = mapM_ (\(f, l) -> edge (Edge f to l Flow)) (sources from)
+connect from to = mapM_ (\(f,l,ids) -> edge (Edge f to l Flow Nothing ids)) (sources from)
 
 node :: From -> [Text] -> Build From
 node from label = do
   n <- fresh
   item (ItemNode n StepNode label)
   connect from n
-  pure (Sources [(n, Nothing)])
+  pure (Sources [(n,Nothing,[])])
 
-box :: [Text] -> Build a -> Build (Text, a)
+box :: [Text] -> Build a -> Build (Text,a)
 box label inside = do
   b <- fresh
-  Build (\(BuildState n open es) -> ((), BuildState n ([] : open) es))
+  Build (\s -> ((),s {open = []:s.open}))
   a <- inside
-  Build $ \case
-    BuildState n (contents : parent : outer) es -> ((), BuildState n ((ItemBox b label (reverse contents) : parent) : outer) es)
-    s -> ((), s)
-  pure (b, a)
+  Build $ \s -> ((),s {open = case s.open of
+    contents:parent:outer -> (ItemBox b label (reverse contents):parent):outer
+    other -> other})
+  pure (b,a)
 
 build :: Context -> From -> Description -> Build From
 build context from = \case
+  Located a d -> located a (build context from d)
+  FirstOnly d -> case from of
+    Pair a b -> (\x -> Pair x b) <$> build InBranch a d
+    _ -> (\x -> Pair x from) <$> build InBranch from d
   Leaf Identity -> pure from
   -- A known pair's half goes on exactly; otherwise it's like any @arr@.
   Leaf FirstHalf | Pair a _ <- from -> pure a
@@ -363,7 +454,7 @@ build context from = \case
     -- An @arr@ can take a pair apart any way it likes, so its halves are lost,
     -- and so is what the edge labels inside it said.
     InSequence -> pure $ case from of
-      Pair _ _ -> Sources [(n, Nothing) | (n, _) <- sources from]
+      Pair _ _ -> Sources [(n, Nothing, ids) | (n, _, ids) <- sources from]
       Sources _ -> from
     InBranch -> node from ["arr"]
   Leaf info -> step Nothing info
@@ -374,23 +465,31 @@ build context from = \case
   Halves l r -> case from of
     Pair a b -> Pair <$> build InBranch a l <*> build InBranch b r
     _ -> Pair <$> build InBranch (labelled "first") l <*> build InBranch (labelled "second") r
-  Branch l r -> merge <$> build InBranch (labelled "left") l <*> build InBranch (labelled "right") r
+  Branch l r -> do
+    let start = from
+    address <- Build (\s -> (s.current,s))
+    let branch side label = build InBranch (Sources [(f,Just label,ids <> [EdgeId address side]) | (f,_,ids) <- sources start])
+    merge <$> branch LeftSide "left" l <*> branch RightSide "right" r
   ForEach f -> Sources . sources . snd <$> box ["each"] (build InSequence (Sources (sources from)) f)
   -- "Again" goes back to where the body starts: the steps the loop's input
   -- flows into. If the body has none, it goes to the box.
   Repeated f -> do
     before <- edgeCount
     (b, exits) <- box ["repeatUntil"] (build InSequence from f)
-    entries <- entriesSince before (map fst (sources from))
+    entries <- entriesSince before ([f | (f,_,_) <- sources from])
     let targets = if null entries then [b] else entries
-    mapM_ (\(e, _) -> mapM_ (\t -> edge (Edge e t (Just "again") Again)) targets) (sources exits)
+    mapM_ (\(e, _, _) -> mapM_ (\t -> edge (Edge e t (Just "again") Again Nothing [])) targets) (sources exits)
     -- The condition is checked before the first run, so the input can leave
     -- without going through the body.
     pure (merge from exits)
+  Annotated n (Located a (Leaf info)) | not (passes (Leaf info)) -> do
+    exits <- located a (step (Just n) info)
+    Build (\s -> ((),s {mapped = [(s.current,i) | (i,_,_) <- sources exits] <> s.mapped}))
+    pure exits
   Annotated n (Leaf info) | not (passes (Leaf info)) -> step (Just n) info
   Annotated n f -> snd <$> box (n.name : maybe [] pure n.description) (build InSequence from f)
   where
-    labelled l = Sources [(f, Just l) | (f, _) <- sources from]
+    labelled l = Sources [(f, Just l, ids) | (f, _, ids) <- sources from]
     -- A half of a pair the graph can't follow: plumbing, like @arr@.
     half name = case context of
       InSequence -> pure from
@@ -411,15 +510,31 @@ build context from = \case
       exits <- node from lines''
       case info of
         DraftInfo _ _ _ tools ->
-          mapM_
-            ( \t -> do
-                n <- fresh
-                item (ItemNode n ToolNode ["tool " <> t.name])
-                mapM_ (\(e, _) -> edge (Edge e n Nothing Uses)) (sources exits)
-            )
-            tools
+          mapM_ (drawTool exits) tools
         _ -> pure ()
       pure exits
+
+-- Definitions are finite. References link to the definition's address without
+-- recursively drawing it again.
+drawTool :: From -> ToolInfo -> Build ()
+drawTool from t = located t.address $ case t.body of
+  ToolFlow d -> do
+    let n = "tool_" <> itemId t.address 0
+    Build (\s -> ((), s {mapped = (t.address,n):s.mapped}))
+    item (ItemNode n ToolNode ["tool " <> t.name])
+    mapM_ (\(e,_,_) -> edge (Edge e n Nothing Uses Nothing [])) (sources from)
+    exits <- build InSequence (Sources [(n,Nothing,[])]) d
+    let end = "return_" <> itemId t.address 0
+    item (ItemNode end Terminal ["return"])
+    connect exits end
+  ToolGroup _ members -> do
+    (b,()) <- box ["recursive tools", "entry " <> t.name] (mapM_ (drawTool (Sources [])) members)
+    mapM_ (\(e,_,_) -> edge (Edge e b Nothing Uses Nothing [])) (sources from)
+  ToolReference target -> do
+    n <- fresh
+    item (ItemNode n ToolNode ["tool " <> t.name])
+    mapM_ (\(e,_,_) -> edge (Edge e n Nothing Uses Nothing [])) (sources from)
+    edge (Edge n ("tool_" <> itemId target 0) (Just "reference") Reference (Just target) [])
 
 -- | How a step is labelled, everywhere: what kind of step it is, then its name
 -- if it has one, then its details (an instruction, or questions).
@@ -436,11 +551,19 @@ stepLines name info = kind : maybe [] pure name <> details
       JudgeInfo _ [q] -> ("judge", [questionText q])
       JudgeInfo _ qs -> ("judge " <> T.pack (show (length qs)) <> " questions in one request", map questionText qs)
 
+-- The logical root is available to consumers without adding a diagram box.
+drawingItems :: FlowGraph -> [Item]
+drawingItems graph = case graph.items of
+  [ItemBox root _ contents] | root == itemId rootAddress 0 -> contents
+  items -> items
+
 -- | A Mermaid flowchart of the flow's graph.
 mermaid :: Description -> Text
 mermaid d = T.unlines ("flowchart TD" : concatMap (items' "  ") is <> map edge' es)
   where
-    FlowGraph is es = flowGraph d
+    graph = flowGraph d
+    is = drawingItems graph
+    es = graph.edges
     items' indent = \case
       ItemNode i kind ls -> [indent <> i <> shape kind (T.intercalate "<br/>" (map escape ls))]
       ItemBox i ls inside -> [indent <> "subgraph " <> i <> "[\"" <> T.intercalate "<br/>" (map escape ls) <> "\"]"] <> concatMap (items' (indent <> "  ")) inside <> [indent <> "end"]
@@ -448,11 +571,12 @@ mermaid d = T.unlines ("flowchart TD" : concatMap (items' "  ") is <> map edge' 
       Terminal -> "([\"" <> l <> "\"])"
       StepNode -> "[\"" <> l <> "\"]"
       ToolNode -> "[/\"" <> l <> "\"/]"
-    edge' (Edge f t l style) = "  " <> f <> arrow style <> maybe "" (\x -> "|" <> escape x <> "|") l <> " " <> t
+    edge' (Edge f t l style _ _) = "  " <> f <> arrow style <> maybe "" (\x -> "|" <> escape x <> "|") l <> " " <> t
     arrow = \case
       Flow -> " -->"
       Uses -> " -.-"
       Again -> " -.->"
+      Reference -> " -.->"
     escape = T.replace "\"" "#quot;"
 
 -- | A Graphviz DOT digraph of the flow's graph. Render it with, for example,
@@ -465,7 +589,9 @@ dot d =
       <> map edge' es
       <> ["}"]
   where
-    FlowGraph is es = flowGraph d
+    graph = flowGraph d
+    is = drawingItems graph
+    es = graph.edges
     items' indent = \case
       ItemNode i kind ls -> [indent <> i <> " [label=\"" <> T.intercalate "\\n" (map inner ls) <> "\"" <> shape kind <> "];"]
       ItemBox i ls inside -> [indent <> "subgraph cluster_" <> i <> " {", indent <> "  label=\"" <> T.intercalate "\\n" (map inner ls) <> "\";", indent <> "  style=rounded;"] <> concatMap (items' (indent <> "  ")) inside <> [indent <> "}"]
@@ -474,7 +600,7 @@ dot d =
       StepNode -> ""
       ToolNode -> ", shape=parallelogram, style=\"\""
     -- An edge into a box points at the box's first node, clipped to the box.
-    edge' (Edge f t l style) =
+    edge' (Edge f t l style _ _) =
       let (target, attrs) = case firstNode t is of
             Just n
               | inBox t f is -> (n, [])
@@ -486,6 +612,7 @@ dot d =
       Flow -> []
       Uses -> ["style=dotted", "arrowhead=none"]
       Again -> ["style=dashed"]
+      Reference -> ["style=dotted"]
     -- JSON's string escapes are also DOT's.
     str = renderJson . String
     inner = T.pack . init . drop 1 . T.unpack . str
@@ -523,11 +650,17 @@ firstNode b = go
 -- JSON
 
 -- | The description as a JSON-shaped value, for UIs and other agents.
+-- Sequence/parallel lists are flattened for reading; element addresses survive.
+-- Use the graph's address mapping for intermediate composition scopes.
 descriptionValue :: Description -> Value
 descriptionValue = \case
+  Located a d -> case descriptionValue d of
+    Object fields -> Object (("address",String (addressText a)):fields)
+    value -> value
+  FirstOnly d -> Object [("kind",String "first"),("step",descriptionValue d)]
   Leaf info -> leaf info
-  Sequence ds -> node "sequence" [("steps", Array (map descriptionValue ds))]
-  Together ds -> node "together" [("steps", Array (map descriptionValue ds))]
+  Sequence ds -> node "sequence" [("steps", Array (map descriptionValue (concatMap sequenceParts ds)))]
+  Together ds -> node "together" [("steps", Array (map descriptionValue (concatMap togetherParts ds)))]
   Halves l r -> node "halves" [("first", descriptionValue l), ("second", descriptionValue r)]
   Branch l r -> node "branch" [("left", descriptionValue l), ("right", descriptionValue r)]
   ForEach d -> node "each" [("step", descriptionValue d)]
@@ -538,6 +671,12 @@ descriptionValue = \case
         <> maybe [] (\t -> [("description", String t)]) n.description
         <> [("step", descriptionValue d)]
   where
+    sequenceParts (Located _ (Sequence ds)) = concatMap sequenceParts ds
+    sequenceParts (Sequence ds) = concatMap sequenceParts ds
+    sequenceParts d = [d]
+    togetherParts (Located _ (Together ds)) = concatMap togetherParts ds
+    togetherParts (Together ds) = concatMap togetherParts ds
+    togetherParts d = [d]
     node kind fields = Object (("kind", String kind) : fields)
     leaf = \case
       Identity -> node "pass" []

@@ -27,15 +27,34 @@ module Agentic.Runtime
     -- * Events and errors
   , Event (..)
   , Happened (..)
+  , Address
+  , addressText
+  , Occurrence (..)
+  , ContextFrame (..)
+  , NodeType (..)
+  , Side (..)
+  , EdgeId (..)
+  , edgeIdText
+  , Outcome (..)
+  , ActionKind (..)
+  , EventPayload (..)
+  , Summary (..)
+  , summaryValue
+  , summarise
+  , occurrenceValue
+  , Scope (..)
+  , scopeWith
+  , ioScope
   , FlowError (..)
   ) where
 
+import Agentic.Internal.Address
 import Agentic.Contract (ProjectionError)
-import Agentic.Core (Instruction, Note)
+import Agentic.Core (Instruction, Note (..))
 import Agentic.Questions (Answer, JudgeRequest)
 import Agentic.Schema (Schema)
 import Agentic.Value (Value (..))
-import Control.Exception (Exception, throwIO)
+import Control.Exception (Exception, SomeException, SomeAsyncException, AsyncException (..), catch, fromException, mask, throwIO, try)
 import Data.Text (Text)
 
 -- ---------------------------------------------------------------------------
@@ -100,21 +119,181 @@ data ToolCall = ToolCall
 -- ---------------------------------------------------------------------------
 -- Events and errors
 
-data Event = Event
-  { path :: [Note]
-  , happened :: Happened
-  }
+-- | Run-local identity. A recorder supplies the namespace for separate runs,
+-- including an @interpret@ nested inside an @act@.
+-- Equality uses addresses and the full frame stack, never notes or provider
+-- call ids alone. Serialise with 'occurrenceValue', not derived 'Show'.
+data Occurrence = Occurrence
+  { address :: !Address
+  , context :: ![ContextFrame]
+    -- ^ Innermost frame first; pushing a frame shares the enclosing stack.
+  } deriving (Eq, Ord, Show)
+
+data ContextFrame
+  = EachFrame !Address !Int !Int
+  | RepeatFrame !Address !Int
+  | CallFrame !Address !Int !Int !Text
+  deriving (Eq, Ord, Show)
+
+data Side = LeftSide | RightSide deriving (Eq, Ord, Show)
+data EdgeId = EdgeId !Address !Side deriving (Eq, Ord, Show)
+
+-- | Injective capture-local encoding, identical in observations and graph edges.
+edgeIdText :: EdgeId -> Text
+edgeIdText (EdgeId a side) = addressText a <> case side of
+  LeftSide -> "/select/0"
+  RightSide -> "/select/1"
+
+data NodeType
+  = RunNode | IdentityNode | PureNode | FirstHalfNode | SecondHalfNode
+  | EffectNode | DraftNode | JudgeNode | SequenceNode | FanoutNode
+  | SplitNode | FirstNode | ChoiceNode | EachNode | RepeatNode | NoteNode | CallNode
+  deriving (Eq, Ord, Show)
+
+data Outcome = Completed | CallOk | UnknownTool | InvalidInput deriving (Eq, Ord, Show)
+data ActionKind = ToolBatch | Response deriving (Eq, Ord, Show)
+
+-- | Metadata never contains provider values or diagnostic exceptions.
+data Happened
+  = Entered !(Maybe Int)
+    -- ^ Exact total for Each, including zero; no total for other scopes.
+  | Returned !Outcome
+    -- ^ Interpreter return only; never forces the result, even to WHNF.
+  | Failed
+  | Cancelled
+  | Selected !EdgeId
+  | CallResolved !Address !Address
+    -- ^ Binding site and actual body root. Emitted before decoding; invalid
+    -- input can therefore resolve a body without entering it.
+  | Drafting
+  | Turned !Int !ActionKind
+  | OutputRejected !Int
+  | Judged
+    -- ^ Answers available for decoding; an empty batch needs no provider request.
+  deriving (Eq, Show)
+
+-- | Optional rich data. Discarding this field must not demand its contents.
+data EventPayload
+  = DraftPayload Conversation
+  | TurnPayload Turn
+  | CallPayload ToolCall
+  | ResultPayload ToolResult
+  | RejectionPayload Text
+  | JudgePayload JudgeRequest [Answer]
+  | ExceptionPayload SomeException
   deriving (Show)
 
-data Happened
-  = Drafting Conversation
-  | Turned Turn
-  | ToolCalled ToolCall
-  | ToolReturned Text ToolResult
-  | OutputRejected Text
-  | Judged JudgeRequest [Answer]
-  | Acted
-  deriving (Show)
+-- | Observers are synchronous but sibling callbacks may overlap. Parent entry
+-- completes before child events; child terminals complete before parent exit.
+-- A recorder must serialise calls while preserving this causal order.
+-- Notification failure (including interruption) can leave an open child beneath
+-- a terminated parent. On closing the recording such outcomes are unknown;
+-- never invent terminal events. A projection that omits occurrences must retain
+-- ancestry explicitly rather than simply filtering event kinds.
+data Event = Event
+  { occurrence :: Occurrence
+  , parent :: Maybe Occurrence
+  , nodeType :: NodeType
+  , path :: [Note]
+  , happened :: Happened
+  , payload :: Maybe EventPayload
+  } deriving (Show)
+
+data Summary = Summary
+  { occurrence :: !Occurrence
+  , parent :: !(Maybe Occurrence)
+  , nodeType :: !NodeType
+  , path :: ![Note]
+  , happened :: !Happened
+  } deriving (Eq, Show)
+
+-- | Copies metadata only; neither evaluates nor retains payload closures.
+summarise :: Event -> Summary
+summarise e = forceKey e.occurrence `seq` forceParent e.parent `seq`
+  Summary e.occurrence e.parent e.nodeType e.path e.happened
+ where
+  forceKey (Occurrence (Address segments) frames) = forceList segments `seq` forceList frames
+  forceList = foldr (\value rest -> value `seq` rest) ()
+  forceParent Nothing = ()
+  forceParent (Just k) = forceKey k
+
+-- | Public, lossless JSON-shaped identity encoding. No Show-based identities.
+occurrenceValue :: Occurrence -> Value
+occurrenceValue (Occurrence a frames) = Object
+  [("address", String (addressText a)), ("context", Array (map frame frames))]
+ where
+  number = Integer . toInteger
+  frame = \case
+    EachFrame a i n -> Array [String "each", String (addressText a), number i, number n]
+    RepeatFrame a i -> Array [String "repeat", String (addressText a), number i]
+    CallFrame a t i c -> Array [String "call", String (addressText a), number t, number i, String c]
+
+-- | Portable metadata encoding, with optional payloads already discarded.
+summaryValue :: Summary -> Value
+summaryValue e = Object
+  [ ("occurrence", occurrenceValue e.occurrence)
+  , ("parent", maybe Null occurrenceValue e.parent)
+  , ("node", String (nodeName e.nodeType))
+  , ("notes", Array [Object [("name",String n.name),("description",maybe Null String n.description)] | n <- e.path])
+  , ("event", eventValue e.happened)
+  ]
+ where
+  number = Integer . toInteger
+  eventValue = \case
+    Entered total -> Object [("kind",String "entered"),("total",maybe Null number total)]
+    Returned outcome -> Object [("kind",String "returned"),("outcome",String (case outcome of
+      Completed -> "completed"; CallOk -> "ok"; UnknownTool -> "unknownTool"; InvalidInput -> "invalidInput"))]
+    Failed -> Object [("kind",String "failed")]
+    Cancelled -> Object [("kind",String "cancelled")]
+    Selected edge -> Object [("kind",String "selected"),("edge",String (edgeIdText edge))]
+    CallResolved binding target -> Object [("kind",String "callResolved"),("binding",String (addressText binding)),("body",String (addressText target))]
+    Drafting -> Object [("kind",String "drafting")]
+    Turned i action -> Object [("kind",String "turned"),("turn",number i),("action",String (case action of ToolBatch -> "tools"; Response -> "response"))]
+    OutputRejected i -> Object [("kind",String "outputRejected"),("turn",number i)]
+    Judged -> Object [("kind",String "judged")]
+  nodeName = \case
+    RunNode -> "run"; IdentityNode -> "identity"; PureNode -> "pure"
+    FirstHalfNode -> "firstHalf"; SecondHalfNode -> "secondHalf"; EffectNode -> "effect"
+    DraftNode -> "draft"; JudgeNode -> "judge"; SequenceNode -> "sequence"
+    FanoutNode -> "fanout"; SplitNode -> "split"; FirstNode -> "first"; ChoiceNode -> "choice"
+    EachNode -> "each"; RepeatNode -> "repeat"; NoteNode -> "note"; CallNode -> "call"
+
+-- | A scope hook owns entry, protected execution, and one terminal notification.
+-- The callbacks are outside the protected body. Implementations must preserve
+-- exceptions and must not demand the body's returned value.
+-- Call entry once before the body; on success call returned once; on exceptional
+-- exit call exited at most once. Never call both terminal callbacks, retry a
+-- callback, or catch a callback exception as though it came from the body.
+newtype Scope m = Scope
+  { runScope :: forall a. m () -> (a -> m ()) -> (Happened -> Maybe EventPayload -> m ()) -> m a -> m a
+  }
+
+scopeWith :: Scope m -> m () -> (a -> m ()) -> (Happened -> Maybe EventPayload -> m ()) -> m a -> m a
+scopeWith (Scope f) = f
+
+-- | IO observes all exceptional exits. 'SomeAsyncException' means cancellation,
+-- except 'StackOverflow' and 'HeapOverflow', which mean failure. Classification
+-- uses exception type, not delivery mechanism. Resource exhaustion can itself
+-- prevent notification. Notifications run masked (interruptible
+-- operations remain interruptible); the body runs in the caller's mask state.
+-- Interrupted notification is incomplete delivery: no retry or second terminal.
+-- Even cancellation during an exit report yields to the original exception.
+ioScope :: Scope IO
+ioScope = Scope $ \enter returned exited body -> mask $ \restore -> do
+  enter
+  result <- try (restore body)
+  case result of
+    Right a -> returned a >> pure a
+    Left (e :: SomeException) -> do
+      exited (classify e) (Just (ExceptionPayload e)) `catch` \(_ :: SomeException) -> pure ()
+      throwIO e
+ where
+  classify e = case fromException e :: Maybe AsyncException of
+    Just StackOverflow -> Failed
+    Just HeapOverflow -> Failed
+    _ -> case fromException e :: Maybe SomeAsyncException of
+      Just _ -> Cancelled
+      Nothing -> Failed
 
 -- | Errors the core raises itself. Provider errors are the provider's own.
 data FlowError
@@ -146,8 +325,11 @@ data Runtime m = Runtime
   { systemOne :: SystemOne m
   , systemTwo :: SystemTwo m
   , parallel :: forall a. [m a] -> m [a]
-    -- ^ Runs independent work: 'Agentic.Core.each', 'Control.Arrow.&&&', parallel tool calls.
+    -- ^ Runs independent work. Execute each action at most once, every action
+    -- exactly once on success, and preserve result order. Before returning or
+    -- raising, finish or unwind all started work; never detach or retry it.
   , observe :: Event -> m ()
+  , scope :: Scope m
   , failure :: forall a. FlowError -> m a
   }
 
@@ -163,7 +345,7 @@ failWith Runtime {failure = f} = f
 -- | A runtime in IO with no providers: it runs things one after another,
 -- observes nothing, and throws 'FlowError's.
 runtime :: Runtime IO
-runtime = runtimeWith throwIO
+runtime = (runtimeWith throwIO) {scope = ioScope}
 
 -- | A runtime in any monad, given how it raises errors.
 runtimeWith :: Monad m => (forall a. FlowError -> m a) -> Runtime m
@@ -173,6 +355,7 @@ runtimeWith raise =
     , systemTwo = SystemTwo (const (raise NoSystemTwo))
     , parallel = sequence
     , observe = const (pure ())
+    , scope = Scope (\enter returned _ body -> enter >> body >>= \a -> returned a >> pure a)
     , failure = raise
     }
 
