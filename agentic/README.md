@@ -319,8 +319,9 @@ knowing:
 A grade 5 project - and a flow that mixes both kinds of model. Claude suggests
 ten prehistoric creatures. Jev classifies each one, then the flow chooses its
 exhibit. A dinosaur gets an ASCII picture and a trump card, made side by side.
-Another kind of creature gets a short "Not a dinosaur!" fact card. Claude
-combines all the entries into one poster.
+Pterosaurs and plesiosaurs are the classic "not actually dinosaurs" - sorry
+kids. They and the other creatures get a short "Not a dinosaur!" fact card.
+Claude combines all the entries into one poster.
 
 ```haskell
 dinoProject :: Agentic IO () Poster
@@ -482,8 +483,9 @@ tightly as function application, so it names exactly the expression before it:
     >>> arr route `named` "dinosaur or other creature"
 ```
 
-Without it, the code that routes creatures to their exhibits would be invisible. Bracket a bigger sub-flow to name all of it, and use `note` to add a
-description too. Names also tag every trace event, so they stay useful well
+Without it, the code that routes creatures to their exhibits would be invisible.
+Bracket a bigger sub-flow to name all of it, and use `note` to add a description
+too. Names also tag every trace event, so they stay useful well
 after the flow is written. My rule of thumb: an instruction is written for the
 model, and a name is written for whoever's watching.
 

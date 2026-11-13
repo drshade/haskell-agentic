@@ -44,17 +44,26 @@ check = do
               pure [ChoiceAnswer label [(label,1)] 1]
             two = SystemTwo $ \conversation -> do
               atomicModifyIORef' calls (\cs -> (conversation.outputSchema.shape:cs,()))
-              answer <- if conversation.outputSchema.shape == (modelContract @[Creature]).schema.shape
+              answer <-
+                if conversation.outputSchema.shape == (modelContract @[Creature]).schema.shape
                 then pure (respond creatures)
                 else if conversation.outputSchema.shape == (modelContract @DinoPic).schema.shape
-                  then equal "picture input" conversation.input (encode dinosaur) >> pure (respond picture)
+                  then do
+                    equal "picture input" conversation.input (encode dinosaur)
+                    pure (respond picture)
                 else if conversation.outputSchema.shape == (modelContract @TrumpCard).schema.shape
-                  then equal "trump card input" conversation.input (encode dinosaur) >> pure (respond card)
+                  then do
+                    equal "trump card input" conversation.input (encode dinosaur)
+                    pure (respond card)
                 else if conversation.outputSchema.shape == (modelContract @FactCard).schema.shape
-                  then equal "fact card input" conversation.input (encode (NotADinosaur other Pterosaur)) >> pure (respond fact)
+                  then do
+                    equal "fact card input" conversation.input
+                      (encode (NotADinosaur other Pterosaur))
+                    pure (respond fact)
                 else if conversation.outputSchema.shape == (modelContract @Poster).schema.shape
                   then do
-                    equal "poster must receive both tagged entries in input order" conversation.input
+                    equal "poster must receive both tagged entries in input order"
+                      conversation.input
                       (encode (Exhibit (map expected creatures)))
                     pure (respond poster)
                 else fail "unexpected model contract"
@@ -69,9 +78,12 @@ check = do
         cs <- readIORef calls
         let dinosaurs = length [() | c <- creatures, encode c == encode dinosaur]
             others = length creatures - dinosaurs
-        equal "one picture per dinosaur" dinosaurs (length (filter (== (modelContract @DinoPic).schema.shape) cs))
-        equal "one trump card per dinosaur" dinosaurs (length (filter (== (modelContract @TrumpCard).schema.shape) cs))
-        equal "one fact card per other creature" others (length (filter (== (modelContract @FactCard).schema.shape) cs))
+        equal "one picture per dinosaur" dinosaurs
+          (length (filter (== (modelContract @DinoPic).schema.shape) cs))
+        equal "one trump card per dinosaur" dinosaurs
+          (length (filter (== (modelContract @TrumpCard).schema.shape) cs))
+        equal "one fact card per other creature" others
+          (length (filter (== (modelContract @FactCard).schema.shape) cs))
         equal "no extra model calls" (2 + 2 * dinosaurs + others) (length cs)
         ss <- readIORef selected
         equal "left selections" dinosaurs (length (filter (== LeftSide) ss))

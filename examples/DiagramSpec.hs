@@ -47,7 +47,8 @@ main = do
               && all ((==1) . length . (.selections)) (outgoing i)
               && all (`elem` map (.label) (outgoing i)) [Just "left",Just "right"]
             validSelection e = case e.selections of
-              [EdgeId address _] -> e.from `elem` diamonds && lookup address graph.addressItems == Just e.from
+              [EdgeId address _] -> e.from `elem` diamonds
+                && lookup address graph.addressItems == Just e.from
               _ -> False
         unless (all validDecision diamonds && all validSelection selected
           && all ((`notElem` dots) . snd) graph.addressItems
@@ -58,7 +59,9 @@ main = do
           ["--write",directory] -> T.writeFile (directory <> "/" <> name <> "." <> extension) actual
           [] -> do
             expected <- T.readFile ("diagrams/" <> name <> "." <> extension)
-            unless (actual == expected) (fail (name <> "." <> extension <> " differs; inspect the rendering before regenerating"))
+            unless (actual == expected) $
+              fail (name <> "." <> extension
+                <> " differs; inspect the rendering before regenerating")
           _ -> fail "usage: diagram-test [--write directory]") outputs
   check "dino" (describe dinoProject)
   check "tictactoe" (describe game)
