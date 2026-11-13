@@ -18,6 +18,7 @@ module Agentic.Describe
   , Edge (..)
   , EdgeStyle (..)
   , descriptionValue
+  , flowGraphValue
   ) where
 
 import Agentic.Contract (Outline, outline, outlineLabel)
@@ -723,6 +724,59 @@ firstNode b = go
 
 -- ---------------------------------------------------------------------------
 -- JSON
+
+-- | The complete graph as a JSON-shaped value, without executing a flow.
+-- The object contains @items@, @edges@, @addressItems@ and @bodies@ arrays.
+-- @root@ is the logical root item id: renderers draw its children, not its box.
+-- It is null if a hand-built graph has no root address mapping.
+-- Items have @id@, @kind@ ("node" or "box") and @labels@; nodes add
+-- @nodeKind@ ("terminal", "step", "tool", "decision", "junction"), while
+-- boxes add nested @items@. Edge @style@ is "flow", "uses", "again" or
+-- "reference". Optional labels, reference targets and bindings encode as null.
+-- Addresses and selection ids use 'addressText' and 'edgeIdText', matching
+-- observation encodings within the same captured flow, not across revisions.
+-- The logical root and unmapped graph-only junctions are preserved as supplied;
+-- no runtime scopes are inferred from items or labels.
+flowGraphValue :: FlowGraph -> Value
+flowGraphValue graph = Object
+  [ ("root", maybe Null String (lookup rootAddress graph.addressItems))
+  , ("items", Array (map itemValue graph.items))
+  , ("edges", Array (map edgeValue graph.edges))
+  , ("addressItems", Array
+      [Object [("address", addressValue a), ("item", String i)]
+      | (a,i) <- graph.addressItems])
+  , ("bodies", Array
+      [Object [("owner", addressValue b.owner)
+              ,("binding", maybe Null addressValue b.binding)
+              ,("bodyRoot", addressValue b.bodyRoot)]
+      | b <- graph.bodies])
+  ]
+ where
+  addressValue = String . addressText
+  labelsValue = Array . map String
+  itemValue = \case
+    ItemNode i kind labels -> Object
+      [("id", String i), ("kind", String "node")
+      ,("nodeKind", String (nodeTag kind)), ("labels", labelsValue labels)]
+    ItemBox i labels children -> Object
+      [("id", String i), ("kind", String "box")
+      ,("labels", labelsValue labels), ("items", Array (map itemValue children))]
+  nodeTag = \case
+    Terminal -> "terminal"
+    StepNode -> "step"
+    ToolNode -> "tool"
+    DecisionNode -> "decision"
+    JunctionNode -> "junction"
+  edgeValue e = Object
+    [("from", String e.from), ("to", String e.to)
+    ,("label", maybe Null String e.label), ("style", String (styleTag e.style))
+    ,("referenceTarget", maybe Null addressValue e.referenceTarget)
+    ,("selections", Array (map (String . edgeIdText) e.selections))]
+  styleTag = \case
+    Flow -> "flow"
+    Uses -> "uses"
+    Again -> "again"
+    Reference -> "reference"
 
 -- | The description as a JSON-shaped value, for UIs and other agents.
 -- Sequence/parallel lists are flattened for reading; element addresses survive.

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+* Add `flowGraphValue` for complete graph encoding: nested items, explicit kind
+  and style tags, edges, selection IDs, address mappings and body relations.
+
 * Replace the old event envelope with occurrence keys, explicit parents, loop
   and call frames, lifecycle outcomes, selections, and resolved tool targets.
   `EventPayload` is optional; `summarise` and `summaryValue` expose portable

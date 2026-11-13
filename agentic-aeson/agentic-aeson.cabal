@@ -36,3 +36,17 @@ library
     , scientific       >=0.3 && <0.4
     , text             >=2.0 && <2.2
     , vector           >=0.12 && <0.14
+
+test-suite agentic-aeson-test
+  type:             exitcode-stdio-1.0
+  default-language: GHC2021
+  ghc-options:      -Wall
+  hs-source-dirs:   test
+  main-is:          Spec.hs
+  build-depends:
+    , agentic
+    , agentic-aeson
+    , aeson >=2.1 && <2.3
+    , base >=4.18 && <5
+    , hspec >=2.10 && <3
+    , text >=2.0 && <2.2
