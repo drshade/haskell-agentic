@@ -727,6 +727,8 @@ firstNode b = go
 
 -- | The complete graph as a JSON-shaped value, without executing a flow.
 -- The object contains @items@, @edges@, @addressItems@ and @bodies@ arrays.
+-- @root@ is the logical root item id: renderers draw its children, not its box.
+-- It is null if a hand-built graph has no root address mapping.
 -- Items have @id@, @kind@ ("node" or "box") and @labels@; nodes add
 -- @nodeKind@ ("terminal", "step", "tool", "decision", "junction"), while
 -- boxes add nested @items@. Edge @style@ is "flow", "uses", "again" or
@@ -737,7 +739,8 @@ firstNode b = go
 -- no runtime scopes are inferred from items or labels.
 flowGraphValue :: FlowGraph -> Value
 flowGraphValue graph = Object
-  [ ("items", Array (map itemValue graph.items))
+  [ ("root", maybe Null String (lookup rootAddress graph.addressItems))
+  , ("items", Array (map itemValue graph.items))
   , ("edges", Array (map edgeValue graph.edges))
   , ("addressItems", Array
       [Object [("address", addressValue a), ("item", String i)]

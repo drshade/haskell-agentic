@@ -604,9 +604,8 @@ work: a tool that calls itself is one node in the graph and a new occurrence
 every time. `graph.addressItems` maps each address to the item that shows it,
 and `graph.bodies` identifies loop bodies and possible tool-call targets.
 `flowGraphValue` encodes the complete graph, including those relationships,
-selection IDs and reference edges. Save it alongside the summaries from that
-flow; `descriptionValue` is a readable description, not a substitute for this
-graph encoding.
+selection IDs and reference edges. Save it next to the summaries
+from the same flow - `descriptionValue` is for reading, this is for replaying.
 
 A few things that will bite you:
 

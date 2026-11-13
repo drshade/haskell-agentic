@@ -63,6 +63,10 @@ spec = H.describe "flowGraphValue" $ do
     interpret rt f (Left 1) `shouldReturn` 1
     interpret rt f (Right 2) `shouldReturn` 2
     es <- readIORef ref
+    let roots = [e.occurrence.address | e <- es, e.nodeType == RunNode]
+    null roots `shouldBe` False
+    mapM_ (\a -> field "root" v `shouldBe` maybe Null String (lookup a (graphOf f).addressItems)) roots
+    field "root" v `shouldBe` field "id" (only (array (field "items" v)))
     length selections `shouldBe` 2
     [String (edgeIdText edge) | e <- es, Selected edge <- [e.happened]] `shouldMatchList` selections
     mapM_ (\e -> field "address" (occurrenceValue e.occurrence) `shouldSatisfy` (`elem` addresses)) es
