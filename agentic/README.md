@@ -255,6 +255,36 @@ deleteRecord :: Tool IO
 deleteRecord = tool "delete" "Delete a fossil record" (act confirmWithHuman >>> act deleteIfApproved)
 ```
 
+### Recursive tools
+
+Declare self recursion with `recursiveTool`, or mutual recursion with
+`recursiveTools` (up to five tools):
+
+```haskell
+researcher :: Tool IO
+researcher = recursiveTool $ \self ->
+  tool @Text @Text "research" "Research deeper" $
+    draftWith [self] "Research this; recurse when useful, then answer."
+
+pingPong :: (Tool IO, Tool IO)
+pingPong = recursiveTools $ \(ping, pong) ->
+  ( tool @Text @Text "ping" "Ping" (draftWith [pong] "Ask pong or finish.")
+  , tool @Text @Text "pong" "Pong" (draftWith [ping] "Ask ping or finish.") )
+```
+
+Don't tie the knot yourself: preflight has to walk the flow. Use the members
+passed into the builder, and return `tool` definitions. The builder must be
+pure; inspect its arguments only with `toolName` and `toolDescription`, and
+keep their metadata free of cyclic dependencies. Returning an argument in
+place of a definition is an error.
+
+A tool saved by an `act` still belongs to its original group when used in
+another flow. The model can recurse past 100 calls, but preflight and describe
+reject more than 100 statically nested tool bodies with `ToolNestingLimit 100`.
+That catches the old plain knot-tied shape; it also rejects a finite tree 101
+tools deep. It isn't cycle detection, and cyclic metadata can still hang.
+`capped` limits turns of a draft, not total recursion depth.
+
 ### How the loop works
 
 The core runs the loop and a provider only ever takes one turn, so it behaves
@@ -337,7 +367,9 @@ So for steps that don't depend on each other, stick with `&&&`.
 ### Describe it before you run it
 
 ```
-ghci> describe dinoProject
+ghci> import Control.Exception (throwIO)
+ghci> d <- either throwIO pure (describe dinoProject)
+ghci> print d
 draft @[Creature]  "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
 each
 └─ judge  choice of 7 "What kind of animal was this creature?"  (keeping its input)
@@ -386,9 +418,15 @@ flowchart TD
   n9 --> output
 ```
 
-`describe` returns a plain `Description` you can walk yourself, and
-`descriptionValue` turns it into JSON for UIs and other agents. The tree hides
-unnamed glue between steps, but never a branch.
+`describe` returns `Either FlowError Description`. Invalid recursion and excessive
+tool nesting are errors, rather than an excuse to draw a truncated picture. It
+doesn't run effects or compile model codecs, so you can still inspect a flow
+whose contracts a model provider can't handle.
+
+The `Description` can be rendered as a tree or diagram, or turned into JSON with
+`descriptionValue`. Recursive definitions and references are finite; their
+addresses belong to this captured flow only. Diagrams currently show tools
+attached to their draft; expanding their bodies is separate graph work.
 
 The diagram follows each half of a pair from `&&&` or `***` to wherever it
 goes next, but it can't see inside an `arr`, so `arr fst` loses track of which

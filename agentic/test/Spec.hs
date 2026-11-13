@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Agentic
+import RecursionSpec qualified
 import Agentic.Schema (Field (..), Schema (..), Shape (..))
 import Agentic.Scripted
 import Data.IORef
@@ -76,6 +77,7 @@ roundTrips c a = c.decode (c.encode a) `shouldBe` Right a
 
 main :: IO ()
 main = hspec $ do
+  RecursionSpec.spec
   describe' "Contracts" $ do
     it "round-trips a derived record" $
       roundTrips modelContract joke
@@ -174,7 +176,7 @@ main = hspec $ do
             draft @[Joke] "ten jokes please"
               >>> keep 0.7 funny
               >>> each (draftWith @Joke [tool @Text @Text "search" "Search" (act pure)] "polish this joke")
-      T.lines (renderTree (Agentic.describe flow))
+      T.lines (renderTree (described flow))
         `shouldBe` [ "draft @[Joke]  \"ten jokes please\""
                    , "keep 0.7  each"
                    , "└─ judge  yes/no \"Would a 10-year-old laugh at this joke?\"  (keeping its input)"
@@ -186,13 +188,13 @@ main = hspec $ do
     it "never hides a branch, even when it's only glue" $ do
       let flow :: Agentic IO (Joke, Joke) (Rating, Text)
           flow = draft @Rating "rate it" *** arr (.genre)
-      T.lines (renderTree (Agentic.describe flow))
+      T.lines (renderTree (described flow))
         `shouldBe` ["both halves", "├─ first → draft @Rating  \"rate it\"", "└─ second → arr"]
 
     it "draws first and second alike, and left and right alike" $ do
       let d = draft @Rating "rate it"
           tree :: Agentic IO i o -> [Text]
-          tree = T.lines . renderTree . Agentic.describe
+          tree = T.lines . renderTree . described
       tree (first d :: Agentic IO (Joke, Int) (Rating, Int)) `shouldBe` ["both halves", "├─ first → draft @Rating  \"rate it\"", "└─ second → pass"]
       tree (second d :: Agentic IO (Int, Joke) (Int, Rating)) `shouldBe` ["both halves", "├─ first → pass", "└─ second → draft @Rating  \"rate it\""]
       tree (left d :: Agentic IO (Either Joke Int) (Either Rating Int)) `shouldBe` ["branch", "├─ left → draft @Rating  \"rate it\"", "└─ right → pass"]
@@ -200,7 +202,7 @@ main = hspec $ do
     it "puts a description under the name in diagrams, not in the tree" $ do
       let flow :: Agentic IO Joke Joke
           flow = note "polish" "Tidy the wording" (draft @Joke "polish it" >>> note "check" "Make sure it's still a joke" (arr id))
-          d = Agentic.describe flow
+          d = described flow
       any (T.isInfixOf "Tidy the wording") (T.lines (mermaid d)) `shouldBe` True
       any (T.isInfixOf "act\\ncheck\\nMake sure") (T.lines (dot d)) `shouldBe` False
       any (T.isInfixOf "arr\\ncheck\\nMake sure it's still a joke") (T.lines (dot d)) `shouldBe` True
@@ -209,7 +211,7 @@ main = hspec $ do
     it "groups a parallel branch that's several steps in a row" $ do
       let flow :: Agentic IO Joke (Joke, Rating)
           flow = (draft @Joke "rewrite it" >>> draft @Joke "shorten it") &&& draft @Rating "rate it"
-      T.lines (renderTree (Agentic.describe flow))
+      T.lines (renderTree (described flow))
         `shouldBe` [ "together"
                    , "├─ in order"
                    , "│  ├─ draft @Joke  \"rewrite it\""
@@ -220,44 +222,44 @@ main = hspec $ do
     it "shows a loop and what it runs" $ do
       let flow :: Agentic IO Joke Joke
           flow = repeatUntil ((== "kids") . (.genre)) (draft @Joke "make it more kid-friendly") `named` "polish until it's for kids"
-      T.lines (renderTree (Agentic.describe flow))
+      T.lines (renderTree (described flow))
         `shouldBe` ["polish until it's for kids  repeatUntil", "└─ draft @Joke  \"make it more kid-friendly\""]
 
     it "draws a fork that joins again in mermaid" $ do
       let flow :: Agentic IO Joke (Joke, Rating)
           flow = returnA &&& draft @Rating "rate it"
-          edges = filter (T.isInfixOf "-->") (T.lines (mermaid (Agentic.describe flow)))
+          edges = filter (T.isInfixOf "-->") (T.lines (mermaid (described flow)))
       edges `shouldBe` ["  input --> n0", "  input --> output", "  n0 --> output"]
 
     it "wires second to the second half of a known pair" $ do
       let flow :: Agentic IO Joke (Joke, Rating)
           flow = (draft @Joke "retell it" &&& draft @Rating "rate it") >>> second (draft @Rating "rate it again")
-          edges = filter (T.isInfixOf "-->") (T.lines (mermaid (Agentic.describe flow)))
+          edges = filter (T.isInfixOf "-->") (T.lines (mermaid (described flow)))
       edges `shouldBe` ["  input --> n0", "  input --> n1", "  n1 --> n2", "  n0 --> output", "  n2 --> output"]
 
     it "joins a pass-through from both sides of a choice with one edge" $ do
       let flow :: Agentic IO (Either Joke Joke) (Joke, Rating)
           flow = (returnA &&& draft @Rating "rate it") ||| (returnA &&& draft @Rating "rate it harshly")
-          edges = filter (T.isInfixOf "-->") (T.lines (mermaid (Agentic.describe flow)))
+          edges = filter (T.isInfixOf "-->") (T.lines (mermaid (described flow)))
       edges `shouldBe` ["  input -->|left| n0", "  input -->|right| n1", "  input --> output", "  n0 --> output", "  n1 --> output"]
 
     it "follows takeSecond to the half it keeps" $ do
       let flow :: Agentic IO Joke Rating
           flow = (draft @Joke "retell it" &&& draft @Rating "rate it") >>> takeSecond >>> draft @Rating "rate it again"
-          edges = filter (T.isInfixOf "-->") (T.lines (mermaid (Agentic.describe flow)))
+          edges = filter (T.isInfixOf "-->") (T.lines (mermaid (described flow)))
       edges `shouldBe` ["  input --> n0", "  input --> n1", "  n1 --> n2", "  n2 --> output"]
 
     it "lets a loop's input leave without going through the body" $ do
       let flow :: Agentic IO Joke Joke
           flow = repeatUntil ((== "kids") . (.genre)) (draft @Joke "make it kid-friendly") >>> act pure `named` "show it"
-          edges = filter (T.isInfixOf "-->") (T.lines (mermaid (Agentic.describe flow)))
+          edges = filter (T.isInfixOf "-->") (T.lines (mermaid (described flow)))
       edges `shouldBe` ["  input --> n1", "  input --> n2", "  n1 --> n2", "  n2 --> output"]
 
     it "draws the same graph as DOT, with boxes as clusters" $ do
       let flow :: Agentic IO [Joke] [Joke]
           flow = each (draft @Joke "polish it") `named` "polish"
-          out = mermaid (Agentic.describe flow)
-          dotOut = T.lines (dot (Agentic.describe flow))
+          out = mermaid (described flow)
+          dotOut = T.lines (dot (described flow))
       filter (T.isInfixOf "->") dotOut `shouldBe` ["  input -> n2;", "  n2 -> output;"]
       length (filter (T.isInfixOf "subgraph cluster_") dotOut) `shouldBe` 2
       length (filter (T.isInfixOf "subgraph ") (T.lines out)) `shouldBe` 2
@@ -265,17 +267,20 @@ main = hspec $ do
     it "sends a loop's again edge back to the body's first step, in both formats" $ do
       let flow :: Agentic IO Joke Joke
           flow = repeatUntil ((== "kids") . (.genre)) (draft @Joke "make it kid-friendly" >>> act pure `named` "show it")
-          d = Agentic.describe flow
+          d = described flow
       filter (T.isInfixOf "again") (T.lines (mermaid d)) `shouldBe` ["  n2 -.->|again| n1"]
       filter (T.isInfixOf "again") (T.lines (dot d)) `shouldBe` ["  n2 -> n1 [label=\"again\", style=dashed];"]
 
-    it "expands a tool that calls itself only once" $ do
-      let researcher :: Agentic IO Text Text
-          researcher = draftWith @Text [tool "research" "Research deeper" researcher] "research this"
-      T.lines (renderTree (Agentic.describe researcher))
-        `shouldBe` [ "draft @Text  \"research this\""
-                   , "└─ tool research  draft @Text  \"research this\""
-                   , "   └─ tool research  (see above)"
-                   ]
+    it "describes an explicit recursive tool with a finite reference" $ do
+      let researcher = recursiveTool $ \self -> tool @Text @Text "research" "Research deeper" (draftWith [self] "research this")
+          flow = draftWith @Text @Text @IO [researcher] "start"
+          tree = renderTree (described flow)
+      tree `shouldSatisfy` T.isInfixOf "recursive tools  (entry research)"
+      tree `shouldSatisfy` T.isInfixOf "tool research  (recursive reference)"
+
  where
   describe' = Test.Hspec.describe
+
+-- These fixtures are expected to have finite, valid structure.
+described :: Agentic m i o -> Description
+described = either (error . show) id . Agentic.describe

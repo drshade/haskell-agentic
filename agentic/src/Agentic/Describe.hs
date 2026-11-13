@@ -4,6 +4,9 @@ module Agentic.Describe
   , Description (..)
   , StepInfo (..)
   , ToolInfo (..)
+  , ToolBody (..)
+  , Address
+  , addressText
   , renderTree
   , mermaid
   , dot
@@ -18,9 +21,11 @@ module Agentic.Describe
 
 import Agentic.Contract (Outline, outline, outlineLabel)
 import Agentic.Core
+import Agentic.Internal.Static qualified as S
+import Agentic.Internal.Static (Address, addressText)
+import Agentic.Runtime (FlowError)
 import Agentic.Questions (QuestionSpec (..), Questions (..))
 import Agentic.Value (Value (..), renderJson)
-import Data.List (mapAccumL)
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -61,50 +66,63 @@ data StepInfo
       }
 
 data ToolInfo = ToolInfo
-  { name :: Text
+  { address :: Address
+  , name :: Text
   , description :: Text
   , input :: Outline
   , output :: Outline
-  , body :: Description
+  , body :: ToolBody
   }
 
--- | Describe a flow. This never runs anything.
-describe :: Agentic m i o -> Description
-describe = \case
-  Step s -> Leaf (stepInfo s)
-  Seq f g -> Sequence (sequenced (describe f) <> sequenced (describe g))
-  -- Only the right is flattened: @(a &&& b) &&& c@ is a different shape of
-  -- pair from @a &&& b &&& c@, and the graph routes by that shape.
-  Fanout f g -> Together (describe f : together (describe g))
-  Split f g -> Halves (describe f) (describe g)
-  First f -> Halves (describe f) (Leaf Identity)
-  Choose f g -> Branch (describe f) (describe g)
-  Each f -> ForEach (describe f)
-  Repeat _ f -> Repeated (describe f)
-  Noted n f -> Annotated n (describe f)
-  where
-    sequenced = \case
-      Sequence ds -> ds
-      d -> [d]
-    together = \case
-      Together ds -> ds
-      d -> [d]
+-- | A finite tool body, a group's definitions, or an explicit reference to
+-- a member's structural address. Addresses identify positions in this captured
+-- description only; they are not identities across revisions.
+data ToolBody
+  = ToolFlow Description
+  | ToolGroup Int [ToolInfo]
+    -- ^ The selected entry member (zero based), and every group definition.
+  | ToolReference Address
 
-stepInfo :: Step m i o -> StepInfo
+-- | Describe a flow without running effects or compiling model contracts.
+-- Invalid recursive definitions and tool-body nesting beyond 100 are errors.
+describe :: Agentic m i o -> Either FlowError Description
+describe = fmap fromStatic . S.staticFlow
+
+fromStatic :: S.StaticFlow -> Description
+fromStatic = \case
+  S.SStep s -> Leaf (stepInfo s)
+  S.SSeq f g -> Sequence (sequenced (fromStatic f) <> sequenced (fromStatic g))
+  S.SFanout f g -> Together (fromStatic f : together (fromStatic g))
+  S.SSplit f g -> Halves (fromStatic f) (fromStatic g)
+  S.SFirst f -> Halves (fromStatic f) (Leaf Identity)
+  S.SChoose f g -> Branch (fromStatic f) (fromStatic g)
+  S.SEach f -> ForEach (fromStatic f)
+  S.SRepeat f -> Repeated (fromStatic f)
+  S.SNoted n f -> Annotated n (fromStatic f)
+ where
+  sequenced = \case
+    Sequence ds -> ds
+    d -> [d]
+  together = \case
+    Together ds -> ds
+    d -> [d]
+
+stepInfo :: S.StaticStep -> StepInfo
 stepInfo = \case
-  Pass -> Identity
-  Wrap _ -> Identity
-  Arr _ -> Glue
-  TakeFirst -> FirstHalf
-  TakeSecond -> SecondHalf
-  Act _ -> Effect
-  Draft input out instruction tools ->
-    DraftInfo instruction (outline input) (outline out) (map toolInfo tools)
-  Judge input qs -> JudgeInfo (outline input) qs.specs
+  S.SIdentity -> Identity
+  S.SGlue -> Glue
+  S.SFirstHalf -> FirstHalf
+  S.SSecondHalf -> SecondHalf
+  S.SEffect -> Effect
+  S.SDraft input out instruction tools -> DraftInfo instruction (outline input) (outline out) (map toolInfo tools)
+  S.SJudge input qs -> JudgeInfo (outline input) qs.specs
 
-toolInfo :: Tool m -> ToolInfo
-toolInfo (Tool name description input out body) =
-  ToolInfo name description (outline input) (outline out) (describe body)
+toolInfo :: S.StaticTool -> ToolInfo
+toolInfo (S.StaticTool address name description input out body) =
+  ToolInfo address name description (outline input) (outline out) $ case body of
+    S.Body f -> ToolFlow (fromStatic f)
+    S.Members selected members -> ToolGroup selected (map toolInfo members)
+    S.ReferenceTo target -> ToolReference target
 
 -- ---------------------------------------------------------------------------
 -- The tree view
@@ -114,71 +132,61 @@ instance Show Description where
 
 data Tree = Node Text [Tree]
 
--- | The tree view. Each tool's body is expanded the first time the tool
--- appears. Unnamed glue between steps is hidden, but a branch is never hidden:
--- inside @&&&@, @***@ and @|||@ it shows as @arr@ (or @pass@ for 'returnA'), and
--- a pass-through beside a step shows as "keeping its input".
+-- | The tree view. Recursive groups list their finite definitions; references
+-- point to members without expanding them. Unnamed glue between steps is
+-- hidden, but a branch is never hidden: inside @&&&@, @***@ and @|||@ it shows
+-- as @arr@ (or @pass@), and a pass-through beside a step keeps its input.
 renderTree :: Description -> Text
-renderTree = T.intercalate "\n" . concatMap (draw "" "") . snd . trees []
+renderTree = T.intercalate "\n" . concatMap (draw "" "") . trees
 
--- | Convert to trees, threading the names of tools already expanded.
-trees :: [Text] -> Description -> ([Text], [Tree])
-trees seen = \case
-  Leaf Identity -> (seen, [])
-  Leaf Glue -> (seen, [])
-  Leaf FirstHalf -> (seen, [])
-  Leaf SecondHalf -> (seen, [])
+trees :: Description -> [Tree]
+trees = \case
+  Leaf Identity -> []
+  Leaf Glue -> []
+  Leaf FirstHalf -> []
+  Leaf SecondHalf -> []
   Leaf info -> leaf Nothing info
-  Sequence ds -> onSnd concat (mapAccumL trees seen ds)
+  Sequence ds -> concatMap trees ds
   Together ds ->
     let keeping = if any passes ds then "  (keeping its input)" else ""
-     in case onSnd concat (mapAccumL parallel seen (filter (not . passes) ds)) of
-          (seen', [Node t cs]) -> (seen', [Node (t <> keeping) cs])
-          (seen', ts) -> (seen', [Node ("together" <> keeping) ts])
-  Halves l r ->
-    let (seen1, ls) = branch seen l
-        (seen2, rs) = branch seen1 r
-     in (seen2, [Node "both halves" [labelled "first" ls, labelled "second" rs]])
-  Branch l r ->
-    let (seen1, ls) = branch seen l
-        (seen2, rs) = branch seen1 r
-     in (seen2, [Node "branch" [labelled "left" ls, labelled "right" rs]])
-  Repeated d -> case branch seen d of
-    (seen', [Node "together" ts]) -> (seen', [Node "repeatUntil" ts])
-    (seen', ts) -> (seen', [Node "repeatUntil" ts])
-  ForEach d -> case branch seen d of
-    (seen', [Node "together" ts]) -> (seen', [Node "each" ts])
-    (seen', ts) -> (seen', [Node "each" ts])
+     in case concatMap parallel (filter (not . passes) ds) of
+          [Node t cs] -> [Node (t <> keeping) cs]
+          ts -> [Node ("together" <> keeping) ts]
+  Halves l r -> [Node "both halves" [labelled "first" (branch l), labelled "second" (branch r)]]
+  Branch l r -> [Node "branch" [labelled "left" (branch l), labelled "right" (branch r)]]
+  Repeated d -> loop "repeatUntil" d
+  ForEach d -> loop "each" d
   Annotated n (Leaf info) | not (passes (Leaf info)) -> leaf (Just n.name) info
-  Annotated n d -> case trees seen d of
-    (seen', [Node t cs]) -> (seen', [Node (n.name <> "  " <> t) cs])
-    (seen', []) -> (seen', [Node n.name []])
-    (seen', ts) -> (seen', [Node n.name ts])
-  where
-    -- A step: what kind it is, then its name, then the details.
-    leaf name info =
-      let (seen', toolTrees) = case info of
-            DraftInfo _ _ _ tools -> mapAccumL toolTree seen tools
-            _ -> (seen, [])
-       in (seen', [Node (T.intercalate "  " (stepLines name info)) toolTrees])
-    -- A branch of @&&&@ that's several steps in a row is grouped, so its steps
-    -- don't read as more parallel branches.
-    parallel s d = case branch s d of
-      (s', ts@(_ : _ : _)) -> (s', [Node "in order" ts])
-      r -> r
-    -- A branch always shows, even when it's only glue.
-    branch s d = case trees s d of
-      (s', []) -> (s', [Node (plumbing d) []])
-      r -> r
-    toolTree s t
-      | t.name `elem` s = (s, Node ("tool " <> t.name <> "  (see above)") [])
-      | otherwise = case trees (t.name : s) t.body of
-          (s', [Node body cs]) -> (s', Node ("tool " <> t.name <> "  " <> body) cs)
-          (s', ts) -> (s', Node ("tool " <> t.name) ts)
-    labelled l = \case
-      [Node t cs] -> Node (l <> " → " <> t) cs
-      [] -> Node (l <> " → pass") []
-      ts -> Node l ts
+  Annotated n d -> case trees d of
+    [Node t cs] -> [Node (n.name <> "  " <> t) cs]
+    [] -> [Node n.name []]
+    ts -> [Node n.name ts]
+ where
+  leaf name info =
+    let toolTrees = case info of
+          DraftInfo _ _ _ ts -> map toolTree ts
+          _ -> []
+     in [Node (T.intercalate "  " (stepLines name info)) toolTrees]
+  -- Group a multi-step parallel branch so its steps don't read as branches.
+  parallel d = case branch d of
+    ts@(_ : _ : _) -> [Node "in order" ts]
+    ts -> ts
+  branch d = case trees d of
+    [] -> [Node (plumbing d) []]
+    ts -> ts
+  loop label d = case branch d of
+    [Node "together" ts] -> [Node label ts]
+    ts -> [Node label ts]
+  toolTree t = case t.body of
+    ToolReference _ -> Node ("tool " <> t.name <> "  (recursive reference)") []
+    ToolGroup _ members -> Node ("recursive tools  (entry " <> t.name <> ")") (map toolTree members)
+    ToolFlow body -> case trees body of
+      [Node label cs] -> Node ("tool " <> t.name <> "  " <> label) cs
+      ts -> Node ("tool " <> t.name) ts
+  labelled l = \case
+    [Node t cs] -> Node (l <> " → " <> t) cs
+    [] -> Node (l <> " → pass") []
+    ts -> Node l ts
 
 -- | How a branch that's only plumbing shows in the tree view.
 plumbing :: Description -> Text
@@ -549,16 +557,17 @@ descriptionValue = \case
         node "judge" [("input", String (outlineLabel input)), ("questions", Array (map question qs))]
     tool t =
       Object
-        [ ("name", String t.name)
+        [ ("address", String (addressText t.address))
+        , ("name", String t.name)
         , ("description", String t.description)
         , ("input", String (outlineLabel t.input))
         , ("output", String (outlineLabel t.output))
+        , ("body", case t.body of
+            ToolFlow d -> descriptionValue d
+            ToolReference target -> Object [("kind", String "reference"), ("target", String (addressText target))]
+            ToolGroup selected members -> Object [("kind", String "recursiveTools"), ("entry", Integer (toInteger selected)), ("members", Array (map tool members))])
         ]
     question = \case
       AskYesNo q -> Object [("type", String "yesNo"), ("question", String q)]
       AskChoice q opts -> Object [("type", String "choice"), ("question", String q), ("options", Array [String l | (l, _) <- opts])]
       AskScore q levels -> Object [("type", String "score"), ("question", String q), ("levels", Array [String l | (l, _) <- levels])]
-
--- | Apply a function to a pair's second half.
-onSnd :: (b -> c) -> (a, b) -> (a, c)
-onSnd f (a, b) = (a, f b)

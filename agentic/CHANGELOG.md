@@ -1,5 +1,22 @@
 # Changelog for agentic
 
+## Unreleased
+
+* Add `recursiveTool` and `recursiveTools` for self and mutual recursion, with
+  abstract tools and tuple binders. Execute real members against a finite static
+  cursor; tools saved through effects retain their original definitions.
+* Preflight validates all real group members before effects. Both preflight and
+  description reject static tool-body nesting beyond 100; this is a heuristic
+  limit, not cycle detection, and never limits explicit runtime recursion.
+* `describe` now returns `Either FlowError Description`. It remains independent
+  of model-codec compilation. Tool descriptions/JSON contain finite group
+  definitions and explicit references; same-name bodies are not deduplicated.
+  Use smart constructors instead of the now-internal `Tool` constructors;
+  handwritten tool contracts go through `Contract` instances.
+* Recursive builders must return concrete definitions and have productive
+  metadata. Member aliases report a clear error; arbitrary cyclic metadata
+  computations remain partial.
+
 ## 0.2.1.0 - 2026-11-06
 
 * `Contract` now produces a typed `Structure`, shared by generic derivation
