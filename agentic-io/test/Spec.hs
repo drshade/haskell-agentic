@@ -2,8 +2,11 @@ module Main (main) where
 
 import Agentic
 import Agentic.IO
+import Agentic.Runtime (Conversation (..))
 import Agentic.Scripted (fixedAnswers, replyingWith, respond)
 import Control.Exception (try)
+import Control.Concurrent.MVar
+import System.Timeout qualified as Timeout
 import Data.IORef
 import Data.Text (Text)
 import GHC.Generics (Generic)
@@ -58,7 +61,12 @@ fresh name = do
   pure file
 
 main :: IO ()
-main = hspec $ Test.Hspec.describe "withStore" $ do
+main = hspec $ do
+  recursionSpec
+  storeSpec
+
+storeSpec :: Spec
+storeSpec = Test.Hspec.describe "withStore" $ do
   it "records, then replays without calling the models" $ do
     file <- fresh "agentic-store-replay.jsonl"
     (live, turns, judgements) <- counting
@@ -89,3 +97,31 @@ main = hspec $ Test.Hspec.describe "withStore" $ do
     again <- withStore ReplayOrRecord file offline
     _ <- interpret again flow "penguins"
     pure ()
+
+-- A barrier forces three root provider calls to overlap. The provider decides
+-- recursion from its input, so concurrent scheduling cannot consume a script
+-- in the wrong order. Every recursive invocation reuses the same provider ID.
+recursionSpec :: Spec
+recursionSpec = Test.Hspec.describe "concurrent recursive tools" $ do
+  it "shares the finite cursor across concurrent recursive occurrences" $ do
+    roots <- newIORef (0 :: Int)
+    entered <- newIORef (0 :: Int)
+    startBarrier <- newEmptyMVar
+    let self = recursiveTool $ \s -> tool @Int @Int "self" "" $
+          act (\x -> atomicModifyIORef' entered (\n -> (n + 1, ())) >> pure x)
+            >>> draftWith [s] "recurse"
+        scriptedModel = SystemTwo $ \c -> do
+          if null c.path && null c.history
+            then do
+              n <- atomicModifyIORef' roots (\n -> (n + 1, n + 1))
+              if n == 3 then putMVar startBarrier () else pure ()
+              readMVar startBarrier
+            else pure ()
+          let action = case (c.input, c.history) of
+                (Integer n, []) | n > 0 -> CallTools [ToolCall "same-id" "self" (Integer (n - 1))]
+                _ -> Respond c.input
+          pure (Turn (Raw Null) action)
+        rt = concurrently runtime{systemTwo = scriptedModel}
+        f = each (draftWith @Int @Int @IO [self] "start")
+    Timeout.timeout 10000000 (interpret rt f [126, 128, 130]) `shouldReturn` Just [126, 128, 130]
+    readIORef entered `shouldReturn` 384

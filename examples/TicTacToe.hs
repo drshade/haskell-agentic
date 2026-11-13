@@ -4,6 +4,7 @@
 module Main (main) where
 
 import Agentic
+import Control.Exception (throwIO)
 import Agentic.IO (loadDotEnv)
 import Agentic.OpenAI (openai)
 import Data.Text (Text)
@@ -47,9 +48,10 @@ render (Board t m b) = mconcat [line r <> "\n" | r <- [t, m, b]]
 main :: IO ()
 main = do
   _ <- loadDotEnv
-  print $ describe game
-  T.putStrLn $ "\n" <> mermaid (describe game)
-  T.putStrLn $ dot (describe game)
+  description <- either throwIO pure (describe game)
+  print description
+  T.putStrLn $ "\n" <> mermaid description
+  T.putStrLn $ dot description
   rt <- pure runtime >>= withSystemTwo (openai & effort Low)
   let empty = Row Blank Blank Blank
   _ <- interpret rt game (Game (Board empty empty empty) Playing)

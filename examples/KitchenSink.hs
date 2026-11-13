@@ -15,6 +15,7 @@
 module Main (main) where
 
 import Agentic
+import Control.Exception (throwIO)
 import Agentic.Anthropic (anthropic)
 import Agentic.IO (Mode (..), concurrently, loadDotEnv, withStore)
 import Agentic.Jev (jev)
@@ -240,9 +241,10 @@ page h = T.putStrLn ("  paged on-call about: " <> h.ticket.email.subject) >> pur
 main :: IO ()
 main = do
   _ <- loadDotEnv
-  print $ describe kitchenSink
-  T.putStrLn $ "\n" <> mermaid (describe kitchenSink)
-  T.putStrLn $ dot (describe kitchenSink)
+  description <- either throwIO pure (describe kitchenSink)
+  print description
+  T.putStrLn $ "\n" <> mermaid description
+  T.putStrLn $ dot description
   rt <-
     pure (concurrently runtime)
       >>= withSystemOne jev

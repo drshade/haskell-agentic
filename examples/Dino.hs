@@ -6,6 +6,7 @@
 module Main (main) where
 
 import Agentic
+import Control.Exception (throwIO)
 import Agentic.Anthropic (anthropic)
 import Agentic.IO (concurrently, loadDotEnv)
 import Agentic.Jev (jev)
@@ -106,9 +107,10 @@ notADinosaur (c, k) = NotADinosaur c.name k.chosen
 main :: IO ()
 main = do
   _ <- loadDotEnv
-  print $ describe dinoProject
-  T.putStrLn $ "\n" <> mermaid (describe dinoProject)
-  T.putStrLn $ dot (describe dinoProject)
+  description <- either throwIO pure (describe dinoProject)
+  print description
+  T.putStrLn $ "\n" <> mermaid description
+  T.putStrLn $ dot description
   rt <- pure (concurrently runtime)
               >>= withSystemOne jev 
               >>= withSystemTwo (anthropic & effort Low)

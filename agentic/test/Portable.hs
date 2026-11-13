@@ -155,7 +155,7 @@ main = do
   check "the answers decoded to typed values" (verdict == (YesNo 0.9, YesNo 0.9))
 
   -- 6. Describing the flow invokes no handlers: describe has no runtime to call.
-  let tree = renderTree (describe jokeAndFigure)
+  let tree = either (error . show) renderTree (describe jokeAndFigure)
   check "describe shows the drafts and both tools" (all (`T.isInfixOf` tree) ["draft @Joke", "tool count_letters  act", "tool write_joke  draft @Joke", "draft @Figure"])
 
   -- 7. Plumbing a diagram can follow runs like arr fst and arr snd.
@@ -165,6 +165,18 @@ main = do
       flat = 1 :/\ "two" :/\ True
   check "a :/\\ pair builds and matches nested pairs" (flat == (1, ("two", True)) && (case flat of _ :/\ t :/\ _ -> t == "two"))
 
-  -- 8. All of the above ran in Pure, not IO.
+  -- 8. Explicit recursion needs no IO, identity generator or exception constraint.
+  let self = recursiveTool $ \s -> tool @Text @Text "self" "" (draftWith [s] "recurse")
+      recursiveFlow = draftWith @Text @Text @Pure [self] "start"
+      recursiveWorld = world0
+        { script = replicate 126 (CallTools [ToolCall "same" "self" (String "x")])
+            <> replicate 127 (Respond (String "done"))
+        , events = []
+        }
+      (recursiveResult, recursiveEnd) = (interpret handlers recursiveFlow "x").runPure recursiveWorld
+  check "explicit recursion works in a pure monad past 100 calls"
+    (recursiveResult == "done" && null recursiveEnd.script && length [() | ToolReturned _ _ <- recursiveEnd.events] == 126)
+
+  -- 9. All of the above ran in Pure, not IO.
   n <- readIORef failures
   if n == 0 then putStrLn "all checks passed" else putStrLn (show n <> " checks failed") >> exitFailure

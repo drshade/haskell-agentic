@@ -118,7 +118,11 @@ data Happened
 
 -- | Errors the core raises itself. Provider errors are the provider's own.
 data FlowError
-  = NoSystemOne
+  = ToolNestingLimit Int
+    -- ^ Static tool-body nesting exceeded the limit (100). A heuristic,
+    -- not cycle detection; it never limits explicit runtime recursion.
+  | InvalidRecursion Text
+  | NoSystemOne
   | NoSystemTwo
   | UnsupportedContract [Note] ProjectionError
   | MalformedAnswers Text

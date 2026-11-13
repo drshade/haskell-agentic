@@ -184,7 +184,7 @@ main = hspec $ do
       isLeft (compileModel (contract @(Maybe Hidden))) `shouldBe` True
       isLeft (compileModel (contract @VariantChoice)) `shouldBe` True
     it "describes a flow even when its model projection is unsupported" $
-      renderTree (describe (draft @Hidden @() @IO "hidden")) `shouldSatisfy` (not . null . show)
+      either (error . show) renderTree (describe (draft @Hidden @() @IO "hidden")) `shouldSatisfy` (not . null . show)
     it "rejects unsupported tool results before any effect or provider call" $ do
       effects <- newIORef (0 :: Int)
       calls <- newIORef (0 :: Int)

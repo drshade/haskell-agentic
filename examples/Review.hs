@@ -2,6 +2,7 @@
 module Main (main) where
 
 import Agentic
+import Control.Exception (throwIO)
 import Agentic.IO.DotEnv (loadDotEnv)
 import Agentic.Jev (jev)
 import Data.Text (Text)
@@ -36,9 +37,10 @@ review =
 main :: IO ()
 main = do
   _ <- loadDotEnv
-  print $ describe review
-  T.putStrLn $ "\n" <> mermaid (describe review)
-  T.putStrLn $ dot (describe review)
+  description <- either throwIO pure (describe review)
+  print description
+  T.putStrLn $ "\n" <> mermaid description
+  T.putStrLn $ dot description
   rt <- pure runtime >>= withSystemOne jev
   result <- interpret rt review (Joke "Why was the scarecrow promoted?" "He was outstanding in his field.")
   print result
