@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Agentic
+import GraphValueSpec qualified
 import ObservationSpec qualified
 import RecursionSpec qualified
 import Agentic.Schema (Field (..), Schema (..), Shape (..))
@@ -78,6 +79,7 @@ roundTrips c a = c.decode (c.encode a) `shouldBe` Right a
 
 main :: IO ()
 main = hspec $ do
+  GraphValueSpec.spec
   ObservationSpec.spec
   RecursionSpec.spec
   describe' "Contracts" $ do

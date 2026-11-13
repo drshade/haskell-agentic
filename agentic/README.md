@@ -590,6 +590,7 @@ its parent is, so you can light up the graph from `describe` as the run goes:
 d <- either throwIO pure (describe flow)
 let graph = flowGraph d
     rt = observing (save . summaryValue . summarise) runtime
+save (flowGraphValue graph)
 interpret rt flow input
 ```
 
@@ -602,6 +603,10 @@ calls (which element, which pass, which call). That is what makes recursion
 work: a tool that calls itself is one node in the graph and a new occurrence
 every time. `graph.addressItems` maps each address to the item that shows it,
 and `graph.bodies` identifies loop bodies and possible tool-call targets.
+`flowGraphValue` encodes the complete graph, including those relationships,
+selection IDs and reference edges. Save it alongside the summaries from that
+flow; `descriptionValue` is a readable description, not a substitute for this
+graph encoding.
 
 A few things that will bite you:
 
