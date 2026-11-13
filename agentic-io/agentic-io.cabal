@@ -48,6 +48,7 @@ test-suite agentic-io-test
   ghc-options:      -Wall
   type:             exitcode-stdio-1.0
   hs-source-dirs:   test
+  other-modules:    ObservationIO
   main-is:          Spec.hs
   build-depends:
     , agentic          >=0.2.1 && <0.3

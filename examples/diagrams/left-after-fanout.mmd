@@ -1,0 +1,14 @@
+flowchart TD
+  input(["input"])
+  n_flow_seq_0_fan_0_note_0["act<br/>source one"]
+  n_flow_seq_0_fan_1_note_0["act<br/>source two"]
+  n_flow_seq_1_seq_1_0{" "}
+  n_flow_seq_1_seq_1_choose_0_seq_0_note_0["act<br/>handle pair"]
+  output(["output"])
+  input --> n_flow_seq_0_fan_0_note_0
+  input --> n_flow_seq_0_fan_1_note_0
+  n_flow_seq_0_fan_0_note_0 --> n_flow_seq_1_seq_1_0
+  n_flow_seq_0_fan_1_note_0 --> n_flow_seq_1_seq_1_0
+  n_flow_seq_1_seq_1_0 -->|left| n_flow_seq_1_seq_1_choose_0_seq_0_note_0
+  n_flow_seq_1_seq_1_choose_0_seq_0_note_0 --> output
+  n_flow_seq_1_seq_1_0 -->|right| output

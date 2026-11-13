@@ -1,0 +1,155 @@
+digraph flow {
+  compound=true;
+  node [shape=box, style=rounded, fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  input [label="input", shape=oval];
+  n_flow_seq_0_0 [label="draft @[Email]\n\"Write 8 emails to the support address of an online bookshop, as they might arrive in a day. Include one spam email, one refund request and one angry customer.\""];
+  n_flow_seq_1_seq_0_fan_0_note_0 [label="arr\ncount the emails"];
+  subgraph cluster_n_flow_seq_1_seq_0_fan_1_0 {
+    label="keep 0.5";
+    style=rounded;
+    subgraph cluster_n_flow_seq_1_seq_0_fan_1_note_seq_0_0 {
+      label="each";
+      style=rounded;
+      n_flow_seq_1_seq_0_fan_1_note_seq_0_each_fan_1_0 [label="judge\nyes/no \"Is this a genuine email from a customer, not spam?\""];
+    }
+  }
+  subgraph cluster_n_flow_seq_1_seq_1_seq_0_split_1_seq_0_0 {
+    label="each";
+    style=rounded;
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_0_each_seq_0_fan_1_0 [label="judge 3 questions in one request\nchoice of 5 \"What is this email about?\"\nscore on 3 levels \"How urgent is this email?\"\nyes/no \"Is the customer angry?\""];
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_0_each_seq_1_note_0 [label="arr\ntriage policy\nUrgent if Jev scores it above Soon, or the customer is angry"];
+  }
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_0_note_0 [label="arr\nsplit off the urgent tickets"];
+  subgraph cluster_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_0 {
+    label="each";
+    style=rounded;
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_0_note_0 [label="arr\nrefunds to the refund agent"];
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_0 [label="", shape=diamond, style=solid, width=0.3, height=0.3, fixedsize=true];
+    entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_select_0 [label="", shape=point, width=0.06];
+    entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_select_1 [label="", shape=point, width=0.06];
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_0 [label="draft @Reply\n\"This customer wants a refund. Look up their order, check the request against the refund policy, and write a reply that tells them the outcome.\""];
+    tool_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0 [label="tool lookup_order", shape=parallelogram, style=""];
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0 [label="act"];
+    return_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0 [label="return", shape=oval];
+    tool_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0 [label="tool refund_eligible", shape=parallelogram, style=""];
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0 [label="judge\nyes/no \"Our policy: refunds within 30 days of purchase, for damaged books or books that weren't what was ordered. Does this request fit the policy?\""];
+    return_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0 [label="return", shape=oval];
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_1_fan_1_0 [label="draft @Reply\n\"Write a helpful reply to this customer's email.\""];
+    subgraph cluster_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_0 {
+      label="polish\nRevise until Jev rates the reply polite (≥ 0.9)";
+      style=rounded;
+      n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_0_fan_1_seq_1_seq_1_0 [label="judge\nyes/no \"Is this reply polite and warm?\""];
+      subgraph cluster_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_1_seq_0_0 {
+        label="repeatUntil";
+        style=rounded;
+        n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 [label="draft @Reply\n\"Make this reply warmer and more polite, keeping what it says.\""];
+        n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_1_fan_1_seq_1_seq_1_0 [label="judge\nyes/no \"Is this reply polite and warm?\""];
+      }
+    }
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_1_0 [label="draft @Text\n\"Write a one-line log entry for this support ticket.\""];
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_1_seq_1_note_0 [label="act\nsend the reply"];
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_1_note_0 [label="act\npage the on-call team"];
+  }
+  subgraph cluster_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_0 {
+    label="each";
+    style=rounded;
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_0_note_0 [label="arr\nrefunds to the refund agent"];
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_0 [label="", shape=diamond, style=solid, width=0.3, height=0.3, fixedsize=true];
+    entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_select_0 [label="", shape=point, width=0.06];
+    entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_select_1 [label="", shape=point, width=0.06];
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_0 [label="draft @Reply\n\"This customer wants a refund. Look up their order, check the request against the refund policy, and write a reply that tells them the outcome.\""];
+    tool_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0 [label="tool lookup_order", shape=parallelogram, style=""];
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0 [label="act"];
+    return_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0 [label="return", shape=oval];
+    tool_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0 [label="tool refund_eligible", shape=parallelogram, style=""];
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0 [label="judge\nyes/no \"Our policy: refunds within 30 days of purchase, for damaged books or books that weren't what was ordered. Does this request fit the policy?\""];
+    return_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0 [label="return", shape=oval];
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_1_fan_1_0 [label="draft @Reply\n\"Write a helpful reply to this customer's email.\""];
+    subgraph cluster_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_0 {
+      label="polish\nRevise until Jev rates the reply polite (≥ 0.9)";
+      style=rounded;
+      n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_0_fan_1_seq_1_seq_1_0 [label="judge\nyes/no \"Is this reply polite and warm?\""];
+      subgraph cluster_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_1_seq_0_0 {
+        label="repeatUntil";
+        style=rounded;
+        n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 [label="draft @Reply\n\"Make this reply warmer and more polite, keeping what it says.\""];
+        n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_1_fan_1_seq_1_seq_1_0 [label="judge\nyes/no \"Is this reply polite and warm?\""];
+      }
+    }
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_1_0 [label="draft @Text\n\"Write a one-line log entry for this support ticket.\""];
+    n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_1_seq_1_note_0 [label="act\nsend the reply"];
+  }
+  n_flow_seq_1_seq_1_seq_1_seq_1_0 [label="draft @Report\n\"Summarise the day's support email for the support lead.\""];
+  output [label="output", shape=oval];
+  input -> n_flow_seq_0_0;
+  n_flow_seq_0_0 -> n_flow_seq_1_seq_0_fan_0_note_0;
+  n_flow_seq_0_0 -> n_flow_seq_1_seq_0_fan_1_note_seq_0_each_fan_1_0;
+  n_flow_seq_0_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_0_each_seq_0_fan_1_0;
+  n_flow_seq_1_seq_0_fan_1_note_seq_0_each_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_0_each_seq_0_fan_1_0;
+  n_flow_seq_0_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_0_each_seq_1_note_0;
+  n_flow_seq_1_seq_0_fan_1_note_seq_0_each_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_0_each_seq_1_note_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_0_each_seq_0_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_0_each_seq_1_note_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_0_each_seq_1_note_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_0_note_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_0_note_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_0_note_0 [label="first"];
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_0_note_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_0 -> entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_select_0 [label="left"];
+  entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_select_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_0 -> tool_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0 [style=dotted, arrowhead=none];
+  tool_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0 -> return_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_0 -> tool_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0 [style=dotted, arrowhead=none];
+  tool_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0 -> return_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_0 -> entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_select_1 [label="right"];
+  entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_select_1 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_1_fan_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_0_fan_1_seq_1_seq_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_1_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_0_fan_1_seq_1_seq_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_1_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_1_fan_1_seq_1_seq_1_0;
+  entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_select_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 [label="again", style=dashed];
+  entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_select_1 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 [label="again", style=dashed];
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 [label="again", style=dashed];
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_1_fan_1_seq_1_seq_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 [label="again", style=dashed];
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_0_note_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_1_0 [label="first"];
+  entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_select_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_1_seq_1_note_0;
+  entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_select_1 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_1_seq_1_note_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_1_seq_1_note_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_0_seq_1_choose_1_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_1_seq_1_note_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_1_seq_1_note_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_0_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_1_seq_1_note_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_0_seq_1_seq_1_note_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_1_note_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_0_note_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_0_note_0 [label="second"];
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_0_note_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_0 -> entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_select_0 [label="left"];
+  entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_select_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_0 -> tool_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0 [style=dotted, arrowhead=none];
+  tool_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0 -> return_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_0_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_0 -> tool_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0 [style=dotted, arrowhead=none];
+  tool_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0 -> return_n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_tool_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_0 -> entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_select_1 [label="right"];
+  entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_select_1 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_1_fan_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_0_fan_1_seq_1_seq_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_1_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_0_fan_1_seq_1_seq_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_1_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_1_fan_1_seq_1_seq_1_0;
+  entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_select_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 [label="again", style=dashed];
+  entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_select_1 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 [label="again", style=dashed];
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 [label="again", style=dashed];
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_1_fan_1_seq_1_seq_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 [label="again", style=dashed];
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_0_note_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_1_0 [label="second"];
+  entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_select_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_1_seq_1_note_0;
+  entry_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_select_1 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_1_seq_1_note_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_0_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_1_seq_1_note_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_0_seq_1_choose_1_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_1_seq_1_note_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_0_seq_1_note_seq_1_seq_0_repeat_seq_1_seq_0_split_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_1_seq_1_note_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_0_fan_1_0 -> n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_1_seq_1_note_0;
+  n_flow_seq_1_seq_0_fan_0_note_0 -> n_flow_seq_1_seq_1_seq_1_seq_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_0_each_seq_1_note_0 -> n_flow_seq_1_seq_1_seq_1_seq_1_0;
+  n_flow_seq_1_seq_1_seq_0_split_1_seq_1_seq_1_split_1_each_seq_1_seq_1_note_0 -> n_flow_seq_1_seq_1_seq_1_seq_1_0;
+  n_flow_seq_1_seq_1_seq_1_seq_1_0 -> output;
+}

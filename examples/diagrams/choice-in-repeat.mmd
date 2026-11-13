@@ -1,0 +1,16 @@
+flowchart TD
+  input(["input"])
+  subgraph n_flow_0["repeatUntil"]
+    n_flow_repeat_seq_1_0{" "}
+    entry_flow_repeat_seq_1_select_1((" "))
+    n_flow_repeat_seq_1_choose_0_0["arr"]
+  end
+  output(["output"])
+  input --> n_flow_repeat_seq_1_0
+  n_flow_repeat_seq_1_0 -->|left| n_flow_repeat_seq_1_choose_0_0
+  n_flow_repeat_seq_1_choose_0_0 -.->|again| n_flow_repeat_seq_1_0
+  n_flow_repeat_seq_1_0 -->|right| entry_flow_repeat_seq_1_select_1
+  entry_flow_repeat_seq_1_select_1 -.->|again| n_flow_repeat_seq_1_0
+  input --> output
+  n_flow_repeat_seq_1_choose_0_0 --> output
+  entry_flow_repeat_seq_1_select_1 --> output

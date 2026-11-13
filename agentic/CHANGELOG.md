@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+* Replace the old event envelope with occurrence keys, explicit parents, loop
+  and call frames, lifecycle outcomes, selections, and resolved tool targets.
+  `EventPayload` is optional; `summarise` and `summaryValue` expose portable
+  metadata without retaining payload values.
+* Add runtime `Scope` hooks. IO distinguishes failed and cancelled exits while
+  preserving exception types; other monads can supply their own hook. Returns
+  remain lazy, and interrupted observers leave unknown outcomes without retries.
+* Preserve addresses in `Located` descriptions before display projection.
+  Graphs publish address/item and body-root relations, finite tool bodies,
+  recursive reference edges, and decision diamonds with two labelled selection
+  edges. Conditional routing dots are graph-only; named choices label their
+  diamond. The logical root stays undrawn and JSON sequences stay flat.
+* Add test-only replay checks and an observation-overhead benchmark. No event
+  recorder, transport, clock or production reducer is added.
+
 * Add `recursiveTool` and `recursiveTools` for self and mutual recursion, with
   abstract tools and tuple binders. Execute real members against a finite static
   cursor; tools saved through effects retain their original definitions.

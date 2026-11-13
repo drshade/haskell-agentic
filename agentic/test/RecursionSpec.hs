@@ -8,6 +8,7 @@ import Data.IORef
 import Data.List (nub)
 import Data.Text (Text)
 import Data.Text qualified as T
+import ObservationModel (replay, State (..), Status (..))
 import Test.Hspec hiding (describe)
 import Test.Hspec qualified as H
 
@@ -32,13 +33,29 @@ done = Respond (String "done")
 scriptFor :: [Text] -> [Action]
 scriptFor names = map call names <> replicate (length names + 1) done
 
-run :: Agentic IO Text Text -> [Action] -> IO [Happened]
+run :: Agentic IO Text Text -> [Action] -> IO [Event]
 run flow actions = do
   seen <- newIORef []
   model <- scripted actions
-  let rt = observing (\e -> modifyIORef' seen (e.happened :)) runtime{systemTwo = model}
+  let rt = observing (\e -> modifyIORef' seen (e :)) runtime{systemTwo = model}
   interpret rt flow "input" `shouldReturn` "done"
-  reverse <$> readIORef seen
+  events <- reverse <$> readIORef seen
+  let graph = flowGraph (finite flow)
+      ids = itemIds graph.items
+      started = [e.occurrence | e <- events, Entered _ <- [e.happened]]
+  length started `shouldBe` length (nub started)
+  length ids `shouldBe` length (nub ids)
+  all (\e -> e.from `elem` ids && e.to `elem` ids) graph.edges `shouldBe` True
+  all ((`elem` ids) . snd) graph.addressItems `shouldBe` True
+  all (\e -> case e.referenceTarget of
+    Nothing -> e.style /= Reference
+    Just target -> e.style == Reference && target `elem` map fst graph.addressItems) graph.edges `shouldBe` True
+  case replay graph (map summarise events) of
+    Left problem -> expectationFailure problem
+    Right (State rows) -> [key | (key,_,_,Open) <- rows] `shouldBe` []
+  pure events
+ where
+  itemIds = concatMap (\case ItemNode i _ _ -> [i]; ItemBox i _ xs -> i:itemIds xs)
 
 finite :: Agentic m i o -> Description
 finite = either (error . show) id . describe
@@ -46,6 +63,8 @@ finite = either (error . show) id . describe
 -- Inspect actual finite tool definitions/references, without relying on labels.
 toolsIn :: Description -> [ToolInfo]
 toolsIn = \case
+  Located _ d -> toolsIn d
+  FirstOnly d -> toolsIn d
   Leaf (DraftInfo _ _ _ ts) -> concatMap collect ts
   Leaf _ -> []
   Sequence ds -> concatMap toolsIn ds
@@ -78,8 +97,8 @@ spec = H.describe "recursive tools" $ do
         f = root [self]
     checkFinite 1 f
     events <- run f (scriptFor (replicate 126 "self"))
-    length [() | ToolCalled _ <- events] `shouldBe` 126
-    length [() | ToolReturned _ _ <- events] `shouldBe` 126
+    length [() | e <- events, CallResolved _ _ <- [e.happened]] `shouldBe` 126
+    length [() | e <- events, Returned CallOk <- [e.happened]] `shouldBe` 126
 
   it "runs mutual recursion and exposes each group definition once" $ do
     let (ping, _) = recursiveTools $ \(p,q) ->
@@ -88,7 +107,7 @@ spec = H.describe "recursive tools" $ do
         names = take 126 (cycle ["ping", "pong"])
     checkFinite 2 f
     events <- run f (scriptFor names)
-    [c.name | ToolCalled c <- events] `shouldBe` names
+    [c.name | e <- events, Just (CallPayload c) <- [e.payload]] `shouldBe` names
 
   it "restores outer lexical meaning during nested A/B/A/B reentry" $ do
     entered <- newIORef ([] :: [Text])

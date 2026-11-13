@@ -1,0 +1,18 @@
+digraph flow {
+  compound=true;
+  node [shape=box, style=rounded, fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  input [label="input", shape=oval];
+  n_flow_seq_0_fan_0_note_0 [label="act\nsource one"];
+  n_flow_seq_0_fan_1_note_0 [label="act\nsource two"];
+  n_flow_seq_1_seq_1_0 [label="", shape=diamond, style=solid, width=0.3, height=0.3, fixedsize=true];
+  n_flow_seq_1_seq_1_choose_0_seq_0_note_0 [label="act\nhandle pair"];
+  output [label="output", shape=oval];
+  input -> n_flow_seq_0_fan_0_note_0;
+  input -> n_flow_seq_0_fan_1_note_0;
+  n_flow_seq_0_fan_0_note_0 -> n_flow_seq_1_seq_1_0;
+  n_flow_seq_0_fan_1_note_0 -> n_flow_seq_1_seq_1_0;
+  n_flow_seq_1_seq_1_0 -> n_flow_seq_1_seq_1_choose_0_seq_0_note_0 [label="left"];
+  n_flow_seq_1_seq_1_choose_0_seq_0_note_0 -> output;
+  n_flow_seq_1_seq_1_0 -> output [label="right"];
+}

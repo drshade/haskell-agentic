@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Agentic
+import ObservationSpec qualified
 import RecursionSpec qualified
 import Agentic.Schema (Field (..), Schema (..), Shape (..))
 import Agentic.Scripted
@@ -77,6 +78,7 @@ roundTrips c a = c.decode (c.encode a) `shouldBe` Right a
 
 main :: IO ()
 main = hspec $ do
+  ObservationSpec.spec
   RecursionSpec.spec
   describe' "Contracts" $ do
     it "round-trips a derived record" $
@@ -136,10 +138,10 @@ main = hspec $ do
     it "tells the model about unknown tools instead of failing" $ do
       events <- newIORef []
       rt <- testRuntime [callTools [("nope", Null)], respond joke] 1
-      let rt' = observing (\e -> modifyIORef events (e.happened :)) rt
+      let rt' = observing (\e -> modifyIORef events (e :)) rt
       _ <- interpret rt' (draft @Joke "a joke please") ()
       results <- readIORef events
-      [r | ToolReturned _ r <- results] `shouldBe` [ToolFailed "there is no tool named nope"]
+      [r | e <- results, Just (ResultPayload r) <- [e.payload]] `shouldBe` [ToolFailed "there is no tool named nope"]
 
     it "judges with System One" $ do
       rt <- testRuntime [] 0.8
@@ -229,38 +231,38 @@ main = hspec $ do
       let flow :: Agentic IO Joke (Joke, Rating)
           flow = returnA &&& draft @Rating "rate it"
           edges = filter (T.isInfixOf "-->") (T.lines (mermaid (described flow)))
-      edges `shouldBe` ["  input --> n0", "  input --> output", "  n0 --> output"]
+      edges `shouldBe` ["  input --> n_flow_fan_1_0", "  input --> output", "  n_flow_fan_1_0 --> output"]
 
     it "wires second to the second half of a known pair" $ do
       let flow :: Agentic IO Joke (Joke, Rating)
           flow = (draft @Joke "retell it" &&& draft @Rating "rate it") >>> second (draft @Rating "rate it again")
           edges = filter (T.isInfixOf "-->") (T.lines (mermaid (described flow)))
-      edges `shouldBe` ["  input --> n0", "  input --> n1", "  n1 --> n2", "  n0 --> output", "  n2 --> output"]
+      edges `shouldBe` ["  input --> n_flow_seq_0_fan_0_0", "  input --> n_flow_seq_0_fan_1_0", "  n_flow_seq_0_fan_1_0 --> n_flow_seq_1_split_1_0", "  n_flow_seq_0_fan_0_0 --> output", "  n_flow_seq_1_split_1_0 --> output"]
 
-    it "joins a pass-through from both sides of a choice with one edge" $ do
+    it "routes both sides of a choice through distinct fork points" $ do
       let flow :: Agentic IO (Either Joke Joke) (Joke, Rating)
           flow = (returnA &&& draft @Rating "rate it") ||| (returnA &&& draft @Rating "rate it harshly")
           edges = filter (T.isInfixOf "-->") (T.lines (mermaid (described flow)))
-      edges `shouldBe` ["  input -->|left| n0", "  input -->|right| n1", "  input --> output", "  n0 --> output", "  n1 --> output"]
+      edges `shouldBe` ["  input --> n_flow_0", "  n_flow_0 -->|left| entry_flow_select_0", "  entry_flow_select_0 --> n_flow_choose_0_fan_1_0", "  n_flow_0 -->|right| entry_flow_select_1", "  entry_flow_select_1 --> n_flow_choose_1_fan_1_0", "  entry_flow_select_0 --> output", "  entry_flow_select_1 --> output", "  n_flow_choose_0_fan_1_0 --> output", "  n_flow_choose_1_fan_1_0 --> output"]
 
     it "follows takeSecond to the half it keeps" $ do
       let flow :: Agentic IO Joke Rating
           flow = (draft @Joke "retell it" &&& draft @Rating "rate it") >>> takeSecond >>> draft @Rating "rate it again"
           edges = filter (T.isInfixOf "-->") (T.lines (mermaid (described flow)))
-      edges `shouldBe` ["  input --> n0", "  input --> n1", "  n1 --> n2", "  n2 --> output"]
+      edges `shouldBe` ["  input --> n_flow_seq_0_fan_0_0", "  input --> n_flow_seq_0_fan_1_0", "  n_flow_seq_0_fan_1_0 --> n_flow_seq_1_seq_1_0", "  n_flow_seq_1_seq_1_0 --> output"]
 
     it "lets a loop's input leave without going through the body" $ do
       let flow :: Agentic IO Joke Joke
           flow = repeatUntil ((== "kids") . (.genre)) (draft @Joke "make it kid-friendly") >>> act pure `named` "show it"
           edges = filter (T.isInfixOf "-->") (T.lines (mermaid (described flow)))
-      edges `shouldBe` ["  input --> n1", "  input --> n2", "  n1 --> n2", "  n2 --> output"]
+      edges `shouldBe` ["  input --> n_flow_seq_0_repeat_0", "  input --> n_flow_seq_1_note_0", "  n_flow_seq_0_repeat_0 --> n_flow_seq_1_note_0", "  n_flow_seq_1_note_0 --> output"]
 
     it "draws the same graph as DOT, with boxes as clusters" $ do
       let flow :: Agentic IO [Joke] [Joke]
           flow = each (draft @Joke "polish it") `named` "polish"
           out = mermaid (described flow)
           dotOut = T.lines (dot (described flow))
-      filter (T.isInfixOf "->") dotOut `shouldBe` ["  input -> n2;", "  n2 -> output;"]
+      filter (T.isInfixOf "->") dotOut `shouldBe` ["  input -> n_flow_note_each_0;", "  n_flow_note_each_0 -> output;"]
       length (filter (T.isInfixOf "subgraph cluster_") dotOut) `shouldBe` 2
       length (filter (T.isInfixOf "subgraph ") (T.lines out)) `shouldBe` 2
 
@@ -268,8 +270,8 @@ main = hspec $ do
       let flow :: Agentic IO Joke Joke
           flow = repeatUntil ((== "kids") . (.genre)) (draft @Joke "make it kid-friendly" >>> act pure `named` "show it")
           d = described flow
-      filter (T.isInfixOf "again") (T.lines (mermaid d)) `shouldBe` ["  n2 -.->|again| n1"]
-      filter (T.isInfixOf "again") (T.lines (dot d)) `shouldBe` ["  n2 -> n1 [label=\"again\", style=dashed];"]
+      filter (T.isInfixOf "again") (T.lines (mermaid d)) `shouldBe` ["  n_flow_repeat_seq_1_note_0 -.->|again| n_flow_repeat_seq_0_0"]
+      filter (T.isInfixOf "again") (T.lines (dot d)) `shouldBe` ["  n_flow_repeat_seq_1_note_0 -> n_flow_repeat_seq_0_0 [label=\"again\", style=dashed];"]
 
     it "describes an explicit recursive tool with a finite reference" $ do
       let researcher = recursiveTool $ \self -> tool @Text @Text "research" "Research deeper" (draftWith [self] "research this")

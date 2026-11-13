@@ -425,8 +425,9 @@ whose contracts a model provider can't handle.
 
 The `Description` can be rendered as a tree or diagram, or turned into JSON with
 `descriptionValue`. Recursive definitions and references are finite; their
-addresses belong to this captured flow only. Diagrams currently show tools
-attached to their draft; expanding their bodies is separate graph work.
+addresses belong to this captured flow only. Diagrams show the tools and their
+bodies, with references for recursion. A choice is a diamond with a left and a
+right edge. A dot is just a fork in the picture, not another step to run.
 
 The diagram follows each half of a pair from `&&&` or `***` to wherever it
 goes next, but it can't see inside an `arr`, so `arr fst` loses track of which
@@ -578,6 +579,53 @@ testRuntime = do
   two <- scripted [respond joke]
   pure runtime { systemOne = fixedAnswers 0.95, systemTwo = two }
 ```
+
+### Follow a run on its graph
+
+`observing` gets an `Event` for every node a run enters - not just the model
+calls, the plumbing too. Each event says which occurrence it belongs to and who
+its parent is, so you can light up the graph from `describe` as the run goes:
+
+```haskell
+d <- either throwIO pure (describe flow)
+let graph = flowGraph d
+    rt = observing (save . summaryValue . summarise) runtime
+interpret rt flow input
+```
+
+`save :: Value -> IO ()` is yours - the library has no recorder, clock or
+transport. `summarise` drops optional provider values and diagnostics without retaining
+the discarded payloads.
+
+An occurrence is an address in the flow plus where it sits in its loops and tool
+calls (which element, which pass, which call). That is what makes recursion
+work: a tool that calls itself is one node in the graph and a new occurrence
+every time. `graph.addressItems` maps each address to the item that shows it,
+and `graph.bodies` identifies loop bodies and possible tool-call targets.
+
+A few things that will bite you:
+
+- An occurrence is `Entered`, then `Returned`, `Failed` or `Cancelled`. A
+  timeout or a cancelled sibling is `Cancelled`, not `Failed`.
+- `Returned` doesn't force the result. A lazy value can still blow up later, in
+  whichever step demands it.
+- `each` reports its total on entry, so it walks the whole list first. No
+  infinite lists.
+- Once a recording ends, no terminal means an unknown outcome. A process can
+  die, or an observer can throw, leaving an occurrence open.
+- Under `concurrently` several branches can call your observer at once.
+  Serialise it yourself.
+- The supplied IO runtime observes failures. With `runtimeWith` you get
+  `Entered` and `Returned`, unless you supply a `Scope` that sees other exits.
+- Addresses belong to the graph they came from. Store them together, and don't
+  match them across versions of a flow.
+- A provider's call ids can repeat, so never key on them alone.
+
+It isn't free either - every node pays a little even with no observer, and a
+plumbing-heavy `each` emits a lot of events.
+`cabal bench agentic:observation-overhead` shows you what it costs.
+
+None of this touches `withStore` - recorded answers stay valid.
 
 ## History
 

@@ -7,49 +7,14 @@ import Agentic.Internal.Core
 import Agentic.Questions (Questions)
 import Agentic.Runtime (FlowError (..))
 import Data.Text (Text)
-import Data.Text qualified as T
-
-data Segment
-  = SeqLeft | SeqRight | FanLeft | FanRight | SplitLeft | SplitRight
-  | ChooseLeft | ChooseRight | FirstBody | EachBody | RepeatBody | NotedBody
-  | ToolAt Int | MemberAt Int
-  deriving (Eq, Ord, Show)
-
--- | An opaque position within one captured flow, comparable with 'Eq'/'Ord'.
--- It is not an identity across code revisions.
-newtype Address = Address [Segment] deriving (Eq, Ord)
-
-instance Show Address where
-  show = T.unpack . addressText
+import Agentic.Internal.Address
 
 toolNestingLimit :: Int
 toolNestingLimit = 100
 
-child :: Address -> Segment -> Address
-child (Address path) s = Address (path <> [s])
+data StaticFlow = StaticFlow {address :: Address, shape :: StaticNode}
 
--- | Render a capture-local identifier for display or serialization. The text
--- format is unspecified and may change; retain it with its captured description.
-addressText :: Address -> Text
-addressText (Address path) = T.intercalate "/" (map render path)
- where
-  render = \case
-    SeqLeft -> "seq/0"
-    SeqRight -> "seq/1"
-    FanLeft -> "fan/0"
-    FanRight -> "fan/1"
-    SplitLeft -> "split/0"
-    SplitRight -> "split/1"
-    ChooseLeft -> "choose/0"
-    ChooseRight -> "choose/1"
-    FirstBody -> "first"
-    EachBody -> "each"
-    RepeatBody -> "repeat"
-    NotedBody -> "note"
-    ToolAt k -> "tool/" <> T.pack (show k)
-    MemberAt k -> "member/" <> T.pack (show k)
-
-data StaticFlow
+data StaticNode
   = SStep StaticStep
   | SSeq StaticFlow StaticFlow
   | SFanout StaticFlow StaticFlow
@@ -86,7 +51,7 @@ staticFlow :: Agentic m i o -> Either FlowError StaticFlow
 staticFlow = walk 0 [] (Address [])
 
 walk :: forall m i o. Int -> Env m -> Address -> Agentic m i o -> Either FlowError StaticFlow
-walk depth env address = \case
+walk depth env address flow = StaticFlow address <$> case flow of
   Step s -> SStep <$> case s of
     Pass -> pure SIdentity
     Wrap _ -> pure SIdentity
@@ -142,7 +107,7 @@ bodyAt :: StaticFlow -> Address -> Maybe StaticFlow
 bodyAt root (Address path) = go root path
  where
   go f [] = Just f
-  go f (s : rest) = case (f, s) of
+  go f (s : rest) = case (f.shape, s) of
     (SSeq l _, SeqLeft) -> go l rest
     (SSeq _ r, SeqRight) -> go r rest
     (SFanout l _, FanLeft) -> go l rest
@@ -175,7 +140,7 @@ validate = go []
   check notes label c = case compileModel c of
     Left (ProjectionError path problem) -> Left (UnsupportedContract notes (ProjectionError (label : path) problem))
     Right _ -> Right ()
-  go notes = \case
+  go notes flow = case flow.shape of
     SStep (SDraft i o _ ts) -> check notes "draft.input" i >> check notes "draft.output" o >> mapM_ (toolCheck notes) ts
     SStep (SJudge i _) -> check notes "judge.input" i
     SStep _ -> Right ()

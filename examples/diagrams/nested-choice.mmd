@@ -1,0 +1,12 @@
+flowchart TD
+  input(["input"])
+  n_flow_0{" "}
+  n_flow_choose_0_0{" "}
+  n_flow_choose_0_choose_1_note_0["act<br/>inner"]
+  output(["output"])
+  input --> n_flow_0
+  n_flow_0 -->|left| n_flow_choose_0_0
+  n_flow_choose_0_0 -->|right| n_flow_choose_0_choose_1_note_0
+  n_flow_choose_0_0 -->|left| output
+  n_flow_choose_0_choose_1_note_0 --> output
+  n_flow_0 -->|right| output
