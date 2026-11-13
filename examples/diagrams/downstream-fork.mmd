@@ -1,0 +1,14 @@
+flowchart TD
+  input(["input"])
+  n_flow_seq_0_0{" "}
+  entry_flow_seq_0_select_0((" "))
+  n_flow_seq_1_fan_0_note_0["act<br/>f"]
+  n_flow_seq_1_fan_1_note_0["act<br/>g"]
+  output(["output"])
+  input --> n_flow_seq_0_0
+  n_flow_seq_0_0 -->|left| entry_flow_seq_0_select_0
+  entry_flow_seq_0_select_0 --> n_flow_seq_1_fan_0_note_0
+  n_flow_seq_0_0 -->|right| entry_flow_seq_0_select_0
+  entry_flow_seq_0_select_0 --> n_flow_seq_1_fan_1_note_0
+  n_flow_seq_1_fan_0_note_0 --> output
+  n_flow_seq_1_fan_1_note_0 --> output

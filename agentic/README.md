@@ -425,8 +425,9 @@ whose contracts a model provider can't handle.
 
 The `Description` can be rendered as a tree or diagram, or turned into JSON with
 `descriptionValue`. Recursive definitions and references are finite; their
-addresses belong to this captured flow only. Diagrams currently show tools
-attached to their draft; expanding their bodies is separate graph work.
+addresses belong to this captured flow only. Diagrams show the tools and their
+bodies, with references for recursion. A choice is a diamond with a left and a
+right edge. A dot is just a fork in the picture, not another step to run.
 
 The diagram follows each half of a pair from `&&&` or `***` to wherever it
 goes next, but it can't see inside an `arr`, so `arr fst` loses track of which

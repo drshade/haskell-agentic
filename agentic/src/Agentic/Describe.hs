@@ -24,10 +24,10 @@ import Agentic.Contract (Outline, outline, outlineLabel)
 import Agentic.Core
 import Agentic.Internal.Static qualified as S
 import Agentic.Internal.Address
-import Agentic.Runtime (FlowError, EdgeId (..), Side (..))
+import Agentic.Runtime (FlowError, EdgeId (..), Side (..), edgeIdText)
 import Agentic.Questions (QuestionSpec (..), Questions (..))
 import Agentic.Value (Value (..), renderJson)
-import Data.List (isPrefixOf, maximumBy, nub)
+import Data.List (find, isPrefixOf, maximumBy, nub)
 import Data.Ord (comparing)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -271,7 +271,14 @@ data Item
   | ItemBox Text [Text] [Item]
     -- ^ An id, its label's lines, and what's inside.
 
-data NodeKind = Terminal | StepNode | ToolNode
+data NodeKind = Terminal | StepNode | ToolNode | DecisionNode
+  | JunctionNode
+    -- ^ Graph-only routing point, with no occurrence/address mapping. A
+    -- projected fork can span several syntax positions (including a later
+    -- fanout after a pass-through choice), so it does not identify one AST node.
+    -- A dot also appears where a selected side feeds both a loop's Again edge
+    -- and its exit.
+  deriving (Eq, Show)
 
 data Edge = Edge
   { from :: Text
@@ -282,8 +289,8 @@ data Edge = Edge
   , referenceTarget :: Maybe Address
     -- ^ Definition address for a recursive Reference edge; never inferred from its label.
   , selections :: [EdgeId]
-    -- ^ Logical selection edges represented by this rendered edge.
-  }
+    -- ^ A singleton on each decision's two outgoing edges; empty elsewhere.
+  } deriving (Eq, Show)
 
 data EdgeStyle = Flow | Uses | Again | Reference
   deriving (Eq, Show)
@@ -293,7 +300,8 @@ flowGraph :: Description -> FlowGraph
 flowGraph d = FlowGraph finalItems finalEdges mapping relations
  where
   (_, state) = flow.runBuild (BuildState 0 [[]] [] flowAddress [])
-  finalItems = ItemBox (itemId rootAddress 0) ["run"] (reverse (concat state.open)) : []
+  (junctions, finalEdges) = selectionRoutes (reverse state.links)
+  finalItems = [ItemBox (itemId rootAddress 0) ["run"] (insertJunctions junctions (reverse (concat state.open)))]
   rawMapping = (rootAddress, itemId rootAddress 0) : state.mapped
   (addresses, relations) = structure d
   mapping = [(a, resolve a) | a <- rootAddress : addresses]
@@ -302,12 +310,61 @@ flowGraph d = FlowGraph finalItems finalEdges mapping relations
     Nothing -> case [(p,i) | (Address p,i) <- rawMapping, p `isPrefixOf` path] of
       [] -> itemId rootAddress 0
       candidates -> snd (maximumBy (comparing (length . fst)) candidates)
-  finalEdges = reverse state.links
   flow = do
     item (ItemNode "input" Terminal ["input"])
     exits <- build InSequence (Sources [("input", Nothing, [])]) d
     item (ItemNode "output" Terminal ["output"])
     connect exits "output"
+
+-- Consolidate a selected side only after downstream wiring is known. A
+-- pass-through can fork later, or supply a repeat's carried input. Keeping its
+-- side id until here avoids duplicating the decision's labelled edge.
+selectionRoutes :: [Edge] -> ([(Text, Item)], [Edge])
+selectionRoutes original = shareJunctions (foldl route ([], original) ids)
+ where
+  ids = nub (concatMap (.selections) original)
+  route (items, edges) selection@(EdgeId address side) =
+    let selected = [e | e <- edges, selection `elem` e.selections]
+        diamond = itemId address 0
+        label = case side of LeftSide -> "left"; RightSide -> "right"
+        junction = "entry_" <> T.replace "/" "_" (edgeIdText selection)
+        isSelected e = selection `elem` e.selections
+        redirect e = if isSelected e then
+          e {from = junction, label = if e.label == Just label then Nothing else e.label, selections = []}
+          else e
+     in case selected of
+          [e] | e.style == Flow ->
+            (items, [if isSelected e then e {label = Just label} else e | e <- edges])
+          _ ->
+            let entry = Edge diamond junction (Just label) Flow Nothing [selection]
+                insert [] = []
+                insert (e:rest)
+                  | isSelected e = entry : map redirect (e:rest)
+                  | otherwise = e : insert rest
+             in (items <> [(diamond,ItemNode junction JunctionNode [])], insert edges)
+
+-- Two pass-through sides may reach the same later fork. Share that routing
+-- point without merging their two distinct labelled decision edges.
+shareJunctions :: ([(Text, Item)], [Edge]) -> ([(Text, Item)], [Edge])
+shareJunctions (junctions, edges) = foldl share ([], edges) junctions
+ where
+  share (kept, edges) entry@(owner, ItemNode current JunctionNode _) =
+    let exits node = [(e.to,e.label,e.style,e.referenceTarget,e.selections) | e <- edges, e.from == node]
+        same (otherOwner, ItemNode other JunctionNode _) = owner == otherOwner && exits current == exits other
+        same _ = False
+     in case find same kept of
+          Just (_, ItemNode target JunctionNode _) ->
+            let redirect e = e {from = if e.from == current then target else e.from,
+                                to = if e.to == current then target else e.to}
+             in (kept, nub (map redirect edges))
+          _ -> (kept <> [entry], edges)
+  share (kept, edges) entry = (kept <> [entry], edges)
+
+-- Put routing dots in the same displayed box as their decision.
+insertJunctions :: [(Text, Item)] -> [Item] -> [Item]
+insertJunctions junctions = concatMap $ \case
+  ItemBox i label children -> [ItemBox i label (insertJunctions junctions children)]
+  node@(ItemNode i _ _) -> node : [junction | (owner,junction) <- junctions, owner == i]
 
 -- All positions survive the display projection, including synthetic call scopes.
 structure :: Description -> ([Address], [BodyRelation])
@@ -361,9 +418,9 @@ sources = dedupe . go
     dedupe = \case
       [] -> []
       (n, l, ids) : rest ->
-        let others = [(l',more) | (n',l',more) <- rest, n' == n]
+        let others = [(l',more) | (n',l',more) <- rest, n' == n, more == ids]
          in (n, if all ((== l) . fst) others then l else Nothing, nub (ids <> concatMap snd others))
-              : dedupe [x | x@(n',_,_) <- rest, n' /= n]
+              : dedupe [x | x@(n',_,more) <- rest, n' /= n || more /= ids]
 
 -- | The two sides of a @|||@ joining again: where both made a pair, so does
 -- the join.
@@ -465,11 +522,7 @@ build context from = \case
   Halves l r -> case from of
     Pair a b -> Pair <$> build InBranch a l <*> build InBranch b r
     _ -> Pair <$> build InBranch (labelled "first") l <*> build InBranch (labelled "second") r
-  Branch l r -> do
-    let start = from
-    address <- Build (\s -> (s.current,s))
-    let branch side label = build InBranch (Sources [(f,Just label,ids <> [EdgeId address side]) | (f,_,ids) <- sources start])
-    merge <$> branch LeftSide "left" l <*> branch RightSide "right" r
+  Branch l r -> decision Nothing from l r
   ForEach f -> Sources . sources . snd <$> box ["each"] (build InSequence (Sources (sources from)) f)
   -- "Again" goes back to where the body starts: the steps the loop's input
   -- flows into. If the body has none, it goes to the box.
@@ -478,10 +531,14 @@ build context from = \case
     (b, exits) <- box ["repeatUntil"] (build InSequence from f)
     entries <- entriesSince before ([f | (f,_,_) <- sources from])
     let targets = if null entries then [b] else entries
-    mapM_ (\(e, _, _) -> mapM_ (\t -> edge (Edge e t (Just "again") Again Nothing [])) targets) (sources exits)
+    mapM_ (\(e, _, ids) -> mapM_ (\t -> edge (Edge e t (Just "again") Again Nothing ids)) targets) (sources exits)
     -- The condition is checked before the first run, so the input can leave
     -- without going through the body.
     pure (merge from exits)
+  Annotated n (Located a (Branch l r)) -> do
+    exits <- located a (decision (Just n.name) from l r)
+    Build (\s -> ((),s {mapped = (s.current,itemId a 0):s.mapped}))
+    pure exits
   Annotated n (Located a (Leaf info)) | not (passes (Leaf info)) -> do
     exits <- located a (step (Just n) info)
     Build (\s -> ((),s {mapped = [(s.current,i) | (i,_,_) <- sources exits] <> s.mapped}))
@@ -513,6 +570,15 @@ build context from = \case
           mapM_ (drawTool exits) tools
         _ -> pure ()
       pure exits
+
+decision :: Maybe Text -> From -> Description -> Description -> Build From
+decision name from left right = do
+  diamond <- fresh
+  item (ItemNode diamond DecisionNode (maybe [] pure name))
+  connect from diamond
+  address <- Build (\s -> (s.current,s))
+  let branch side label = build InBranch (Sources [(diamond,Just label,[EdgeId address side])])
+  merge <$> branch LeftSide "left" left <*> branch RightSide "right" right
 
 -- Definitions are finite. References link to the definition's address without
 -- recursively drawing it again.
@@ -571,6 +637,8 @@ mermaid d = T.unlines ("flowchart TD" : concatMap (items' "  ") is <> map edge' 
       Terminal -> "([\"" <> l <> "\"])"
       StepNode -> "[\"" <> l <> "\"]"
       ToolNode -> "[/\"" <> l <> "\"/]"
+      DecisionNode -> "{\"" <> (if T.null l then " " else l) <> "\"}"
+      JunctionNode -> "((\" \"))"
     edge' (Edge f t l style _ _) = "  " <> f <> arrow style <> maybe "" (\x -> "|" <> escape x <> "|") l <> " " <> t
     arrow = \case
       Flow -> " -->"
@@ -593,20 +661,27 @@ dot d =
     is = drawingItems graph
     es = graph.edges
     items' indent = \case
-      ItemNode i kind ls -> [indent <> i <> " [label=\"" <> T.intercalate "\\n" (map inner ls) <> "\"" <> shape kind <> "];"]
+      ItemNode i kind ls -> [indent <> i <> " [label=\"" <> T.intercalate "\\n" (map inner ls) <> "\"" <> shape kind ls <> "];"]
       ItemBox i ls inside -> [indent <> "subgraph cluster_" <> i <> " {", indent <> "  label=\"" <> T.intercalate "\\n" (map inner ls) <> "\";", indent <> "  style=rounded;"] <> concatMap (items' (indent <> "  ")) inside <> [indent <> "}"]
-    shape = \case
+    shape kind ls = case kind of
       Terminal -> ", shape=oval"
       StepNode -> ""
       ToolNode -> ", shape=parallelogram, style=\"\""
+      DecisionNode -> ", shape=diamond, style=solid" <> if null ls then ", width=0.3, height=0.3, fixedsize=true" else ""
+      JunctionNode -> ", shape=point, width=0.06"
     -- An edge into a box points at the box's first node, clipped to the box.
-    edge' (Edge f t l style _ _) =
+    edge' (Edge f t l style _ selections) =
       let (target, attrs) = case firstNode t is of
             Just n
               | inBox t f is -> (n, [])
               | otherwise -> (n, ["lhead=cluster_" <> t])
             Nothing -> (t, [])
-          extra = maybe [] (\x -> ["label=" <> str x]) l <> attrs <> styleOf style
+          sharedTarget = length [() | e <- es, e.from == f, e.to == t, not (null e.selections)] > 1
+          ports = case selections of
+            [EdgeId _ LeftSide] | sharedTarget -> ["tailport=sw", "headport=w", "minlen=2"]
+            [EdgeId _ RightSide] | sharedTarget -> ["tailport=se", "headport=e", "minlen=2"]
+            _ -> []
+          extra = maybe [] (\x -> ["label=" <> str x]) l <> attrs <> ports <> styleOf style
        in "  " <> f <> " -> " <> target <> (if null extra then "" else " [" <> T.intercalate ", " extra <> "]") <> ";"
     styleOf = \case
       Flow -> []

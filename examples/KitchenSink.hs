@@ -12,7 +12,7 @@
 -- environment or .env. Model calls are recorded to kitchensink.jsonl, so a
 -- second run replays them in a moment. (With no Jev token, an LLM can answer
 -- the judgements instead: withSystemOne anthropic.)
-module Main (main) where
+module KitchenSink (main, kitchenSink) where
 
 import Agentic
 import Control.Exception (throwIO)

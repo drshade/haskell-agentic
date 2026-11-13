@@ -11,7 +11,9 @@
   remain lazy, and interrupted observers leave unknown outcomes without retries.
 * Preserve addresses in `Located` descriptions before display projection.
   Graphs publish address/item and body-root relations, finite tool bodies,
-  recursive reference edges, and logical choice ids on rendered edges.
+  recursive reference edges, and decision diamonds with two labelled selection
+  edges. Conditional routing dots are graph-only; named choices label their
+  diamond. The logical root stays undrawn and JSON sequences stay flat.
 * Add test-only replay checks and an observation-overhead benchmark. No event
   recorder, transport, clock or production reducer is added.
 

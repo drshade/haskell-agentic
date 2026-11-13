@@ -34,6 +34,22 @@ validate flow events = do
     Just target -> e.style == Reference && target `elem` addresses) graph.edges `shouldBe` True
   length (nub (map addressText addresses)) `shouldBe` length (nub addresses)
   length (nub (map edgeIdText selections)) `shouldBe` length selections
+  let nodes = allNodes graph.items
+      decisions = [i | (i,DecisionNode) <- nodes]
+      junctions = [i | (i,JunctionNode) <- nodes]
+  all ((`notElem` junctions) . snd) graph.addressItems `shouldBe` True
+  mapM_ (\diamond -> do
+    let outgoing = [e | e <- graph.edges, e.from == diamond]
+    length outgoing `shouldBe` 2
+    map (.label) outgoing `shouldMatchList` [Just "left",Just "right"]
+    map (length . (.selections)) outgoing `shouldBe` [1,1]) decisions
+  all (\e -> null e.selections || e.from `elem` decisions) graph.edges `shouldBe` True
+  mapM_ (\e -> case e.happened of
+    Selected selected -> do
+      let diamond = lookup e.occurrence.address graph.addressItems
+      diamond `shouldSatisfy` maybe False (`elem` decisions)
+      [edge.from | edge <- graph.edges, selected `elem` edge.selections] `shouldBe` maybe [] pure diamond
+    _ -> pure ()) events
   prefixesValid graph events `shouldBe` True
   case replay graph events of
     Left problem -> expectationFailure problem
@@ -81,14 +97,37 @@ spec = H.describe "execution observations" $ do
     length (entries PureNode leftEvents) `shouldBe` 0
     length (entries IdentityNode rightEvents) `shouldBe` 0
 
-  it "keeps both logical ids when pass-through choice edges coalesce" $ do
+  it "draws two distinct selection edges even when both sides pass through" $ do
     let f = (returnA ||| returnA) :: Agentic IO (Either Int Int) Int
         graph = flowGraph (either (error . show) id (describe f))
     (_,ls) <- capture runtime f (Left 1)
     (_,rs) <- capture runtime f (Right 1)
     let selected = [edge | e <- ls <> rs, Selected edge <- [e.happened]]
     length selected `shouldBe` 2
-    [edge.selections | edge <- graph.edges, length edge.selections == 2] `shouldBe` [selected]
+    [edge.selections | edge <- graph.edges, not (null edge.selections)] `shouldBe` map pure selected
+
+  it "keeps two selection edges when pass-through results fork later or feed a loop" $ do
+    let forked = (returnA ||| returnA) >>> (act pure &&& act pure) :: Agentic IO (Either Int Int) (Int,Int)
+        looped = (returnA ||| returnA) >>> repeatUntil (>=3) (arr (+1)) :: Agentic IO (Either Int Int) Int
+        nested = (returnA ||| returnA) ||| returnA :: Agentic IO (Either (Either Int Int) Int) Int
+    let graph = flowGraph (either (error . show) id (describe forked))
+        junction = one [i | (i,JunctionNode) <- allNodes graph.items]
+    length [() | edge <- graph.edges, edge.to == junction, not (null edge.selections)] `shouldBe` 2
+    length [() | edge <- graph.edges, edge.from == junction] `shouldBe` 2
+    _ <- capture runtime forked (Left 1)
+    _ <- capture runtime forked (Right 1)
+    _ <- capture runtime looped (Left 0)
+    _ <- capture runtime nested (Left (Right 1))
+    let insideLoop = repeatUntil (>=3) (arr Left >>> (arr (+1) ||| returnA)) :: Agentic IO Int Int
+    _ <- capture runtime insideLoop 0
+    pure ()
+
+  it "labels a named choice on its diamond and maps the choice itself there" $ do
+    let f = (returnA ||| arr (+1)) `named` "route" :: Agentic IO (Either Int Int) Int
+        d = either (error . show) id (describe f)
+    _ <- capture runtime f (Right 1)
+    mermaid d `shouldSatisfy` T.isInfixOf "{\"route\"}"
+    dot d `shouldSatisfy` T.isInfixOf "shape=diamond"
 
   it "publishes Each body roots and counts direct body returns for compound bodies" $ do
     let f = each ((arr (+1) `named` "increment") >>> arr (*2)) :: Agentic IO [Int] [Int]
@@ -288,3 +327,6 @@ instance Applicative Trace where
 instance Monad Trace where
   Trace (Left e,es) >>= _ = Trace (Left e,es)
   Trace (Right a,es) >>= f = case f a of Trace (b,more) -> Trace (b,es <> more)
+
+allNodes :: [Item] -> [(Text,NodeKind)]
+allNodes = concatMap (\case ItemNode i kind _ -> [(i,kind)]; ItemBox _ _ children -> allNodes children)

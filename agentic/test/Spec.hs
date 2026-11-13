@@ -239,11 +239,11 @@ main = hspec $ do
           edges = filter (T.isInfixOf "-->") (T.lines (mermaid (described flow)))
       edges `shouldBe` ["  input --> n_flow_seq_0_fan_0_0", "  input --> n_flow_seq_0_fan_1_0", "  n_flow_seq_0_fan_1_0 --> n_flow_seq_1_split_1_0", "  n_flow_seq_0_fan_0_0 --> output", "  n_flow_seq_1_split_1_0 --> output"]
 
-    it "joins a pass-through from both sides of a choice with one edge" $ do
+    it "routes both sides of a choice through distinct fork points" $ do
       let flow :: Agentic IO (Either Joke Joke) (Joke, Rating)
           flow = (returnA &&& draft @Rating "rate it") ||| (returnA &&& draft @Rating "rate it harshly")
           edges = filter (T.isInfixOf "-->") (T.lines (mermaid (described flow)))
-      edges `shouldBe` ["  input -->|left| n_flow_choose_0_fan_1_0", "  input -->|right| n_flow_choose_1_fan_1_0", "  input --> output", "  n_flow_choose_0_fan_1_0 --> output", "  n_flow_choose_1_fan_1_0 --> output"]
+      edges `shouldBe` ["  input --> n_flow_0", "  n_flow_0 -->|left| entry_flow_select_0", "  entry_flow_select_0 --> n_flow_choose_0_fan_1_0", "  n_flow_0 -->|right| entry_flow_select_1", "  entry_flow_select_1 --> n_flow_choose_1_fan_1_0", "  entry_flow_select_0 --> output", "  entry_flow_select_1 --> output", "  n_flow_choose_0_fan_1_0 --> output", "  n_flow_choose_1_fan_1_0 --> output"]
 
     it "follows takeSecond to the half it keeps" $ do
       let flow :: Agentic IO Joke Rating
