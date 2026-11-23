@@ -349,12 +349,12 @@ preflight flow = staticFlow flow >>= validate
 -- in the supplied flow. This runs no flow action, model, observer or replay.
 -- Refusals are data and leave no completion. This does not prove that the wait
 -- was reached or is still wanted; the caller trusts its pending descriptor and
--- owns whether to accept a late reply. A different stored request or reply is refused;
--- the same canonical record succeeds without another save. Journal faults
+-- owns whether to accept a late reply. A different stored request or reply is
+-- refused; the same canonical record succeeds without another save. Journal faults
 -- remain errors. Callers should serialise fulfilments for the same wait:
 -- concurrent deliveries can race between lookup and save, in which case the
--- backend remains authoritative and may raise JournalConflict. Flow-structure failures and a missing
--- journal use the runtime's failure hook.
+-- backend remains authoritative and may raise JournalConflict. Flow-structure
+-- failures and a missing journal use the runtime's failure hook.
 fulfil :: Monad m => Runtime m -> Agentic m i o -> PendingWait -> Value
   -> m (Either ReplyRefused ())
 fulfil rt flow pending reply = do
