@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Agentic
+import AwaitSpec qualified
 import JournalSpec qualified
 import GraphValueSpec qualified
 import ExceptScopeSpec qualified
@@ -81,6 +82,7 @@ roundTrips c a = c.decode (c.encode a) `shouldBe` Right a
 
 main :: IO ()
 main = hspec $ do
+  AwaitSpec.spec
   JournalSpec.spec
   GraphValueSpec.spec
   ExceptScopeSpec.spec

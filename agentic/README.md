@@ -803,7 +803,96 @@ When you're observing, a restored step emits `Restored` between `Entered` and
 for the inside of a tool body that was skipped. Keep each attempt's events in
 their own recording.
 
-Waiting on a person or an outside event isn't here yet.
+### Wait for an external reply
+
+Sometimes a flow has to ask a person something, and the answer might take two
+days. You don't want a process sat there for two days. `await` asks, and if
+the reply isn't in the journal yet the run stops and tells you what it's
+waiting for:
+
+```haskell
+askStep :: Agentic IO Text Text
+askStep = await textCodec textCodec
+
+attempt :: IO ()
+attempt = do
+  rt <- withJournal "run-42.jsonl"
+    (JournalIdentity "run-42" "workflow-v1") runtime
+  resumable rt askStep "Can Sam take Friday off?" >>= \case
+    RunFinished reply -> print reply
+    RunWaiting waits -> mapM_ sendQuestion waits
+
+answer :: PendingWait -> Value -> IO ()
+answer wait reply = do
+  rt <- withJournal "run-42.jsonl"
+    (JournalIdentity "run-42" "workflow-v1") runtime
+  fulfil rt askStep wait reply >>= \case
+    Right () -> attempt
+    Left refused -> askAgain wait refused
+```
+
+`sendQuestion` and `askAgain` are yours. The first `attempt` comes back
+`RunWaiting` and the process can exit. When the reply turns up, `answer` checks
+it and saves it, and the next `attempt` picks up from the journal and carries
+on past the `await`. There's no separate resume - it's the same replay as
+before, with one more entry to restore.
+
+The library never sends anything. It hands you the request and you get it to
+whoever needs to see it, however you like.
+
+A `PendingWait` is plain data: the run, the key, the request and the schemas
+of the request and the reply. `pendingWaitValue` and `pendingWaitFromValue`
+turn it into a JSON value and back, so you can store it and answer from a
+different process. Who to ask and by when go in your own request type.
+
+`fulfil` checks the reply with the real codec from the flow, not with the
+schema, and it does that before anything is saved. A reply that doesn't decode
+comes back as `ReplyInvalid` and you can ask again. It finds the `await` by
+walking the flow - no action runs and no model is called.
+
+Waits in parallel are reported together. Ask three people under `each` and the
+first attempt gives you three waits; answer any one and run again, and you get
+the two that are left. Put the steps in sequence and they come one at a time,
+because the second isn't reached until the first is answered. So you choose by
+how you write the flow.
+
+A wait in one branch doesn't stop the others. They carry on until they finish
+or reach a wait of their own, and the `durably` steps they completed are saved.
+
+A few things that will bite you:
+
+- You only hear about the waits the run reached. A branch that never returns
+  means you never get an answer at all.
+- A wait that hasn't been answered is reported again on the next attempt. Keep
+  track by its key so nobody is asked twice.
+- There's no cancel. If nobody answers, make that a value in your reply type
+  and supply it - then the flow decides what happens next.
+- If a wait from last time isn't in this attempt's list, the run no longer
+  wants it. That only holds when the attempt came back `RunFinished` or
+  `RunWaiting`. One that failed tells you nothing, so keep what you had. And
+  only compare attempts of the same run, one after another - never two at the
+  same time.
+- A reply to a wait that was dropped is still saved if you supply it. Whether
+  to take late replies is up to you.
+- The same reply twice is fine. A different one comes back as
+  `ReplyAlreadyAnswered`. Answer one wait at a time (two at the same moment can
+  race).
+- `fulfil` proves the reply fits the reply type. It doesn't prove the wait is
+  still wanted, or who answered.
+- Plain `interpret` on a flow that waits fails with `AwaitNeedsResume`. Use
+  `resumable`.
+- An `await` needs a journal. Without one there is nowhere for a reply to come
+  back to.
+- A nested `interpret` that waits fails the run around it. Use `resumable` in
+  there and deal with the outcome yourself.
+- Inside a tool it works the same way. The tool didn't finish, so it's entered
+  again next time, and a plain `act` before the `await` runs again.
+
+None of this needs `IO`. It works in any monad a flow already runs in.
+
+When you're observing, a step that is waiting ends with `Suspended`, and so
+does every scope that stopped because of it. It isn't `Failed`. Once the reply
+is in, the step emits `Restored` like any other saved step.
 
 ## History
 

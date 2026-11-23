@@ -49,11 +49,14 @@ test-suite agentic-io-test
   ghc-options:      -Wall
   type:             exitcode-stdio-1.0
   hs-source-dirs:   test
-  other-modules:    ObservationIO JournalIO
+  other-modules:    ObservationIO JournalIO AwaitIO
   main-is:          Spec.hs
   build-depends:
     , agentic          >=0.2.1 && <0.3
     , agentic-io       >=0.2.1 && <0.3
+    , agentic-aeson    >=0.2.1 && <0.3
+    , aeson            >=2.1 && <2.3
+    , bytestring       >=0.11 && <0.13
     , process          >=1.6 && <1.7
     , base             >=4.18 && <5
     , directory        >=1.3 && <1.4

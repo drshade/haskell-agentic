@@ -15,7 +15,7 @@ module Agentic.OpenAI
 import Agentic.Aeson (fromAeson)
 import Agentic.Core (Instruction (..))
 import Agentic.JsonSchema (objectSchema, schemaName, unwrap)
-import Agentic.Runtime
+import Agentic.Runtime hiding (PendingWait (..))
 import Agentic.Schema (Schema)
 import Agentic.Settings
 import qualified Agentic.Value as A

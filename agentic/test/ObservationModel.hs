@@ -43,7 +43,7 @@ replay graph = foldl advance (Right (State []))
             Selected edge | edge `notElem` concatMap (.selections) graph.edges -> Left "unknown selection"
             _ -> Right (State rows)
         _ -> Left "event outside its occurrence or changed parent/kind"
-  terminal = \case Returned _ -> True; Failed -> True; Cancelled -> True; _ -> False
+  terminal = \case Returned _ -> True; Failed -> True; Cancelled -> True; Suspended -> True; _ -> False
 
 prefixesValid :: FlowGraph -> [Summary] -> Bool
 prefixesValid graph = all (either (const False) (const True) . replay graph) . inits

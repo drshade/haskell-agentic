@@ -2,6 +2,7 @@
 -- execution expands real tools and follows this view as its structural cursor.
 module Agentic.Internal.Static where
 
+import Agentic.Codec (Codec)
 import Agentic.Contract (Structure, ProjectionError (..), compileModel)
 import Agentic.Internal.Core
 import Agentic.Questions (Questions)
@@ -32,6 +33,7 @@ data StaticStep where
   SSecondHalf :: StaticStep
   SEffect :: StaticStep
   SDurable :: StaticStep
+  SAwait :: Codec q -> Codec r -> StaticStep
   SDraft :: Structure i -> Structure o -> Instruction -> [StaticTool] -> StaticStep
   SJudge :: Structure i -> Questions o -> StaticStep
 
@@ -61,6 +63,7 @@ walk depth env address flow = StaticFlow address <$> case flow of
     TakeSecond -> pure SSecondHalf
     Act _ -> pure SEffect
     Durable _ _ _ -> pure SDurable
+    Await q r -> pure (SAwait q r)
     Draft i o instruction ts -> SDraft i o instruction <$> traverse (\(k,t) -> walkTool depth env (child address (ToolAt k)) t) (zip [0..] ts)
     Judge i qs -> pure (SJudge i qs)
   Seq f g -> SSeq <$> descend SeqLeft f <*> descend SeqRight g

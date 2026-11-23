@@ -1,5 +1,6 @@
 module Main (main) where
 
+import AwaitIO qualified
 import JournalIO qualified
 import ObservationIO qualified
 import Agentic
@@ -65,12 +66,15 @@ fresh name = do
 
 main :: IO ()
 main = do
-  child <- JournalIO.childMode
-  unless child $ hspec $ do
-    JournalIO.spec
-    ObservationIO.spec
-    recursionSpec
-    storeSpec
+  waitingChild <- AwaitIO.childMode
+  unless waitingChild $ do
+    child <- JournalIO.childMode
+    unless child $ hspec $ do
+      AwaitIO.spec
+      JournalIO.spec
+      ObservationIO.spec
+      recursionSpec
+      storeSpec
 
 storeSpec :: Spec
 storeSpec = Test.Hspec.describe "withStore" $ do
