@@ -49,6 +49,10 @@ library
     Agentic.Core
     Agentic.Describe
     Agentic.Interpret
+    Agentic.Internal.SpikeExplicit
+    Agentic.Internal.SpikeTransformer
+    Agentic.Internal.SpikeCommon
+    Agentic.Internal.Core
     Agentic.Questions
     Agentic.Runtime
     Agentic.Journal
@@ -59,9 +63,10 @@ library
     Agentic.ViaLLM
   other-modules:
     Agentic.Internal.Address
-    Agentic.Internal.Core
     Agentic.Internal.Static
     Agentic.Internal.Replay
+    Agentic.Internal.SpikeExplicitOps
+    Agentic.Internal.SpikeTransformerOps
   build-depends:
     , base  >=4.18 && <5
     , text  >=2.0  && <2.2

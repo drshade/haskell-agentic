@@ -176,6 +176,7 @@ data Happened
     -- ^ Interpreter return only; never forces the result, even to WHNF.
   | Failed
   | Cancelled
+  | Suspended
   | Selected !EdgeId
   | CallResolved !Address !Address
     -- ^ Binding site and actual body root. Emitted before decoding; invalid
@@ -261,6 +262,7 @@ summaryValue e = Object
     Returned outcome -> Object [("kind",String "returned"),("outcome",String (case outcome of
       Completed -> "completed"; CallOk -> "ok"; UnknownTool -> "unknownTool"; InvalidInput -> "invalidInput"))]
     Failed -> Object [("kind",String "failed")]
+    Suspended -> Object [("kind",String "suspended")]
     Cancelled -> Object [("kind",String "cancelled")]
     Selected edge -> Object [("kind",String "selected"),("edge",String (edgeIdText edge))]
     CallResolved binding target -> Object [("kind",String "callResolved"),("binding",String (addressText binding)),("body",String (addressText target))]
@@ -269,7 +271,7 @@ summaryValue e = Object
     OutputRejected i -> Object [("kind",String "outputRejected"),("turn",number i)]
     Restored op -> Object [("kind",String "restored"),("operation",case op of
       DurableEffect -> String "effect"; ToolExecution -> String "tool"
-      Judgement -> String "judge"; DraftTurn i -> Object [("turn",number i)])]
+      Judgement -> String "judge"; Wait -> String "wait"; DraftTurn i -> Object [("turn",number i)])]
     Judged -> Object [("kind",String "judged")]
   nodeName = \case
     RunNode -> "run"; IdentityNode -> "identity"; PureNode -> "pure"

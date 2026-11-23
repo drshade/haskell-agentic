@@ -115,6 +115,7 @@ stepInfo = \case
   S.SFirstHalf -> FirstHalf
   S.SSecondHalf -> SecondHalf
   S.SEffect -> Effect
+  S.SAwait -> DurableEffectInfo -- spike-only placeholder; no rendering claims
   S.SDurable -> DurableEffectInfo
   S.SDraft input out instruction tools -> DraftInfo instruction (outline input) (outline out) (map toolInfo tools)
   S.SJudge input qs -> JudgeInfo (outline input) qs.specs

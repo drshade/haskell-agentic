@@ -85,6 +85,7 @@ data Step m i o where
   TakeSecond :: Step m (a, b) b
   Act :: (i -> m o) -> Step m i o
   Durable :: Codec i -> Codec o -> (Maybe DurableKey -> i -> m o) -> Step m i o
+  Await :: Codec i -> Codec o -> Step m i o
   Draft :: Structure i -> Structure o -> Instruction -> [Tool m] -> Step m i o
   Judge :: Structure i -> Questions o -> Step m i o
 

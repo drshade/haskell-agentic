@@ -1,0 +1,42 @@
+pair 1: main
+10,000 elements; each body = named arr (+1) >>> arr (*2); median of 5 runs
+no observer: 4.104 ms
+strict summary + count: 5.953 ms
+summary JSON + append/flush per event: 581.585 ms
+Events per run: 80004
+File flush is a local stand-in, not Kyyn guest/host RPC or fsync. It excludes transport latency.
+pair 1: spike-gated
+10,000 elements; each body = named arr (+1) >>> arr (*2); median of 5 runs
+no observer: 3.844 ms
+strict summary + count: 5.691 ms
+summary JSON + append/flush per event: 568.110 ms
+Events per run: 80004
+File flush is a local stand-in, not Kyyn guest/host RPC or fsync. It excludes transport latency.
+pair 2: spike-gated
+10,000 elements; each body = named arr (+1) >>> arr (*2); median of 5 runs
+no observer: 3.791 ms
+strict summary + count: 5.731 ms
+summary JSON + append/flush per event: 567.032 ms
+Events per run: 80004
+File flush is a local stand-in, not Kyyn guest/host RPC or fsync. It excludes transport latency.
+pair 2: main
+10,000 elements; each body = named arr (+1) >>> arr (*2); median of 5 runs
+no observer: 3.751 ms
+strict summary + count: 5.627 ms
+summary JSON + append/flush per event: 579.362 ms
+Events per run: 80004
+File flush is a local stand-in, not Kyyn guest/host RPC or fsync. It excludes transport latency.
+pair 3: main
+10,000 elements; each body = named arr (+1) >>> arr (*2); median of 5 runs
+no observer: 3.752 ms
+strict summary + count: 5.678 ms
+summary JSON + append/flush per event: 577.237 ms
+Events per run: 80004
+File flush is a local stand-in, not Kyyn guest/host RPC or fsync. It excludes transport latency.
+pair 3: spike-gated
+10,000 elements; each body = named arr (+1) >>> arr (*2); median of 5 runs
+no observer: 3.895 ms
+strict summary + count: 5.744 ms
+summary JSON + append/flush per event: 567.638 ms
+Events per run: 80004
+File flush is a local stand-in, not Kyyn guest/host RPC or fsync. It excludes transport latency.

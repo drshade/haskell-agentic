@@ -118,6 +118,7 @@ interpret rt flow input = within root Nothing RunNode [] Nothing Nothing (const 
       (TakeFirst, SFirstHalf) -> pure (fst x)
       (TakeSecond, SSecondHalf) -> pure (snd x)
       (Arr f, SGlue) -> pure (f x)
+      (Await _ _, SAwait) -> failWith rt (InvalidRecursion "spike: use waiting interpreter")
       (Act f, SEffect) -> f x
       (Durable input output f, SDurable) ->
         recorded DurableEffect key parent EffectNode path (input.encode x)
@@ -231,6 +232,7 @@ kind cursor = case cursor.shape of
     SFirstHalf -> FirstHalfNode
     SSecondHalf -> SecondHalfNode
     SEffect -> EffectNode
+    SAwait -> EffectNode
     SDurable -> EffectNode
     SDraft {} -> DraftNode
     SJudge {} -> JudgeNode
