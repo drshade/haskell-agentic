@@ -728,7 +728,7 @@ codec on each side:
 ```haskell
 {-# LANGUAGE ImportQualifiedPost, LambdaCase, OverloadedStrings #-}
 
-import Agentic hiding (key)
+import Agentic
 import Agentic.Codec qualified as C
 import Agentic.IO (withJournal)
 import Agentic.Schema (Shape (..))
@@ -740,8 +740,8 @@ textCodec = C.primitive (SString Nothing) String $ \case
   _ -> Left "expected text"
 
 sendStep :: Agentic IO Text Text
-sendStep = durably textCodec textCodec $ \key message ->
-  sendMessage (durableKeyText <$> key) message
+sendStep = durably textCodec textCodec $ \stableKey message ->
+  sendMessage (durableKeyText <$> stableKey) message
 
 resume :: IO Text
 resume = do
@@ -766,7 +766,7 @@ A few things that will bite you:
 
 - A `durably` step can run more than once. If it ran but its result wasn't
   saved (the process died, it threw), it runs again next time. Make it safe to
-  repeat. The `key` is the same on every attempt, so pass it on if the other
+  repeat. The key is the same on every attempt, so pass it on if the other
   side can dedupe. It can get long - hash it if the service caps the length.
   It's `Nothing` when the runtime has no journal.
 - A plain `act` runs every time, resume or not. If its result matters after a
