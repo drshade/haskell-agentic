@@ -717,30 +717,31 @@ None of this touches `withStore` - recorded answers stay valid.
 
 ### Save a run and continue it later
 
-`withStore` caches model answers while you edit. To resume a particular run,
-use `withJournal` instead. Model turns, judgements and completed tool calls
-are then saved by their position in the run. A new `durably` step also saves
-an ordinary effect's result:
+`withStore` caches model answers while you edit a prompt. Resuming one
+particular run is a different job, and that's `withJournal`. It saves every
+model turn, judgement and completed tool call by where it sits in the run, so
+the next attempt picks up where the last one stopped.
+
+An `act` has no way to save its result, so there's `durably` - an `act` with a
+codec on each side:
 
 ```haskell
-import Agentic
+{-# LANGUAGE ImportQualifiedPost, LambdaCase, OverloadedStrings #-}
+
+import Agentic hiding (key)
 import Agentic.Codec qualified as C
 import Agentic.IO (withJournal)
 import Agentic.Schema (Shape (..))
 import Data.Text (Text)
 
--- Persistence codecs are explicit. They must reconstruct the full value
--- needed after a restart, not just the fields a model needs to see.
 textCodec :: C.Codec Text
 textCodec = C.primitive (SString Nothing) String $ \case
   String value -> Right value
   _ -> Left "expected text"
 
 sendStep :: Agentic IO Text Text
-sendStep = durably textCodec textCodec $ \stableKey message ->
-  sendMessage (durableKeyText <$> stableKey) message
--- sendMessage is your effect. Pass its idempotency key on if the service
--- supports one. Nothing means this runtime has no journal.
+sendStep = durably textCodec textCodec $ \key message ->
+  sendMessage (durableKeyText <$> key) message
 
 resume :: IO Text
 resume = do
@@ -749,49 +750,60 @@ resume = do
   interpret rt sendStep "Hello"
 ```
 
-Run `resume` again with the same input and identities: a saved result comes
-back through its codec, and work past the saved part runs live. Loop indices,
-recursive calls and tool positions distinguish repeated requests. List totals
-are omitted from journal keys, so a stable prefix can still match when a list
-grows. Observation occurrences keep their totals.
+`sendMessage` is yours. Run `resume` twice and the message goes out once - the
+second time the saved result comes back through the codec, and anything past
+the saved part runs live.
 
-A completed tool call skips its whole body. If a tool stops part way through,
-its body runs again, restoring any completed inner tool calls and `durably`
-steps. Put an independently irreversible action behind its own durable step.
-Plain `act` always runs. Changed branches or loop positions can produce new
-keys and run live; input checks only catch differences on existing keys.
-The caller must keep root input stable and supply a new revision identity
-when code, codecs or provider configuration changes. Revisions cannot migrate.
+A saved result is found by its position: which step, which element of an
+`each`, which pass of a `repeatUntil`, which tool call. Not by what was asked.
+So the same request in two places is two entries.
 
-This is at-least-once execution. If an effect happens but its result isn't
-saved, it may happen again. Make it safe to repeat, using the run-scoped key
-where the other side supports deduplication. Recording forces the encoded
-result before completion, even where a live run would leave it lazy. Codecs
-must accept JSON object field reordering and whole numbers represented as
-integers. Saved results restore values, not resources or state changes in an
-`IORef` or the monad.
+A tool call that finished is restored whole, and its body doesn't run. One that
+stopped part way runs its body again, restoring the `durably` steps and inner
+tool calls that did finish.
 
-The file is plain JSONL. One process/runtime owns it at a time, by convention.
-Writes within that runtime are serialised and flushed before completion is
-reported. An unreadable line fails loading, including an incomplete final line.
-A crash mid-append can leave the file unloadable. There is no repair,
-cross-process lock or promise about power loss. After a write failure, reopen
-the journal rather than reuse its failed handle. Each nested `interpret`
-needs its own run namespace. A different run or revision,
-a mismatched request, or a result that no longer decodes is an error, never
-permission to rerun the effect.
+A few things that will bite you:
 
-For another backend, supply `Runtime.journal` using `Journal`'s initialise,
-lookup and save hooks. They work in any monad. Records keep an exact canonical
-request fingerprint separately from the result; draft requests include all
-history, so long conversations consume quadratic journal space. The backend
-may compress those values without changing their meaning.
+- A `durably` step can run more than once. If it ran but its result wasn't
+  saved (the process died, it threw), it runs again next time. Make it safe to
+  repeat. The `key` is the same on every attempt, so pass it on if the other
+  side can dedupe. It can get long - hash it if the service caps the length.
+  It's `Nothing` when the runtime has no journal.
+- A plain `act` runs every time, resume or not. If its result matters after a
+  restart, make it `durably`.
+- Nothing checks that a resumed run takes the same path. If an `act` returns
+  something different and that changes a branch or a loop, the run just goes
+  the new way. If it changes the input of a step that was saved, the resume
+  fails there - it won't hand you a stale result.
+- Resume with the same input you started with. Nothing can check that either.
+- The second name in `JournalIdentity` is your revision. Change it when the
+  code, the codecs or the provider config change, and old journals are refused.
+  They don't migrate.
+- Only returned values come back. Whatever a skipped step did to an `IORef` is
+  gone.
+- A nested `interpret` (from inside an `act`) needs a journal of its own.
+- A journal error is never a reason to run the step again. A different run or
+  revision, a changed request, a result that no longer decodes - all of them
+  fail the run.
 
-A hit emits `Restored` after entry and validation, before return. Drafts mark
-each restored turn separately; a tool dispatched by a restored turn can still
-run live. Skipped tool bodies emit no events. Keep each resumed attempt's
-observations in a separate recording. Waiting for external answers is not
-part of this API yet.
+The file is one JSON object per line and nothing clever. Use it from one
+process at a time (nothing stops you doing otherwise). A line it can't read
+fails the load, and that includes a half-written last line, so a crash in the
+middle of a write can leave a file that won't open. There's no repair, no
+locking and no promise about power loss. If you need more than that, write
+your own - `Runtime.journal` takes a `Journal` with three hooks (`initialise`,
+`lookupRecord`, `saveRecord`) and they work in any monad.
+
+Every entry keeps the whole request next to its result, to check against on
+the way back. A draft's request includes its history, so a long conversation
+makes for a big journal. Your own store is free to compress that.
+
+When you're observing, a restored step emits `Restored` between `Entered` and
+`Returned`. A draft marks each restored turn separately, and nothing is emitted
+for the inside of a tool body that was skipped. Keep each attempt's events in
+their own recording.
+
+Waiting on a person or an outside event isn't here yet.
 
 ## History
 
