@@ -715,6 +715,96 @@ plumbing-heavy `each` emits a lot of events.
 
 None of this touches `withStore` - recorded answers stay valid.
 
+### Save a run and continue it later
+
+`withStore` caches model answers while you edit a prompt. Resuming one
+particular run is a different job, and that's `withJournal`. It saves every
+model turn, judgement and completed tool call by where it sits in the run, so
+the next attempt picks up where the last one stopped.
+
+An `act` has no way to save its result, so there's `durably` - an `act` with a
+codec on each side:
+
+```haskell
+{-# LANGUAGE ImportQualifiedPost, LambdaCase, OverloadedStrings #-}
+
+import Agentic
+import Agentic.Codec qualified as C
+import Agentic.IO (withJournal)
+import Agentic.Schema (Shape (..))
+import Data.Text (Text)
+
+textCodec :: C.Codec Text
+textCodec = C.primitive (SString Nothing) String $ \case
+  String value -> Right value
+  _ -> Left "expected text"
+
+sendStep :: Agentic IO Text Text
+sendStep = durably textCodec textCodec $ \stableKey message ->
+  sendMessage (durableKeyText <$> stableKey) message
+
+resume :: IO Text
+resume = do
+  rt <- withJournal "run-42.jsonl"
+    (JournalIdentity "run-42" "workflow-v1") runtime
+  interpret rt sendStep "Hello"
+```
+
+`sendMessage` is yours. Run `resume` twice and the message goes out once - the
+second time the saved result comes back through the codec, and anything past
+the saved part runs live.
+
+A saved result is found by its position: which step, which element of an
+`each`, which pass of a `repeatUntil`, which tool call. Not by what was asked.
+So the same request in two places is two entries.
+
+A tool call that finished is restored whole, and its body doesn't run. One that
+stopped part way runs its body again, restoring the `durably` steps and inner
+tool calls that did finish.
+
+A few things that will bite you:
+
+- A `durably` step can run more than once. If it ran but its result wasn't
+  saved (the process died, it threw), it runs again next time. Make it safe to
+  repeat. The key is the same on every attempt, so pass it on if the other
+  side can dedupe. It can get long - hash it if the service caps the length.
+  It's `Nothing` when the runtime has no journal.
+- A plain `act` runs every time, resume or not. If its result matters after a
+  restart, make it `durably`.
+- Nothing checks that a resumed run takes the same path. If an `act` returns
+  something different and that changes a branch or a loop, the run just goes
+  the new way. If it changes the input of a step that was saved, the resume
+  fails there - it won't hand you a stale result.
+- Resume with the same input you started with. Nothing can check that either.
+- The second name in `JournalIdentity` is your revision. Change it when the
+  code, the codecs or the provider config change, and old journals are refused.
+  They don't migrate.
+- Only returned values come back. Whatever a skipped step did to an `IORef` is
+  gone.
+- A nested `interpret` (from inside an `act`) needs a journal of its own.
+- A journal error is never a reason to run the step again. A different run or
+  revision, a changed request, a result that no longer decodes - all of them
+  fail the run.
+
+The file is one JSON object per line and nothing clever. Use it from one
+process at a time (nothing stops you doing otherwise). A line it can't read
+fails the load, and that includes a half-written last line, so a crash in the
+middle of a write can leave a file that won't open. There's no repair, no
+locking and no promise about power loss. If you need more than that, write
+your own - `Runtime.journal` takes a `Journal` with three hooks (`initialise`,
+`lookupRecord`, `saveRecord`) and they work in any monad.
+
+Every entry keeps the whole request next to its result, to check against on
+the way back. A draft's request includes its history, so a long conversation
+makes for a big journal. Your own store is free to compress that.
+
+When you're observing, a restored step emits `Restored` between `Entered` and
+`Returned`. A draft marks each restored turn separately, and nothing is emitted
+for the inside of a tool body that was skipped. Keep each attempt's events in
+their own recording.
+
+Waiting on a person or an outside event isn't here yet.
+
 ## History
 
 v0 - the Kleisli-arrow prototype that used Dhall as its output format (bless

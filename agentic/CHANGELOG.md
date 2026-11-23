@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+* Add explicit-codec `durably` effects, occurrence-keyed completion journals,
+  run/revision identity checks, request guards and `Restored` observations.
+  Model decisions and whole tool completions replay before execution continues
+  live; plain `act` is unchanged. No exactly-once or suspension guarantee.
+
 * Rework Dino around an explicit exhibit choice; add generated example diagrams
   to the README and a gallery, with scripted checks for both branches.
 

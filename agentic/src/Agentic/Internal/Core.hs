@@ -24,6 +24,7 @@ module Agentic.Internal.Core
   , draftWith
   , judge
   , act
+  , durably
     -- * Tools
   , tool
     -- * Structure
@@ -43,6 +44,8 @@ module Agentic.Internal.Core
   , module Control.Arrow
   ) where
 
+import Agentic.Codec (Codec)
+import Agentic.Journal (DurableKey)
 import Agentic.Contract (Structure, Contract (..), nominal)
 import Agentic.Questions (Probability, Questions, YesNo (..))
 import Control.Arrow
@@ -81,6 +84,7 @@ data Step m i o where
     -- which half it keeps.
   TakeSecond :: Step m (a, b) b
   Act :: (i -> m o) -> Step m i o
+  Durable :: Codec i -> Codec o -> (Maybe DurableKey -> i -> m o) -> Step m i o
   Draft :: Structure i -> Structure o -> Instruction -> [Tool m] -> Step m i o
   Judge :: Structure i -> Questions o -> Step m i o
 
@@ -262,6 +266,17 @@ judge = Step . Judge (titledContract @i)
 -- | Plain code with an effect.
 act :: (i -> m o) -> Agentic m i o
 act = Step . Act
+
+-- | An effect with explicit persistence codecs. With a journal, the action
+-- receives a run-scoped key and completed results are restored. Without one it
+-- receives Nothing (not a resumable run) and runs normally, without demanding
+-- either codec. Persistence codecs must accept canonical JSON: object fields
+-- may be reordered and integral numbers represented as Integer.
+-- Codecs must round-trip faithfully. Uncommitted effects may repeat, so make
+-- them idempotent (using the key where supported). Plain 'act' is unaffected.
+durably :: Codec i -> Codec o -> (Maybe DurableKey -> i -> m o) -> Agentic m i o
+durably i o f = Step (Durable i o f)
+
 
 -- | A tool: a name and description for the model, and a flow to run.
 tool :: forall i o m. (Contract i, Contract o, Typeable i, Typeable o) => Text -> Text -> Agentic m i o -> Tool m

@@ -32,9 +32,10 @@ import Data.List (sortOn)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
+import qualified Data.Text.Encoding as TE
+import qualified Data.ByteString as BS
 import System.Directory (doesFileExist)
-import System.IO (IOMode (..), hFlush, withFile)
+import System.IO (IOMode (..), hFlush, withBinaryFile)
 
 data Mode
   = Record
@@ -112,9 +113,9 @@ load file = do
         _ -> Nothing
 
 append :: FilePath -> Value -> Value -> IO ()
-append file key answer = withFile file AppendMode $ \h -> do
-  T.hPutStrLn h (renderJson (Object [("request", key), ("answer", answer)]))
-  hFlush h
+append file key answer = do
+  let bytes = TE.encodeUtf8 (renderJson (Object [("request", key), ("answer", answer)])) <> "\n"
+  BS.length bytes `seq` withBinaryFile file AppendMode (\h -> BS.hPut h bytes >> hFlush h)
 
 -- ---------------------------------------------------------------------------
 -- Keys

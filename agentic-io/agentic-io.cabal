@@ -30,6 +30,7 @@ library
     Agentic.IO
     Agentic.IO.Concurrent
     Agentic.IO.DotEnv
+    Agentic.IO.Journal
     Agentic.IO.Store
   build-depends:
     , agentic          >=0.2.1 && <0.3
@@ -48,11 +49,12 @@ test-suite agentic-io-test
   ghc-options:      -Wall
   type:             exitcode-stdio-1.0
   hs-source-dirs:   test
-  other-modules:    ObservationIO
+  other-modules:    ObservationIO JournalIO
   main-is:          Spec.hs
   build-depends:
     , agentic          >=0.2.1 && <0.3
     , agentic-io       >=0.2.1 && <0.3
+    , process          >=1.6 && <1.7
     , base             >=4.18 && <5
     , directory        >=1.3 && <1.4
     , filepath         >=1.4 && <1.6

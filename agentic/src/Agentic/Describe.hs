@@ -60,6 +60,8 @@ data StepInfo
     -- ^ 'takeSecond'.
   | Effect
     -- ^ @act@: plain code with an effect.
+  | DurableEffectInfo
+    -- ^ @durably@: an effect with explicit persistence codecs.
   | DraftInfo
       { instruction :: Instruction
       , input :: Outline
@@ -113,6 +115,7 @@ stepInfo = \case
   S.SFirstHalf -> FirstHalf
   S.SSecondHalf -> SecondHalf
   S.SEffect -> Effect
+  S.SDurable -> DurableEffectInfo
   S.SDraft input out instruction tools -> DraftInfo instruction (outline input) (outline out) (map toolInfo tools)
   S.SJudge input qs -> JudgeInfo (outline input) qs.specs
 
@@ -614,6 +617,7 @@ stepLines name info = kind : maybe [] pure name <> details
       FirstHalf -> ("takeFirst", [])
       SecondHalf -> ("takeSecond", [])
       Effect -> ("act", [])
+      DurableEffectInfo -> ("durably", [])
       DraftInfo instruction _ out _ -> ("draft @" <> outlineLabel out, [quoted instruction.text])
       JudgeInfo _ [q] -> ("judge", [questionText q])
       JudgeInfo _ qs -> ("judge " <> T.pack (show (length qs)) <> " questions in one request", map questionText qs)
@@ -813,6 +817,7 @@ descriptionValue = \case
       FirstHalf -> node "takeFirst" []
       SecondHalf -> node "takeSecond" []
       Effect -> node "act" []
+      DurableEffectInfo -> node "durably" []
       DraftInfo instruction input out tools ->
         node
           "draft"

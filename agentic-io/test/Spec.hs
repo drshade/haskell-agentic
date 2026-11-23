@@ -1,11 +1,13 @@
 module Main (main) where
 
+import JournalIO qualified
 import ObservationIO qualified
 import Agentic
 import Agentic.IO
 import Agentic.Runtime (Conversation (..))
 import Agentic.Scripted (fixedAnswers, replyingWith, respond)
 import Control.Exception (try)
+import Control.Monad (unless)
 import Control.Concurrent.MVar
 import System.Timeout qualified as Timeout
 import Data.IORef
@@ -62,10 +64,13 @@ fresh name = do
   pure file
 
 main :: IO ()
-main = hspec $ do
-  ObservationIO.spec
-  recursionSpec
-  storeSpec
+main = do
+  child <- JournalIO.childMode
+  unless child $ hspec $ do
+    JournalIO.spec
+    ObservationIO.spec
+    recursionSpec
+    storeSpec
 
 storeSpec :: Spec
 storeSpec = Test.Hspec.describe "withStore" $ do
