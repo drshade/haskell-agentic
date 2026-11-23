@@ -64,7 +64,7 @@ fill flow w v store = case runGuest (fulfil guest flow w v) store of
   result -> error (show result)
 
 onePending :: (Either FetchError (Progress a),Store,[Happened]) -> PendingWait
-onePending (Right (Waiting (w NE.:| [])),_,_) = w
+onePending (Right (RunWaiting (w NE.:| [])),_,_) = w
 onePending _ = error "expected exactly one pending wait"
 
 check :: String -> Bool -> IO ()
@@ -74,8 +74,8 @@ behaviour :: IO ()
 behaviour = do
   let run :: Monad m => Runtime m -> Agentic m i o -> i -> m (Either Waits o)
       run rt f x = convert <$> resumable rt f x
-      convert (Finished a) = Right a
-      convert (Waiting ws) = Left ws
+      convert (RunFinished a) = Right a
+      convert (RunWaiting ws) = Left ws
       (first,s,events) = runGuest (run guest (each awaitInt) [10,20,30]) Map.empty
   waits <- case first of Right (Left ws) -> pure ws; _ -> error (show first)
   check "three reached waits" (NE.length waits == 3 && length [() | Suspended <- events] == 5)
@@ -168,7 +168,7 @@ spec = H.describe "external replies in a pure Program under ExceptT" $ do
         pending = onePending (runGuest (resumable guest flow (Left 1)) Map.empty)
         (finished,_,_) = runGuest (resumable guest flow (Right 2)) Map.empty
     pending.request `shouldBe` Integer 1
-    finished `shouldBe` Right (Finished 2)
+    finished `shouldBe` Right (RunFinished 2)
   it "round-trips pending data with all schema shapes and rejects malformed descriptors" $ do
     let scalar sh = S.schemaOf sh
         schema = S.Schema (Just "request") (Just "docs") ["check"] (S.SObject
@@ -218,5 +218,5 @@ spec = H.describe "external replies in a pure Program under ExceptT" $ do
   it "collects both halves under split" $ do
     let (outcome,_,_) = runGuest (resumable guest (awaitInt *** awaitInt) (1,2)) Map.empty
     case outcome of
-      Right (Waiting ws) -> map (.request) (NE.toList ws) `shouldBe` [Integer 1,Integer 2]
+      Right (RunWaiting ws) -> map (.request) (NE.toList ws) `shouldBe` [Integer 1,Integer 2]
       _ -> expectationFailure (show outcome)

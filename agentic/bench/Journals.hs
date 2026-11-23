@@ -37,8 +37,8 @@ main = do
 #ifdef HAS_AWAIT
     measure (name <> "-waiting") fresh $ \rt ->
       resumable rt (each (await intCodec intCodec)) [1..5000] >>= \case
-        Waiting waits -> evaluate (NE.length waits)
-        Finished _ -> error "expected pending waits"
+        RunWaiting waits -> evaluate (NE.length waits)
+        RunFinished _ -> error "expected pending waits"
 #endif
  where
   completed flow rt = interpret rt flow [1..5000] >>= evaluate . sum

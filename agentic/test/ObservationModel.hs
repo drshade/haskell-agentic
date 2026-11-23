@@ -1,7 +1,7 @@
 -- A deliberately test-only consumer: graph + recorded metadata, no interpreter.
 module ObservationModel (replay, closeRecording, openItems, State (..), Status (..), prefixesValid) where
 
-import Agentic hiding (Finished)
+import Agentic
 import Data.List (inits, nub)
 import Data.Text (Text)
 

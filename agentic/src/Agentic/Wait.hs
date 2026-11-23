@@ -62,7 +62,7 @@ keyFromValue v = do
   unless (op == Array [String "wait"]) (Left "key is not a wait")
   address <- textField "address" fs >>= addressFromText
   context <- field "context" fs >>= list frame
-  pure (JournalKey Wait address context)
+  pure (JournalKey AwaitedReply address context)
  where
   address v = text v >>= addressFromText
   frame = \case

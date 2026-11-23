@@ -32,8 +32,8 @@ interpret :: Monad m => Runtime m -> Agentic m i o -> i -> m o
 interpret rt flow input = case rt.journal of
   Nothing -> worker (direct rt) rt flow input
   Just _ -> resumable rt flow input >>= \case
-    Finished value -> pure value
-    Waiting waits -> failWith rt (AwaitNeedsResume waits)
+    RunFinished value -> pure value
+    RunWaiting waits -> failWith rt (AwaitNeedsResume waits)
 
 -- | Run until completion or until every started independent branch has
 -- finished or suspended. A branch that never settles prevents an outcome.
@@ -41,8 +41,8 @@ interpret rt flow input = case rt.journal of
 {-# INLINABLE resumable #-}
 resumable :: Monad m => Runtime m -> Agentic m i o -> i -> m (Progress o)
 resumable rt flow input = case rt.journal of
-  Nothing -> Finished <$> worker (direct rt) rt flow input
-  Just _ -> either Waiting Finished <$> runExceptT (worker (waiting rt) rt flow input)
+  Nothing -> RunFinished <$> worker (direct rt) rt flow input
+  Just _ -> either RunWaiting RunFinished <$> runExceptT (worker (waiting rt) rt flow input)
 
 -- One body, specialised to the user's monad on the no-journal path and to an
 -- internal ExceptT on the journaled path. Runtime/provider actions stay in m.
@@ -210,9 +210,9 @@ worker execution rt flow input = within root Nothing RunNode [] Nothing Nothing 
         Just j -> do
           request <- canonical (input.encode x)
           let pending = PendingWait j.identity
-                (DurableKey j.identity.namespace (journalKey Wait key)) request
+                (DurableKey j.identity.namespace (journalKey AwaitedReply key)) request
                 input.schema output.schema path
-          recorded Wait key parent AwaitNode path request output.encode output.decode
+          recorded AwaitedReply key parent AwaitNode path request output.encode output.decode
             (const (suspendRun execution (pending :| [])))
       (Durable input output f, SDurable) ->
         recorded DurableEffect key parent EffectNode path (input.encode x)
@@ -361,7 +361,7 @@ fulfil rt flow pending reply = do
   j <- maybe (failWith rt AwaitWithoutJournal) pure rt.journal
   if pending.identity /= j.identity || pending.key.namespace /= j.identity.namespace
     then pure (Left WaitWrongIdentity)
-    else if pending.key.key.operation /= Wait
+    else if pending.key.key.operation /= AwaitedReply
       then pure (Left (WaitInvalidKey "key is not a wait"))
       else do
         j.initialise

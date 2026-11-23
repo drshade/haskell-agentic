@@ -50,7 +50,7 @@ open :: FilePath -> IO (Runtime IO)
 open file = withJournal file identity runtime
 
 oneWait :: Show a => Progress a -> IO PendingWait
-oneWait (Waiting (w NE.:| [])) = pure w
+oneWait (RunWaiting (w NE.:| [])) = pure w
 oneWait other = expectationFailure ("expected one wait: " <> show other) >> fail "missing wait"
 
 childFlow :: FilePath -> Agentic IO Int Int
@@ -73,7 +73,7 @@ childMode = getArgs >>= \case
         accepted <- fulfil rt (childFlow file) w (Integer 42)
         unless (accepted == Right ()) (fail (show accepted))
       "resume" -> resumable rt (childFlow file) 0 >>= \case
-        Finished 43 -> pure ()
+        RunFinished 43 -> pure ()
         result -> fail (show result)
       _ -> fail "unknown child mode"
     pure True
@@ -115,7 +115,7 @@ spec = H.describe "external replies with an IO journal" $ do
     fulfil rt flow w (Object [("b",Number 2.0),("a",Number 1.0)]) `shouldReturn` Right ()
     fulfil rt flow w (Object [("a",Integer 1),("b",Integer 2)]) `shouldReturn` Right ()
     rt' <- open file
-    resumable rt' flow 1 `shouldReturn` Finished (1,2)
+    resumable rt' flow 1 `shouldReturn` RunFinished (1,2)
     fulfil rt' flow w (Object [("a",Integer 3),("b",Integer 2)]) `shouldReturn` Left ReplyAlreadyAnswered
 
   it "returns invalid replies as data without changing the journal" $ withPath $ \file -> do
@@ -129,9 +129,9 @@ spec = H.describe "external replies with an IO journal" $ do
     badRequest <- fulfil rt flow w{request=Object [("x",Null),("x",Null)]} (Integer 2)
     badRequest `shouldSatisfy` \case Left (WaitInvalidRequest _) -> True; _ -> False
     BS.readFile file `shouldReturn` originalBytes
-    resumable rt flow 1 `shouldReturn` Waiting (w NE.:| [])
+    resumable rt flow 1 `shouldReturn` RunWaiting (w NE.:| [])
 
-  it "reports a wait payload and restores with Entered, Restored Wait, Returned" $ withPath $ \file -> do
+  it "reports a wait payload and restores with Entered, Restored AwaitedReply, Returned" $ withPath $ \file -> do
     rt <- open file
     events <- newIORef []
     let flow = await intCodec intCodec `named` "approval"
@@ -143,12 +143,12 @@ spec = H.describe "external replies with an IO journal" $ do
     fulfil observed flow w (Integer 2) `shouldReturn` Right ()
     (map summarise <$> readIORef events) `shouldReturn` map summarise (reverse firstEvents) -- fulfil emits no events
     writeIORef events []
-    resumable observed flow 1 `shouldReturn` Finished 2
+    resumable observed flow 1 `shouldReturn` RunFinished 2
     restored <- reverse <$> readIORef events
     [e.happened | e <- restored,e.nodeType == AwaitNode] `shouldBe`
-      [Entered Nothing,Restored Wait,Returned Completed]
+      [Entered Nothing,Restored AwaitedReply,Returned Completed]
 
-  it "lets an independent durable sibling finish and saves it before returning Waiting" $ withPath $ \file -> do
+  it "lets an independent durable sibling finish and saves it before returning RunWaiting" $ withPath $ \file -> do
     rt <- open file
     waiting <- newEmptyMVar
     count <- newIORef (0::Int)
@@ -160,7 +160,7 @@ spec = H.describe "external replies with an IO journal" $ do
     readIORef count `shouldReturn` 1
     fulfil rt flow w (Integer 5) `shouldReturn` Right ()
     rt' <- open file
-    resumable (concurrently rt') flow 1 `shouldReturn` Finished (5,2)
+    resumable (concurrently rt') flow 1 `shouldReturn` RunFinished (5,2)
     readIORef count `shouldReturn` 1
 
   it "fails the parent when a sibling fails after a wait" $ withPath $ \file -> do
@@ -212,7 +212,7 @@ spec = H.describe "external replies with an IO journal" $ do
           ("call b",[]) -> Turn (Raw Null) (CallTools [ToolCall "b" "b" (Integer 1)])
           _ -> Turn (Raw Null) (Respond (Integer 1))
     progress <- resumable rt{systemTwo=provider} flow 0
-    ws <- case progress of Waiting waits -> pure (NE.toList waits); _ -> fail "expected waits"
+    ws <- case progress of RunWaiting waits -> pure (NE.toList waits); _ -> fail "expected waits"
     length ws `shouldBe` 2
     readIORef calls `shouldReturn` 2
     let isolated = rt{observe=const (error "fulfil observed"),systemTwo=SystemTwo (const (error "fulfil called model"))}

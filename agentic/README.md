@@ -819,8 +819,8 @@ attempt = do
   rt <- withJournal "run-42.jsonl"
     (JournalIdentity "run-42" "workflow-v1") runtime
   resumable rt askStep "Can Sam take Friday off?" >>= \case
-    Finished reply -> print reply
-    Waiting waits -> mapM_ sendQuestion waits
+    RunFinished reply -> print reply
+    RunWaiting waits -> mapM_ sendQuestion waits
 
 answer :: PendingWait -> Value -> IO ()
 answer wait reply = do
@@ -832,7 +832,7 @@ answer wait reply = do
 ```
 
 `sendQuestion` and `askAgain` are yours. The first `attempt` comes back
-`Waiting` and the process can exit. When the reply turns up, `answer` checks
+`RunWaiting` and the process can exit. When the reply turns up, `answer` checks
 it and saves it, and the next `attempt` picks up from the journal and carries
 on past the `await`. There's no separate resume - it's the same replay as
 before, with one more entry to restore.
@@ -868,9 +868,10 @@ A few things that will bite you:
 - There's no cancel. If nobody answers, make that a value in your reply type
   and supply it - then the flow decides what happens next.
 - If a wait from last time isn't in this attempt's list, the run no longer
-  wants it. That only holds when the attempt came back `Finished` or `Waiting`.
-  One that failed tells you nothing, so keep what you had. And only compare
-  attempts of the same run, one after another - never two at the same time.
+  wants it. That only holds when the attempt came back `RunFinished` or
+  `RunWaiting`. One that failed tells you nothing, so keep what you had. And
+  only compare attempts of the same run, one after another - never two at the
+  same time.
 - A reply to a wait that was dropped is still saved if you supply it. Whether
   to take late replies is up to you.
 - The same reply twice is fine. A different one comes back as

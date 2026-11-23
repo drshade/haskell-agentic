@@ -277,7 +277,7 @@ summaryValue e = Object
     OutputRejected i -> Object [("kind",String "outputRejected"),("turn",number i)]
     Restored op -> Object [("kind",String "restored"),("operation",case op of
       DurableEffect -> String "effect"; ToolExecution -> String "tool"
-      Judgement -> String "judge"; Wait -> String "wait"; DraftTurn i -> Object [("turn",number i)])]
+      Judgement -> String "judge"; AwaitedReply -> String "wait"; DraftTurn i -> Object [("turn",number i)])]
     Judged -> Object [("kind",String "judged")]
   nodeName = \case
     RunNode -> "run"; IdentityNode -> "identity"; PureNode -> "pure"
@@ -372,7 +372,7 @@ exceptTScope base = Scope $ \enter returned exited body -> ExceptT $
 -- | The reached frontier after every started branch finishes or suspends.
 -- A failure or cancellation produces no authoritative wait snapshot. Only
 -- reconcile successful attempts of the same run, without overlapping attempts.
-data Progress a = Finished a | Waiting (NonEmpty PendingWait)
+data Progress a = RunFinished a | RunWaiting (NonEmpty PendingWait)
   deriving (Eq, Show)
 
 -- | A trusted description returned by a run, not proof of current reachability

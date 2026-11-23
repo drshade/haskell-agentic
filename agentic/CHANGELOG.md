@@ -5,7 +5,8 @@
 * Add `await`, `resumable` and `fulfil` for typed external replies. Independent
   branches collect their reached waits, ordinary failures stay separate, and
   completed journaled work replays after a reply. This works in pure monads
-  and transformer stacks as well as IO.
+  and transformer stacks as well as IO. Results use `RunFinished` and
+  `RunWaiting`; restored replies use `Restored AwaitedReply`.
 * Add serialisable pending-wait descriptors, typed reply refusals, and
   `Suspended` observation terminals. Include a journal-overhead benchmark
   alongside the existing observation benchmark.

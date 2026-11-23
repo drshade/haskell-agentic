@@ -39,7 +39,7 @@ data Journal m = Journal
   , saveRecord :: Value -> Value -> m ()
   }
 
-data JournalOperation = DurableEffect | ToolExecution | Judgement | Wait | DraftTurn Int
+data JournalOperation = DurableEffect | ToolExecution | Judgement | AwaitedReply | DraftTurn Int
   deriving (Eq, Ord, Show)
 
 -- | Unlike observation frames, element frames omit the list total. Indices
@@ -78,7 +78,7 @@ journalKeyValue k = Object
   op = \case
     DurableEffect -> Array [String "effect"]
     ToolExecution -> Array [String "tool"]
-    Wait -> Array [String "wait"]
+    AwaitedReply -> Array [String "wait"]
     Judgement -> Array [String "judge"]
     DraftTurn n -> Array [String "turn",number n]
   frame = \case
