@@ -1,7 +1,7 @@
 -- A deliberately test-only consumer: graph + recorded metadata, no interpreter.
 module ObservationModel (replay, closeRecording, openItems, State (..), Status (..), prefixesValid) where
 
-import Agentic
+import Agentic hiding (Finished)
 import Data.List (inits, nub)
 import Data.Text (Text)
 
@@ -43,7 +43,7 @@ replay graph = foldl advance (Right (State []))
             Selected edge | edge `notElem` concatMap (.selections) graph.edges -> Left "unknown selection"
             _ -> Right (State rows)
         _ -> Left "event outside its occurrence or changed parent/kind"
-  terminal = \case Returned _ -> True; Failed -> True; Cancelled -> True; _ -> False
+  terminal = \case Returned _ -> True; Failed -> True; Cancelled -> True; Suspended -> True; _ -> False
 
 prefixesValid :: FlowGraph -> [Summary] -> Bool
 prefixesValid graph = all (either (const False) (const True) . replay graph) . inits

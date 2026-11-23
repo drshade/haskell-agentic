@@ -25,6 +25,7 @@ module Agentic.Internal.Core
   , judge
   , act
   , durably
+  , await
     -- * Tools
   , tool
     -- * Structure
@@ -85,6 +86,7 @@ data Step m i o where
   TakeSecond :: Step m (a, b) b
   Act :: (i -> m o) -> Step m i o
   Durable :: Codec i -> Codec o -> (Maybe DurableKey -> i -> m o) -> Step m i o
+  Await :: Codec i -> Codec o -> Step m i o
   Draft :: Structure i -> Structure o -> Instruction -> [Tool m] -> Step m i o
   Judge :: Structure i -> Questions o -> Step m i o
 
@@ -330,3 +332,10 @@ gate p q =
   note ("gate " <> T.pack (show p)) "" $
     (returnA &&& judge q)
       >>> arr (\(x, a) -> if a.yes >= p then Right x else Left x)
+
+-- | Ask for an external reply and suspend this branch if no reply is saved.
+-- Requires a journal. Codecs are explicit and must accept canonical JSON.
+-- Use 'Agentic.Interpret.resumable' to collect all reached waits; plain
+-- 'Agentic.Interpret.interpret' raises an error carrying those waits instead.
+await :: Codec q -> Codec r -> Agentic m q r
+await q r = Step (Await q r)

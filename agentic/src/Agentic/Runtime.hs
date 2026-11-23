@@ -47,6 +47,9 @@ module Agentic.Runtime
   , journalKey
   , ioScope
   , exceptTScope
+  , Progress (..)
+  , PendingWait (..)
+  , ReplyRefused (..)
   , FlowError (..)
   ) where
 
@@ -60,6 +63,7 @@ import Agentic.Value (Value (..))
 import Control.Exception (Exception, SomeException, SomeAsyncException, AsyncException (..), catch, fromException, mask, throwIO, try)
 import Control.Monad (void)
 import Control.Monad.Trans.Except (ExceptT (..), runExceptT)
+import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 
 -- ---------------------------------------------------------------------------
@@ -161,7 +165,7 @@ edgeIdText (EdgeId a side) = addressText a <> case side of
 
 data NodeType
   = RunNode | IdentityNode | PureNode | FirstHalfNode | SecondHalfNode
-  | EffectNode | DraftNode | JudgeNode | SequenceNode | FanoutNode
+  | EffectNode | AwaitNode | DraftNode | JudgeNode | SequenceNode | FanoutNode
   | SplitNode | FirstNode | ChoiceNode | EachNode | RepeatNode | NoteNode | CallNode
   deriving (Eq, Ord, Show)
 
@@ -176,6 +180,8 @@ data Happened
     -- ^ Interpreter return only; never forces the result, even to WHNF.
   | Failed
   | Cancelled
+  | Suspended
+    -- ^ This scope exited with pending waits in this attempt.
   | Selected !EdgeId
   | CallResolved !Address !Address
     -- ^ Binding site and actual body root. Emitted before decoding; invalid
@@ -197,6 +203,7 @@ data EventPayload
   | ResultPayload ToolResult
   | RejectionPayload Text
   | JudgePayload JudgeRequest [Answer]
+  | WaitPayload PendingWait
   | ExceptionPayload SomeException
   deriving (Show)
 
@@ -261,6 +268,7 @@ summaryValue e = Object
     Returned outcome -> Object [("kind",String "returned"),("outcome",String (case outcome of
       Completed -> "completed"; CallOk -> "ok"; UnknownTool -> "unknownTool"; InvalidInput -> "invalidInput"))]
     Failed -> Object [("kind",String "failed")]
+    Suspended -> Object [("kind",String "suspended")]
     Cancelled -> Object [("kind",String "cancelled")]
     Selected edge -> Object [("kind",String "selected"),("edge",String (edgeIdText edge))]
     CallResolved binding target -> Object [("kind",String "callResolved"),("binding",String (addressText binding)),("body",String (addressText target))]
@@ -269,12 +277,12 @@ summaryValue e = Object
     OutputRejected i -> Object [("kind",String "outputRejected"),("turn",number i)]
     Restored op -> Object [("kind",String "restored"),("operation",case op of
       DurableEffect -> String "effect"; ToolExecution -> String "tool"
-      Judgement -> String "judge"; DraftTurn i -> Object [("turn",number i)])]
+      Judgement -> String "judge"; Wait -> String "wait"; DraftTurn i -> Object [("turn",number i)])]
     Judged -> Object [("kind",String "judged")]
   nodeName = \case
     RunNode -> "run"; IdentityNode -> "identity"; PureNode -> "pure"
     FirstHalfNode -> "firstHalf"; SecondHalfNode -> "secondHalf"; EffectNode -> "effect"
-    DraftNode -> "draft"; JudgeNode -> "judge"; SequenceNode -> "sequence"
+    AwaitNode -> "await"; DraftNode -> "draft"; JudgeNode -> "judge"; SequenceNode -> "sequence"
     FanoutNode -> "fanout"; SplitNode -> "split"; FirstNode -> "first"; ChoiceNode -> "choice"
     EachNode -> "each"; RepeatNode -> "repeat"; NoteNode -> "note"; CallNode -> "call"
 
@@ -291,6 +299,9 @@ summaryValue e = Object
 -- reporting must preserve the primary failure against any reporting failure
 -- the hook can observe. Do not force @a@ or @r@ beyond the Either discriminator.
 -- Lift the hook through each short-circuiting layer whose failures it must see.
+-- An interpreter suspension is a normal result at this boundary: the success
+-- callback emits Suspended instead of Returned. Its notification failures and
+-- cancellation propagate like any other normal-terminal notification.
 newtype Scope m = Scope
   { runScope :: forall a r.
       m (Either r ()) ->
@@ -358,9 +369,44 @@ exceptTScope base = Scope $ \enter returned exited body -> ExceptT $
     Right (Left r) -> Left (Right r)
     Right (Right a) -> Right a
 
+-- | The reached frontier after every started branch finishes or suspends.
+-- A failure or cancellation produces no authoritative wait snapshot. Only
+-- reconcile successful attempts of the same run, without overlapping attempts.
+data Progress a = Finished a | Waiting (NonEmpty PendingWait)
+  deriving (Eq, Show)
+
+-- | A trusted description returned by a run, not proof of current reachability
+-- or of the identity of whoever answers. Store it outside the completion
+-- journal if needed. A caller supplies recipient/deadline metadata in its own
+-- request type. Each nested interpreter must use its own journal namespace.
+data PendingWait = PendingWait
+  { identity :: JournalIdentity
+  , key :: DurableKey
+  , request :: Value
+  , requestSchema :: Schema
+  , replySchema :: Schema
+  , path :: [Note]
+  } deriving (Eq, Show)
+
+-- | Expected fulfilment refusals, returned as data so a caller can ask again.
+-- Storage failures remain journal errors. Concurrent conflicting fulfilments
+-- may still race at the backend's immutable save boundary.
+data ReplyRefused
+  = ReplyInvalid Text
+    -- ^ The actual reply codec rejected the canonical value.
+  | ReplyAlreadyAnswered
+    -- ^ A different request or reply is already stored under this key.
+  | ReplyNonCanonical Text
+  | WaitWrongIdentity
+  | WaitInvalidKey Text
+  | WaitInvalidRequest Text
+  deriving (Eq, Show)
+
 -- | Errors the core raises itself. Provider errors are the provider's own.
 data FlowError
-  = JournalFailure JournalError
+  = AwaitWithoutJournal
+  | AwaitNeedsResume (NonEmpty PendingWait)
+  | JournalFailure JournalError
   | ToolNestingLimit Int
     -- ^ Static tool-body nesting exceeded the limit (100). A heuristic,
     -- not cycle detection; it never limits explicit runtime recursion.
