@@ -44,11 +44,13 @@ module Agentic.Runtime
   , occurrenceValue
   , Scope (..)
   , scopeWith
+  , journalKey
   , ioScope
   , exceptTScope
   , FlowError (..)
   ) where
 
+import Agentic.Journal
 import Agentic.Internal.Address
 import Agentic.Contract (ProjectionError)
 import Agentic.Core (Instruction, Note (..))
@@ -138,6 +140,16 @@ data ContextFrame
   | CallFrame !Address !Int !Int !Text
   deriving (Eq, Ord, Show)
 
+-- | Project every observation frame to its journal identity. Observation
+-- occurrences retain element totals; journal keys deliberately do not.
+journalKey :: JournalOperation -> Occurrence -> JournalKey
+journalKey op occurrence = JournalKey op occurrence.address (map frame occurrence.context)
+ where
+  frame = \case
+    EachFrame a i _ -> ElementFrame a i
+    RepeatFrame a i -> IterationFrame a i
+    CallFrame a t i c -> InvocationFrame a t i c
+
 data Side = LeftSide | RightSide deriving (Eq, Ord, Show)
 data EdgeId = EdgeId !Address !Side deriving (Eq, Ord, Show)
 
@@ -171,6 +183,8 @@ data Happened
   | Drafting
   | Turned !Int !ActionKind
   | OutputRejected !Int
+  | Restored !JournalOperation
+    -- ^ A validated journal hit; a draft identifies each restored turn separately.
   | Judged
     -- ^ Answers available for decoding; an empty batch needs no provider request.
   deriving (Eq, Show)
@@ -253,6 +267,9 @@ summaryValue e = Object
     Drafting -> Object [("kind",String "drafting")]
     Turned i action -> Object [("kind",String "turned"),("turn",number i),("action",String (case action of ToolBatch -> "tools"; Response -> "response"))]
     OutputRejected i -> Object [("kind",String "outputRejected"),("turn",number i)]
+    Restored op -> Object [("kind",String "restored"),("operation",case op of
+      DurableEffect -> String "effect"; ToolExecution -> String "tool"
+      Judgement -> String "judge"; DraftTurn i -> Object [("turn",number i)])]
     Judged -> Object [("kind",String "judged")]
   nodeName = \case
     RunNode -> "run"; IdentityNode -> "identity"; PureNode -> "pure"
@@ -343,7 +360,8 @@ exceptTScope base = Scope $ \enter returned exited body -> ExceptT $
 
 -- | Errors the core raises itself. Provider errors are the provider's own.
 data FlowError
-  = ToolNestingLimit Int
+  = JournalFailure JournalError
+  | ToolNestingLimit Int
     -- ^ Static tool-body nesting exceeded the limit (100). A heuristic,
     -- not cycle detection; it never limits explicit runtime recursion.
   | InvalidRecursion Text
@@ -375,6 +393,7 @@ data Runtime m = Runtime
     -- exactly once on success, and preserve result order. Before returning or
     -- raising, finish or unwind all started work; never detach or retry it.
   , observe :: Event -> m ()
+  , journal :: Maybe (Journal m)
   , scope :: Scope m
   , failure :: forall a. FlowError -> m a
   }
@@ -404,6 +423,7 @@ runtimeWith raise =
     , systemTwo = SystemTwo (const (raise NoSystemTwo))
     , parallel = sequence
     , observe = const (pure ())
+    , journal = Nothing
     , scope = Scope (\enter returned exited body -> enter >>= \case
         Left r -> pure r
         Right () -> body >>= \case

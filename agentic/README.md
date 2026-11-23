@@ -715,6 +715,84 @@ plumbing-heavy `each` emits a lot of events.
 
 None of this touches `withStore` - recorded answers stay valid.
 
+### Save a run and continue it later
+
+`withStore` caches model answers while you edit. To resume a particular run,
+use `withJournal` instead. Model turns, judgements and completed tool calls
+are then saved by their position in the run. A new `durably` step also saves
+an ordinary effect's result:
+
+```haskell
+import Agentic
+import Agentic.Codec qualified as C
+import Agentic.IO (withJournal)
+import Agentic.Schema (Shape (..))
+import Data.Text (Text)
+
+-- Persistence codecs are explicit. They must reconstruct the full value
+-- needed after a restart, not just the fields a model needs to see.
+textCodec :: C.Codec Text
+textCodec = C.primitive (SString Nothing) String $ \case
+  String value -> Right value
+  _ -> Left "expected text"
+
+sendStep :: Agentic IO Text Text
+sendStep = durably textCodec textCodec $ \stableKey message ->
+  sendMessage (durableKeyText <$> stableKey) message
+-- sendMessage is your effect. Pass its idempotency key on if the service
+-- supports one. Nothing means this runtime has no journal.
+
+resume :: IO Text
+resume = do
+  rt <- withJournal "run-42.jsonl"
+    (JournalIdentity "run-42" "workflow-v1") runtime
+  interpret rt sendStep "Hello"
+```
+
+Run `resume` again with the same input and identities: a saved result comes
+back through its codec, and work past the saved part runs live. Loop indices,
+recursive calls and tool positions distinguish repeated requests. List totals
+are omitted from journal keys, so a stable prefix can still match when a list
+grows. Observation occurrences keep their totals.
+
+A completed tool call skips its whole body. If a tool stops part way through,
+its body runs again, restoring any completed inner tool calls and `durably`
+steps. Put an independently irreversible action behind its own durable step.
+Plain `act` always runs. Changed branches or loop positions can produce new
+keys and run live; input checks only catch differences on existing keys.
+The caller must keep root input stable and supply a new revision identity
+when code, codecs or provider configuration changes. Revisions cannot migrate.
+
+This is at-least-once execution. If an effect happens but its result isn't
+saved, it may happen again. Make it safe to repeat, using the run-scoped key
+where the other side supports deduplication. Recording forces the encoded
+result before completion, even where a live run would leave it lazy. Codecs
+must accept JSON object field reordering and whole numbers represented as
+integers. Saved results restore values, not resources or state changes in an
+`IORef` or the monad.
+
+The file is plain JSONL. One process/runtime owns it at a time, by convention.
+Writes within that runtime are serialised and flushed before completion is
+reported. An unreadable line fails loading, including an incomplete final line.
+A crash mid-append can leave the file unloadable. There is no repair,
+cross-process lock or promise about power loss. After a write failure, reopen
+the journal rather than reuse its failed handle. Each nested `interpret`
+needs its own run namespace. A different run or revision,
+a mismatched request, or a result that no longer decodes is an error, never
+permission to rerun the effect.
+
+For another backend, supply `Runtime.journal` using `Journal`'s initialise,
+lookup and save hooks. They work in any monad. Records keep an exact canonical
+request fingerprint separately from the result; draft requests include all
+history, so long conversations consume quadratic journal space. The backend
+may compress those values without changing their meaning.
+
+A hit emits `Restored` after entry and validation, before return. Drafts mark
+each restored turn separately; a tool dispatched by a restored turn can still
+run live. Skipped tool bodies emit no events. Keep each resumed attempt's
+observations in a separate recording. Waiting for external answers is not
+part of this API yet.
+
 ## History
 
 v0 - the Kleisli-arrow prototype that used Dhall as its output format (bless

@@ -4,6 +4,9 @@ module Agentic.Interpret
   , preflight
   ) where
 
+import Agentic.Journal
+import Agentic.Internal.Replay
+import Agentic.Value (Value (..), lookupField)
 import Agentic.Contract (Codec (..), Structure, compileModel)
 import Agentic.Internal.Core
 import Agentic.Internal.Address
@@ -19,7 +22,10 @@ import Data.Text (Text)
 -- Let concrete callers specialise the monad operations around each scope.
 {-# INLINABLE interpret #-}
 interpret :: forall m i o. Monad m => Runtime m -> Agentic m i o -> i -> m o
-interpret rt flow input = within root Nothing RunNode [] Nothing Nothing (const Completed) (const Nothing) $
+interpret rt flow input = within root Nothing RunNode [] Nothing Nothing (const Completed) (const Nothing) $ do
+  case rt.journal of
+    Nothing -> pure ()
+    Just j -> j.initialise
   case staticFlow flow >>= (\plan -> validate plan >> pure plan) of
     Left e -> failWith rt e
     Right plan -> run plan
@@ -32,6 +38,40 @@ interpret rt flow input = within root Nothing RunNode [] Nothing Nothing (const 
     (\a -> emit key parent kind path (Returned (outcome a)) (payload a) >> pure a)
     (emit key parent kind path)
     (Right <$> action)
+  -- Only operation boundaries call this helper. With journaling disabled,
+  -- neither keys nor codecs/requests are demanded.
+  recorded :: forall a. JournalOperation -> Occurrence -> Maybe Occurrence -> NodeType
+    -> [Note] -> Value -> (a -> Value) -> (Value -> Either Text a)
+    -> (Maybe DurableKey -> m a) -> m a
+  recorded op occurrence parent kind path request encode decode live = case rt.journal of
+    Nothing -> live Nothing
+    Just j -> do
+      let key = journalKey op occurrence
+      keyValue <- canonical (journalKeyValue key)
+      fingerprint <- canonical request
+      found <- j.lookupRecord keyValue
+      case found of
+        Just stored -> do
+          record <- canonical stored
+          result <- case record of
+            Object fs -> case (lookupField "request" fs,lookupField "result" fs) of
+              (Just old,Just result)
+                | old == fingerprint -> pure result
+                | otherwise -> failWith rt (JournalFailure (JournalDiverged key))
+              _ -> corrupt key "missing completion fields"
+            _ -> corrupt key "expected a completion object"
+          value <- either (corrupt key) pure (decode result)
+          emit occurrence parent kind path (Restored op) Nothing
+          pure value
+        Nothing -> do
+          value <- live (Just (DurableKey j.identity.namespace key))
+          result <- canonical (encode value)
+          let record = Object [("request",fingerprint),("result",result)]
+          j.saveRecord keyValue record
+          pure value
+  canonical = either (failWith rt . JournalFailure . JournalInvalidValue) pure . canonicalValue
+  corrupt :: forall a. JournalKey -> Text -> m a
+  corrupt key = failWith rt . JournalFailure . JournalDecodeError key
   run plan = go plan [] root [] flow input
    where
     go :: forall a b. StaticFlow -> [ContextFrame] -> Occurrence -> [Note] -> Agentic m a b -> a -> m b
@@ -79,10 +119,16 @@ interpret rt flow input = within root Nothing RunNode [] Nothing Nothing (const 
       (TakeSecond, SSecondHalf) -> pure (snd x)
       (Arr f, SGlue) -> pure (f x)
       (Act f, SEffect) -> f x
+      (Durable input output f, SDurable) ->
+        recorded DurableEffect key parent EffectNode path (input.encode x)
+          output.encode output.decode (\stable -> f stable x)
       (Judge inputTree qs, SJudge _ _) -> do
         input <- compile path inputTree
         let request = JudgeRequest (input.encode x) qs.specs
-        answers <- if null qs.specs then pure [] else rt.systemOne.ask request
+        answers <- if null qs.specs then pure [] else
+          recorded Judgement key parent JudgeNode path (judgeRequestValue request)
+            encodeStoredAnswers (fromMaybeDecode "invalid recorded answers" decodeStoredAnswers)
+            (const (rt.systemOne.ask request))
         emit key parent JudgeNode path Judged (Just (JudgePayload request answers))
         answered (decodeAnswers qs answers)
       (Draft inTree outTree instruction toolTrees, SDraft _ _ _ staticTools) -> do
@@ -97,7 +143,11 @@ interpret rt flow input = within root Nothing RunNode [] Nothing Nothing (const 
               , outputSchema = out.schema, history = [] }
         emit key parent DraftNode path Drafting (Just (DraftPayload conversation))
         let loop turnIndex past = do
-              turn <- rt.systemTwo.ask conversation{history = past}
+              let request = conversation{history = past}
+              turn <- recorded (DraftTurn turnIndex) key parent DraftNode path
+                (conversationValue request) encodeStoredTurn
+                (fromMaybeDecode "invalid recorded turn" decodeStoredTurn)
+                (const (rt.systemTwo.ask request))
               let actionKind = case turn.action of Respond _ -> Response; CallTools _ -> ToolBatch
               emit key parent DraftNode path (Turned turnIndex actionKind) (Just (TurnPayload turn))
               case turn.action of
@@ -133,14 +183,36 @@ interpret rt flow input = within root Nothing RunNode [] Nothing Nothing (const 
       context = CallFrame caller.address turn position call.callId : caller.context
       key = Occurrence (child caller.address CallScope) context
       body = case find ((== call.name) . compiledToolName) tools of
-        Nothing -> pure (UnknownTool, ToolFailed ("there is no tool named " <> call.name))
-        Just (CompiledTool binding target cursor name _ input out body) -> do
+        Nothing -> saveCall Nothing Nothing (const (Left "unknown tool has no output codec"))
+          (pure (UnknownTool, ToolFailed ("there is no tool named " <> call.name)))
+        Just (CompiledTool binding target cursor name _ input out toolBody) -> do
           emit key (Just caller) CallNode path (CallResolved binding target) Nothing
-          case input.decode call.input of
-            Left problem -> pure (InvalidInput, ToolFailed ("invalid input: " <> problem))
-            Right i -> do
-              result <- go cursor context key (path <> [Note name Nothing]) body i
-              pure (CallOk, ToolOk (out.encode result))
+          let check value = () <$ out.decode value
+              live = case input.decode call.input of
+                Left problem -> pure (InvalidInput, ToolFailed ("invalid input: " <> problem))
+                Right i -> do
+                  result <- go cursor context key (path <> [Note name Nothing]) toolBody i
+                  pure (CallOk, ToolOk (out.encode result))
+          saveCall (Just binding) (Just target) check live
+      saveCall binding target validateOutput live =
+        let addressValue = maybe Null (String . addressText)
+            request = Object [("name",String call.name),("input",call.input)
+                             ,("binding",addressValue binding),("target",addressValue target)]
+            encode completion = Object
+              [("binding",addressValue binding),("target",addressValue target)
+              ,("completion",completionValue completion)]
+            decode (Object fs)
+              | lookupField "binding" fs == Just (addressValue binding)
+              , lookupField "target" fs == Just (addressValue target)
+              , Just v <- lookupField "completion" fs = do
+                  c@(outcome,result) <- decodeCompletion v
+                  case (outcome,result,binding) of
+                    (CallOk,ToolOk value,Just _) -> validateOutput value >> pure c
+                    (InvalidInput,ToolFailed _,Just _) -> pure c
+                    (UnknownTool,ToolFailed _,Nothing) -> pure c
+                    _ -> Left "inconsistent tool completion"
+            decode _ = Left "invalid tool binding or completion"
+         in recorded ToolExecution key (Just caller) CallNode path request encode decode (const live)
 
 data CompiledTool m where
   CompiledTool :: Address -> Address -> StaticFlow -> Text -> Text -> Codec i -> Codec o -> Agentic m i o -> CompiledTool m
@@ -159,6 +231,7 @@ kind cursor = case cursor.shape of
     SFirstHalf -> FirstHalfNode
     SSecondHalf -> SecondHalfNode
     SEffect -> EffectNode
+    SDurable -> EffectNode
     SDraft {} -> DraftNode
     SJudge {} -> JudgeNode
   SSeq {} -> SequenceNode

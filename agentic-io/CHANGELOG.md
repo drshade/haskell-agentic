@@ -1,5 +1,13 @@
 # Changelog for agentic-io
 
+## Unreleased
+
+* Write model caches and journals as UTF-8 bytes, independent of locale.
+
+* Add `openJournal` and `withJournal` for strict JSONL workflow replay. Writes
+  within a runtime are serialised and flushed before acknowledgement; unreadable
+  lines fail loading. One owner is assumed, with no repair or power-loss promise.
+
 ## 0.2.1.0 - 2026-11-06
 
 * Follow Agentic's `Structure`/`Outline` API and fallible model compilation.

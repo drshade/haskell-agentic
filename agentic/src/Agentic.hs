@@ -10,6 +10,7 @@ module Agentic
   ( module Agentic.Core
   , module Agentic.Contract
   , module Agentic.Questions
+  , module Agentic.Journal
   , module Agentic.Runtime
   , module Agentic.Interpret
   , module Agentic.Describe
@@ -22,6 +23,7 @@ module Agentic
 import Agentic.Contract (Case, Structure, Fields)
 import Agentic.Contract hiding (Case (..), Structure (..), Fields (..))
 import Agentic.Core
+import Agentic.Journal
 import Agentic.Describe
 import Agentic.Interpret
 import Agentic.Questions
