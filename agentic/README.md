@@ -544,9 +544,8 @@ flowchart TD
 ```
 
 `repeatUntil` is the only loop in the language, and it checks its condition
-before each round. Its diagram shows that check as a `Done?` diamond:
-`continue` enters the body, and `done` leaves the loop, even if it has run
-zero times. Every body exit returns to the diamond.
+before each round. In the diagram that check is the `Done?` diamond, so a game
+that's already over goes straight past the body.
 
 `cabal run tictactoe` plays a game on OpenAI, where the dino
 project runs on Claude - same flow code either way.
