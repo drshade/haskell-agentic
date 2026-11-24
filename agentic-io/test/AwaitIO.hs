@@ -54,8 +54,8 @@ oneWait (RunWaiting (w NE.:| [])) = pure w
 oneWait other = expectationFailure ("expected one wait: " <> show other) >> fail "missing wait"
 
 childFlow :: FilePath -> Agentic IO Int Int
-childFlow file = durably intCodec intCodec (\_ n -> appendFile (file<>".effects") "once\n" >> pure (n+1))
-  >>> await intCodec intCodec
+childFlow file = durablyWith intCodec intCodec (\_ n -> appendFile (file<>".effects") "once\n" >> pure (n+1))
+  >>> awaitWith intCodec intCodec
   >>> act (\n -> appendFile (file<>".after") (show n<>"\n") >> pure (n+1))
 
 childMode :: IO Bool
@@ -91,7 +91,7 @@ spec = H.describe "external replies with an IO journal" $ do
 
   it "distinguishes a descriptor mismatch from a backing journal revision mismatch" $ withPath $ \file -> do
     rt <- open file
-    let flow = await intCodec intCodec
+    let flow = awaitWith intCodec intCodec
     w <- resumable rt flow 1 >>= oneWait
     let journal = case rt.journal of Just j -> j; Nothing -> error "missing journal"
         wrongRevision = JournalIdentity "await-run" "r2"
@@ -110,7 +110,7 @@ spec = H.describe "external replies with an IO journal" $ do
     let output = C.primitive (SObject []) (\(a,b) -> Object [("b",Integer (toInteger b)),("a",Integer (toInteger a))]) $ \case
           Object [("a",Integer a),("b",Integer b)] -> Right (fromInteger a::Int,fromInteger b::Int)
           _ -> Left "expected canonical a,b"
-        flow = await intCodec output
+        flow = awaitWith intCodec output
     w <- resumable rt flow 1 >>= oneWait
     fulfil rt flow w (Object [("b",Number 2.0),("a",Number 1.0)]) `shouldReturn` Right ()
     fulfil rt flow w (Object [("a",Integer 1),("b",Integer 2)]) `shouldReturn` Right ()
@@ -120,7 +120,7 @@ spec = H.describe "external replies with an IO journal" $ do
 
   it "returns invalid replies as data without changing the journal" $ withPath $ \file -> do
     rt <- open file
-    let flow = await intCodec intCodec
+    let flow = awaitWith intCodec intCodec
     w <- resumable rt flow 1 >>= oneWait
     originalBytes <- BS.readFile file
     fulfil rt flow w (String "no") `shouldReturn` Left (ReplyInvalid "expected Int")
@@ -134,7 +134,7 @@ spec = H.describe "external replies with an IO journal" $ do
   it "reports a wait payload and restores with Entered, Restored AwaitedReply, Returned" $ withPath $ \file -> do
     rt <- open file
     events <- newIORef []
-    let flow = await intCodec intCodec `named` "approval"
+    let flow = awaitWith intCodec intCodec `named` "approval"
         observed = observing (\e -> modifyIORef' events (e:)) rt
     w <- resumable observed flow 1 >>= oneWait
     firstEvents <- reverse <$> readIORef events
@@ -153,8 +153,8 @@ spec = H.describe "external replies with an IO journal" $ do
     waiting <- newEmptyMVar
     count <- newIORef (0::Int)
     let observed = observing (\e -> when (e.nodeType == AwaitNode && e.happened == Suspended) (putMVar waiting ())) (concurrently rt)
-        effect = durably intCodec intCodec (\_ n -> readMVar waiting >> modifyIORef' count (+1) >> pure (n+1))
-        flow = await intCodec intCodec &&& effect
+        effect = durablyWith intCodec intCodec (\_ n -> readMVar waiting >> modifyIORef' count (+1) >> pure (n+1))
+        flow = awaitWith intCodec intCodec &&& effect
     outcome <- Timeout.timeout 2000000 (resumable observed flow 1)
     w <- case outcome of Just r -> oneWait r; _ -> fail "parallel wait deadlocked"
     readIORef count `shouldReturn` 1
@@ -170,7 +170,7 @@ spec = H.describe "external replies with an IO journal" $ do
     let observed = observing (\e -> do
           atomicModifyIORef' events (\es -> (e:es,()))
           when (e.nodeType == AwaitNode && e.happened == Suspended) (putMVar waiting ())) (concurrently rt)
-        flow = await intCodec intCodec &&& act (\_ -> readMVar waiting >> throwIO (ErrorCall "sibling") :: IO Int)
+        flow = awaitWith intCodec intCodec &&& act (\_ -> readMVar waiting >> throwIO (ErrorCall "sibling") :: IO Int)
     result <- Timeout.timeout 2000000 (try (resumable observed flow 1))
     result `shouldSatisfy` \case Just (Left (ErrorCall "sibling")) -> True; _ -> False
     es <- readIORef events
@@ -184,7 +184,7 @@ spec = H.describe "external replies with an IO journal" $ do
             modifyIORef' events (e:)
             when (e.nodeType == AwaitNode && e.happened == Suspended) $
               if cancel then throwIO ThreadKilled else throwIO (ErrorCall "observer")) rt
-      result <- try (resumable observed (await intCodec intCodec) 1)
+      result <- try (resumable observed (awaitWith intCodec intCodec) 1)
       case result of
         Left (e::SomeException) ->
           if cancel then (fromException e :: Maybe AsyncException) `shouldBe` Just ThreadKilled
@@ -205,7 +205,7 @@ spec = H.describe "external replies with an IO journal" $ do
         -- a recursive reference. The codecs belong to b's finite definition.
         (a,b) = recursiveTools $ \(_,b') ->
           (tool @Int @Int "a" "" (draftWith [b'] "call b")
-          ,tool @Int @Int "b" "" (act (\n -> modifyIORef' calls (+1) >> pure n) >>> await requestCodec replyCodec))
+          ,tool @Int @Int "b" "" (act (\n -> modifyIORef' calls (+1) >> pure n) >>> awaitWith requestCodec replyCodec))
         flow = draftWith @Int @Int [a,b] "both"
         provider = SystemTwo $ \c -> pure $ case (c.instruction.text,c.history) of
           ("both",[]) -> Turn (Raw Null) (CallTools [ToolCall "a" "a" (Integer 1),ToolCall "b" "b" (Integer 1)])

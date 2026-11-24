@@ -29,10 +29,9 @@ in the providers you actually use:
 | `agentic-aeson` | shared by the providers: JSON conversions and strict JSON Schema |
 | `examples` | the examples in this README (not published) |
 
-All the examples below live in `examples/`. `cabal run dino`,
-`cabal run tictactoe`, `cabal run review` and `cabal run kitchensink` run
-against the real models, so copy `.env.example` to `.env` and fill in your
-keys first. `cabal run email-approval` has an offline demo and needs no keys.
+All the examples below live in `examples/` and use real models. Copy
+`.env.example` to `.env` and fill in your keys first. The email approval
+example uses Claude to draft, but its sender only prints the email.
 
 ## The big idea
 
@@ -722,25 +721,16 @@ particular run is a different job, and that's `withJournal`. It saves every
 model turn, judgement and completed tool call by where it sits in the run, so
 the next attempt picks up where the last one stopped.
 
-An `act` has no way to save its result, so there's `durably` - an `act` with a
-codec on each side:
+An `act` has no way to save its result, so there's `durably`. It uses
+`Persist` to save its input and result:
 
 ```haskell
-{-# LANGUAGE ImportQualifiedPost, LambdaCase, OverloadedStrings #-}
-
 import Agentic
-import Agentic.Codec qualified as C
 import Agentic.IO (withJournal)
-import Agentic.Schema (Shape (..))
 import Data.Text (Text)
 
-textCodec :: C.Codec Text
-textCodec = C.primitive (SString Nothing) String $ \case
-  String value -> Right value
-  _ -> Left "expected text"
-
 sendStep :: Agentic IO Text Text
-sendStep = durably textCodec textCodec $ \stableKey message ->
+sendStep = durably $ \stableKey message ->
   sendMessage (durableKeyText <$> stableKey) message
 
 resume :: IO Text
@@ -749,6 +739,26 @@ resume = do
     (JournalIdentity "run-42" "workflow-v1") runtime
   interpret rt sendStep "Hello"
 ```
+
+For your own records and sum types, derive `Persist` alongside `Generic`:
+
+```haskell
+data Approval = Approve | Reject
+  deriving (Generic, Persist)
+```
+
+Persistence saves every field, independently of what a model's `Contract`
+shows. Stock instances cover text, booleans, integers, characters, lists,
+optional values, tuples and `Either`. Nested `Maybe` values stay distinct.
+There are no floating-point instances. Generic recursive schemas fail with
+`RecursivePersistence` when the codec is built, rather than hanging.
+
+Names are stored verbatim. Records and newtypes use a constructor tag and a
+`fields` object. All-nullary enums use strings, so adding the first constructor
+with a payload changes the enum's stored form. Missing or extra fields fail
+decoding. Bump the flow revision when changing a persisted type or codec.
+For a custom type, write `persist = persistWith myCodec`. `awaitWith` and
+`durablyWith` also accept explicit codecs for individual steps.
 
 `sendMessage` is yours. Run `resume` twice and the message goes out once - the
 second time the saved result comes back through the codec, and anything past
@@ -775,7 +785,8 @@ A few things that will bite you:
   something different and that changes a branch or a loop, the run just goes
   the new way. If it changes the input of a step that was saved, the resume
   fails there - it won't hand you a stale result.
-- Resume with the same input you started with. Nothing can check that either.
+- With the low-level interpreter, resume with the same input you started with.
+  The `runIn` helper below saves and restores that input for you.
 - The second name in `JournalIdentity` is your revision. Change it when the
   code, the codecs or the provider config change, and old journals are refused.
   They don't migrate.
@@ -810,9 +821,42 @@ days. You don't want a process sat there for two days. `await` asks, and if
 the reply isn't in the journal yet the run stops and tells you what it's
 waiting for:
 
+For a local application, `Agentic.IO` can own the saved input and questions:
+
+```haskell
+askStep :: Agentic IO Text Bool
+askStep = await @Bool
+
+run = runIn "leave-request" (JournalIdentity "request-42" "leave-v1")
+  runtime askStep
+
+-- In one process:
+startRun run "Can Sam take Friday off?"
+-- In a later process, after showing question 0 to Sam:
+answerRun run 0 True
+```
+
+`startRun` needs a new or empty directory. `resumeRun` restores the original input.
+`questions run` reads the last successful question set without running any
+work, and `asked @RequestType question` decodes a question for your UI.
+Each question has a short ticket that stays the same across resumes and is
+never reused. `answerRun` rejects closed tickets, validates the reply, saves it
+and resumes. Reply types are checked against the addressed wait at runtime,
+so a wrong type comes back as `AnswerRejected` without being saved.
+`answerRunValue` accepts a JSON-shaped `Value` for hosts with a web interface.
+
+Use one command at a time per run directory. The helper publishes questions
+only after a successful attempt. A failure leaves the previous set intact.
+The run id must be unique within your application, and the revision is your
+promise that code, types and model configuration still match. A runtime passed
+to `runIn` must not already have a journal. Storage failures are `RunError`
+exceptions, while expected answer refusals are returned as `Either`.
+
+If you own the storage, the lower-level operations are still available:
+
 ```haskell
 askStep :: Agentic IO Text Text
-askStep = await textCodec textCodec
+askStep = await @Text
 
 attempt :: IO ()
 attempt = do
@@ -896,77 +940,78 @@ is in, the step emits `Restored` like any other saved step.
 
 ### Example: email approval
 
-An agent can draft an email, but you probably want to read it before it goes
-out. `examples/EmailApproval.hs` drafts one, asks you about it and exits. You
-can approve it, reject it, or ask for changes - and changes go round again: a
-new draft, then another question.
+Claude drafts an email, then the flow asks you to approve it and the process
+exits. Approve it in a later invocation and it prints the email. Reject it and
+it finishes without printing. The workflow in
+[EmailApproval.hs](https://github.com/drshade/haskell-agentic/blob/main/examples/EmailApproval.hs)
+is:
 
-Here's the shape of it. This one is drawn by hand. The
-[generated graph](https://github.com/drshade/haskell-agentic/blob/main/examples/diagrams/README.md#email-approval)
-is the real thing, but it also shows the brief and the draft being carried
-along, which makes it busy.
+```haskell
+data Email = Email {subject :: Text, body :: Text}
+  deriving (Eq, Show, Generic, Contract, Persist)
+
+data Decision = Approve | Reject deriving (Eq, Show, Generic, Persist)
+
+emailApproval :: (Email -> IO ()) -> Agentic IO Text ()
+emailApproval send =
+  draft @Email "Draft a short email from this brief."
+    >>> (returnA &&& await @Decision `named` "approve this email?")
+    >>> arr (\(mail,approved) -> if approved == Approve then Left mail else Right ())
+    >>> ((durably (\_ mail -> send mail) `named` "print approved email")
+      ||| arr id `named` "finish without sending") `named` "approved?"
+
+```
+
+The generated diagram shows the draft carried alongside your answer:
 
 ```mermaid
 flowchart TD
-  brief["email brief"] --> draft["draft email"]
-  draft --> review["await approval"]
-  review --> decision{"decision"}
-  decision -->|approve| send["durably: print approved email"]
-  decision -->|request changes| revise["draft revised email"]
-  revise --> review
-  decision -->|reject| stop["finish without sending"]
+  input(["input"])
+  n_flow_seq_0_0["draft @Email<br/>#quot;Draft a short email from this brief.#quot;"]
+  n_flow_seq_1_seq_0_fan_1_note_0["await<br/>approve this email?"]
+  n_flow_seq_1_seq_1_seq_1_note_0{"approved?"}
+  n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0["durably<br/>print approved email"]
+  n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0["arr<br/>finish without sending"]
+  output(["output"])
+  input --> n_flow_seq_0_0
+  n_flow_seq_0_0 --> n_flow_seq_1_seq_0_fan_1_note_0
+  n_flow_seq_0_0 --> n_flow_seq_1_seq_1_seq_1_note_0
+  n_flow_seq_1_seq_0_fan_1_note_0 --> n_flow_seq_1_seq_1_seq_1_note_0
+  n_flow_seq_1_seq_1_seq_1_note_0 -->|left| n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0
+  n_flow_seq_1_seq_1_seq_1_note_0 -->|right| n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0
+  n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0 --> output
+  n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0 --> output
 ```
 
-Try it in a new directory. Every command below is its own process, and none
-of them sits waiting for you to type. I've left the email text, the saved-file
-hints and the idempotency key out of the output:
-
-```console
-$ cabal run -v0 email-approval -- start email-run --demo \
-    "Tell Sam the café opens on Friday."
-[demo] Drafting email.
-Awaiting approval for draft 0.
-
-$ cabal run -v0 email-approval -- resume email-run
-Awaiting approval for draft 0.
-
-$ cabal run -v0 email-approval -- reply email-run 0 revise "Make it warmer."
-[demo] Drafting email.
-Awaiting approval for draft 1.
-
-$ cabal run -v0 email-approval -- reply email-run 1 approve
-FAKE SEND (no email delivered)
-Done: approved email sent by the fake sender.
-
-$ cabal run -v0 email-approval -- resume email-run
-Done: approved email sent by the fake sender.
-```
-
-The second command shows the same draft and doesn't call the model again. The
-last one restores the send from the journal, so there's no second `FAKE SEND`.
-Use `reject` instead of `approve` and it finishes without sending.
-
-You reply to a draft by its number. An answer to draft 0 can't approve draft
-1, and the CLI refuses a reply to a draft that isn't open any more.
-
-Everything is in the directory: the brief in `run.json`, the journal in
-`journal.jsonl`, each question in `pending-N.json` and which one is open in
-`state.json`. Run one command at a time per directory. `start` won't reuse a
-directory that already exists.
-
-The demo doesn't use a model. It builds the email from your brief, and on a
-revision it just quotes the changes you asked for. For real drafting put
-`ANTHROPIC_API_KEY` in the environment or in `.env` and start another run:
+With `ANTHROPIC_API_KEY` in the environment or `.env`, start a run from
+`examples/` in a directory without an existing `email-run`:
 
 ```sh
-cabal run email-approval -- start email-live --live \
-  "Tell Sam the café opens on Friday."
+cabal run email-approval -- email-run start "Tell Sam the café opens on Friday."
 ```
 
-Nothing is sent either way. The sender prints the approved email, and it's
-handed a key that stays the same for that send across restarts. A real sender
-would pass that key on to the email service, because `durably` can repeat an
-effect if the process dies after the send but before the result is saved.
+It prints the draft and `Approve or reject question 0.` The process has exited.
+You can show the same draft again without another model call:
+
+```sh
+cabal run email-approval -- email-run resume
+```
+
+Then answer the numbered question:
+
+```sh
+cabal run email-approval -- email-run approve 0
+# Or: cabal run email-approval -- email-run reject 0
+```
+
+Approval prints `FAKE SEND (no email delivered)` and the draft, then `Finished.`
+Rejection just prints `Finished.` Resuming a completed run doesn't print the
+email again. The library owns the files in `email-run`, and a reply to a closed
+question is refused.
+
+Choose another directory name to start another run. The example also uses that
+name as its local run identity. A real host supplies a unique run id. Its sender
+is only a print statement, so it ignores the idempotency key.
 
 ## History
 

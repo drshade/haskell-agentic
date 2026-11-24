@@ -2,9 +2,12 @@
 
 ## Unreleased
 
-* Add a runnable email-approval example: draft, suspend for approval or revision,
-  and resume through the journal. Includes an offline demo, a fake durable sender,
-  numbered reply files, restart tests and a README walkthrough.
+* Add Generic-derived full-value `Persist` codecs, independent of model
+  contracts. `await @Reply` and `durably action` use them by default. The old
+  explicit-codec functions are now `awaitWith` and `durablyWith` (API break).
+  Low-level `resumable`, `fulfil`, descriptors and journal wire format are unchanged.
+* Simplify email approval to a Claude draft, typed approval and fake durable
+  sender, using the file-backed run helper. Embed its generated diagram.
 
 * Add `await`, `resumable` and `fulfil` for typed external replies. Independent
   branches collect their reached waits, ordinary failures stay separate, and

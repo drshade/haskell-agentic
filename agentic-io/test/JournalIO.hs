@@ -43,7 +43,7 @@ withFilePath = bracket fresh cleanup
     [file,file <> ".effects"]
 
 counted :: IORef Int -> Agentic IO Int Int
-counted count = durably intCodec intCodec $ \key n -> do
+counted count = durablyWith intCodec intCodec $ \key n -> do
   case key of Nothing -> fail "expected a run-scoped key"; Just _ -> pure ()
   atomicModifyIORef' count (\c -> (c+1,()))
   pure (n+1)
@@ -63,7 +63,7 @@ isJournal _ = False
 childMode :: IO Bool
 childMode = getArgs >>= \case
   ["--journal-child",mode,file,scenario] -> do
-    let checkpoint = durably intCodec intCodec (\key n -> do
+    let checkpoint = durablyWith intCodec intCodec (\key n -> do
           appendFile (file <> ".effects") (maybe "missing key" (T.unpack . durableKeyText) key <> "\n")
           pure n)
         self = recursiveTool $ \t -> tool @Int @Int "self" "" $
@@ -160,7 +160,7 @@ spec = H.describe "durable journal" $ do
     rt <- recording file runtime
     interpret rt (counted n) 1 `shouldReturn` 2
     let bad = C.Codec intCodec.schema intCodec.encode (const (Left "old result cannot decode"))
-        flow = durably intCodec bad (\_ _ -> modifyIORef' n (+1) >> pure (9 :: Int))
+        flow = durablyWith intCodec bad (\_ _ -> modifyIORef' n (+1) >> pure (9 :: Int))
     again <- recording file runtime
     interpret again flow 1 `shouldThrow` \case
       JournalFailure (JournalDecodeError _ _) -> True
@@ -189,7 +189,7 @@ spec = H.describe "durable journal" $ do
           unicode = "café 🦖"
       withFilePath $ \file -> do
         n <- newIORef (0 :: Int)
-        let flow = durably textCodec textCodec (\_ t -> modifyIORef' n (+1) >> pure t)
+        let flow = durablyWith textCodec textCodec (\_ t -> modifyIORef' n (+1) >> pure t)
         rt <- recording file runtime
         interpret rt flow unicode `shouldReturn` unicode
         again <- recording file runtime
@@ -320,7 +320,7 @@ spec = H.describe "durable journal" $ do
   it "restores an inner recursive tool under an unfinished outer invocation" $ withFilePath $ \file -> do
     n <- newIORef (0 :: Int)
     stopped <- newIORef True
-    let mark = durably intCodec intCodec (\_ x -> modifyIORef' n (+1) >> pure x)
+    let mark = durablyWith intCodec intCodec (\_ x -> modifyIORef' n (+1) >> pure x)
         self = recursiveTool $ \t -> tool @Int @Int "self" "" $
           mark >>> draftWith [t] "recurse" >>> act (\x -> do
             stop <- readIORef stopped

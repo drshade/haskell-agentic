@@ -1,5 +1,6 @@
 module Main (main) where
 
+import RunIO qualified
 import AwaitIO qualified
 import JournalIO qualified
 import ObservationIO qualified
@@ -70,6 +71,7 @@ main = do
   unless waitingChild $ do
     child <- JournalIO.childMode
     unless child $ hspec $ do
+      RunIO.spec
       AwaitIO.spec
       JournalIO.spec
       ObservationIO.spec

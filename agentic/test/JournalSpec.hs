@@ -30,14 +30,14 @@ instance Monad Memory where
 spec :: Spec
 spec = H.describe "journal core" $ do
   it "runs without a journal without evaluating codecs or inventing a key" $ do
-    let flow = durably (error "input codec") (error "output codec") $ \key (x :: Int) ->
+    let flow = durablyWith (error "input codec") (error "output codec") $ \key (x :: Int) ->
           key `seq` pure (key,x)
     let (key,x) = runIdentity (interpret (runtimeWith (error . show)) flow 7)
     key `shouldBe` Nothing
     x `shouldBe` 7
 
   it "describes durable effects without running them or demanding their codecs" $ do
-    let flow = durably (error "input codec") (error "output codec")
+    let flow = durablyWith (error "input codec") (error "output codec")
           (\_ _ -> error "must not run") :: Agentic IO () ()
     case describe flow of
       Left e -> expectationFailure (show e)
@@ -51,7 +51,7 @@ spec = H.describe "journal core" $ do
           (\key -> Memory (\s -> Right (lookup key s,s)))
           (\key value -> Memory (\s -> Right ((),(key,value):s)))
         rt = (runtimeWith raise){journal=Just journal}
-        f = durably intCodec intCodec (\_ x -> pure (x+1))
+        f = durablyWith intCodec intCodec (\_ x -> pure (x+1))
     case (interpret rt f 4).runMemory [] of
       Left e -> expectationFailure (show e)
       Right (a,records) -> do
@@ -97,13 +97,13 @@ spec = H.describe "journal core" $ do
     let journal = Journal (JournalIdentity "run" "r1") (pure ())
           (const (pure Nothing)) (\_ _ -> writeIORef saved True)
         codec = C.Codec intCodec.schema (\_ -> Array [Integer 1,error "bad encoded tail"]) intCodec.decode
-        f = durably intCodec codec (\_ x -> pure x)
+        f = durablyWith intCodec codec (\_ x -> pure x)
     interpret runtime{journal=Just journal} f 1 `shouldThrow` anyErrorCall
     readIORef saved `shouldReturn` False
 
   it "fails lookup/init errors rather than invoking the effect" $ do
     effect <- newIORef False
-    let f = durably intCodec intCodec (\_ x -> writeIORef effect True >> pure x)
+    let f = durablyWith intCodec intCodec (\_ x -> writeIORef effect True >> pure x)
         journal = Journal (JournalIdentity "run" "r1") (pure ())
           (const (throwIO (ErrorCall "lookup failed"))) (\_ _ -> pure ())
     interpret runtime{journal=Just journal} f 1 `shouldThrow` anyErrorCall

@@ -25,7 +25,9 @@ module Agentic.Internal.Core
   , judge
   , act
   , durably
+  , durablyWith
   , await
+  , awaitWith
     -- * Tools
   , tool
     -- * Structure
@@ -46,6 +48,7 @@ module Agentic.Internal.Core
   ) where
 
 import Agentic.Codec (Codec)
+import Agentic.Persist (Persist, persistence)
 import Agentic.Journal (DurableKey)
 import Agentic.Contract (Structure, Contract (..), nominal)
 import Agentic.Questions (Probability, Questions, YesNo (..))
@@ -276,8 +279,8 @@ act = Step . Act
 -- may be reordered and integral numbers represented as Integer.
 -- Codecs must round-trip faithfully. Uncommitted effects may repeat, so make
 -- them idempotent (using the key where supported). Plain 'act' is unaffected.
-durably :: Codec i -> Codec o -> (Maybe DurableKey -> i -> m o) -> Agentic m i o
-durably i o f = Step (Durable i o f)
+durablyWith :: Codec i -> Codec o -> (Maybe DurableKey -> i -> m o) -> Agentic m i o
+durablyWith i o f = Step (Durable i o f)
 
 
 -- | A tool: a name and description for the model, and a flow to run.
@@ -337,5 +340,17 @@ gate p q =
 -- Requires a journal. Codecs are explicit and must accept canonical JSON.
 -- Use 'Agentic.Interpret.resumable' to collect all reached waits; plain
 -- 'Agentic.Interpret.interpret' raises an error carrying those waits instead.
-await :: Codec q -> Codec r -> Agentic m q r
-await q r = Step (Await q r)
+awaitWith :: Codec q -> Codec r -> Agentic m q r
+awaitWith q r = Step (Await q r)
+
+-- | Ask for a typed external reply, using full-value persistence.
+-- Derive Persist alongside Generic for your request and reply types.
+await :: forall r q m. (Persist q, Persist r) => Agentic m q r
+await = let q = persistence @q; r = persistence @r
+        in q `seq` r `seq` awaitWith q r
+
+-- | Journal an effect using derived full-value codecs. The action receives
+-- its stable idempotency key whenever a journal is installed.
+durably :: (Persist i, Persist o) => (Maybe DurableKey -> i -> m o) -> Agentic m i o
+durably action = let i = persistence; o = persistence
+                 in i `seq` o `seq` durablyWith i o action

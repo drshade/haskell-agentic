@@ -20,50 +20,26 @@ flowchart TD
 
 ## Email approval
 
-This is the generated data-flow graph for [EmailApproval.hs](../EmailApproval.hs).
-The extra edges carry the brief and draft while the flow asks for a decision.
-The [README walkthrough](../../README.md#example-email-approval) shows the CLI.
+Claude drafts an email and waits for approval in a later process.
+[Source](../EmailApproval.hs) · [Walkthrough](../../README.md#example-email-approval)
 
 ```mermaid
 flowchart TD
   input(["input"])
-  n_flow_seq_1_seq_0_fan_1_note_0["draft @Email<br/>draft email<br/>#quot;Draft the email. Apply any requested changes to the previous draft.#quot;"]
-  n_flow_seq_1_seq_1_seq_0_note_0["arr<br/>prepare review"]
-  n_flow_seq_1_seq_1_seq_1_seq_0_fan_1_note_0["await<br/>approve, revise or reject"]
-  subgraph n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_0["repeatUntil"]
-    n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_0_fan_0_0["takeFirst"]
-    n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_0_fan_1_seq_1_note_0["draft @Email<br/>draft email<br/>#quot;Draft the email. Apply any requested changes to the previous draft.#quot;"]
-    n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_1_seq_0_note_0["arr<br/>prepare revised review"]
-    n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_1_seq_1_fan_1_note_0["await<br/>approve, revise or reject"]
-  end
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_1_seq_1_note_0{"approved?"}
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_1_seq_1_note_choose_0_seq_0_note_0["durably<br/>print approved email"]
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_1_seq_1_note_choose_1_note_0["arr<br/>reject email"]
+  n_flow_seq_0_0["draft @Email<br/>#quot;Draft a short email from this brief.#quot;"]
+  n_flow_seq_1_seq_0_fan_1_note_0["await<br/>approve this email?"]
+  n_flow_seq_1_seq_1_seq_1_note_0{"approved?"}
+  n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0["durably<br/>print approved email"]
+  n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0["arr<br/>finish without sending"]
   output(["output"])
-  input --> n_flow_seq_1_seq_0_fan_1_note_0
-  input --> n_flow_seq_1_seq_1_seq_0_note_0
-  n_flow_seq_1_seq_0_fan_1_note_0 --> n_flow_seq_1_seq_1_seq_0_note_0
-  n_flow_seq_1_seq_1_seq_0_note_0 --> n_flow_seq_1_seq_1_seq_1_seq_0_fan_1_note_0
-  n_flow_seq_1_seq_1_seq_0_note_0 --> n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_0_fan_0_0
-  n_flow_seq_1_seq_1_seq_1_seq_0_fan_1_note_0 --> n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_0_fan_0_0
-  n_flow_seq_1_seq_1_seq_0_note_0 --> n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_0_fan_1_seq_1_note_0
-  n_flow_seq_1_seq_1_seq_1_seq_0_fan_1_note_0 --> n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_0_fan_1_seq_1_note_0
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_0_fan_0_0 --> n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_1_seq_0_note_0
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_0_fan_1_seq_1_note_0 --> n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_1_seq_0_note_0
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_1_seq_0_note_0 --> n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_1_seq_1_fan_1_note_0
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_1_seq_0_note_0 -.->|again| n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_0_fan_0_0
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_1_seq_0_note_0 -.->|again| n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_0_fan_1_seq_1_note_0
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_1_seq_1_fan_1_note_0 -.->|again| n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_0_fan_0_0
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_1_seq_1_fan_1_note_0 -.->|again| n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_0_fan_1_seq_1_note_0
-  n_flow_seq_1_seq_1_seq_0_note_0 --> n_flow_seq_1_seq_1_seq_1_seq_1_seq_1_seq_1_note_0
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_1_seq_0_note_0 --> n_flow_seq_1_seq_1_seq_1_seq_1_seq_1_seq_1_note_0
-  n_flow_seq_1_seq_1_seq_1_seq_0_fan_1_note_0 --> n_flow_seq_1_seq_1_seq_1_seq_1_seq_1_seq_1_note_0
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_0_repeat_seq_1_seq_1_seq_1_fan_1_note_0 --> n_flow_seq_1_seq_1_seq_1_seq_1_seq_1_seq_1_note_0
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_1_seq_1_note_0 -->|left| n_flow_seq_1_seq_1_seq_1_seq_1_seq_1_seq_1_note_choose_0_seq_0_note_0
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_1_seq_1_note_0 -->|right| n_flow_seq_1_seq_1_seq_1_seq_1_seq_1_seq_1_note_choose_1_note_0
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_1_seq_1_note_choose_0_seq_0_note_0 --> output
-  n_flow_seq_1_seq_1_seq_1_seq_1_seq_1_seq_1_note_choose_1_note_0 --> output
-
+  input --> n_flow_seq_0_0
+  n_flow_seq_0_0 --> n_flow_seq_1_seq_0_fan_1_note_0
+  n_flow_seq_0_0 --> n_flow_seq_1_seq_1_seq_1_note_0
+  n_flow_seq_1_seq_0_fan_1_note_0 --> n_flow_seq_1_seq_1_seq_1_note_0
+  n_flow_seq_1_seq_1_seq_1_note_0 -->|left| n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0
+  n_flow_seq_1_seq_1_seq_1_note_0 -->|right| n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0
+  n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0 --> output
+  n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0 --> output
 ```
 
 ## KitchenSink
