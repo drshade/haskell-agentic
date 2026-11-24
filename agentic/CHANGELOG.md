@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+* Add a runnable email-approval example: draft, suspend for approval or revision,
+  and resume through the journal. Includes an offline demo, a fake durable sender,
+  numbered reply files, restart tests and a README walkthrough.
+
 * Add `await`, `resumable` and `fulfil` for typed external replies. Independent
   branches collect their reached waits, ordinary failures stay separate, and
   completed journaled work replays after a reply. This works in pure monads

@@ -29,10 +29,10 @@ in the providers you actually use:
 | `agentic-aeson` | shared by the providers: JSON conversions and strict JSON Schema |
 | `examples` | the examples in this README (not published) |
 
-All the examples below live in `examples/` and run against the real models -
-`cabal run dino`, `cabal run tictactoe`, `cabal run review` and
-`cabal run kitchensink`. Copy `.env.example` to `.env` and fill in your keys
-first.
+The examples live in `examples/`. `cabal run dino`, `cabal run tictactoe`,
+`cabal run review` and `cabal run kitchensink` use real models; copy
+`.env.example` to `.env` and fill in your keys first. The email-approval example
+also has an offline demo, so you can try suspension without any keys.
 
 ## The big idea
 
@@ -893,6 +893,77 @@ None of this needs `IO`. It works in any monad a flow already runs in.
 When you're observing, a step that is waiting ends with `Suspended`, and so
 does every scope that stopped because of it. It isn't `Failed`. Once the reply
 is in, the step emits `Restored` like any other saved step.
+
+### Example: email approval
+
+An agent can draft an email, but sometimes you want to read it before it goes
+out. [EmailApproval.hs](https://github.com/drshade/haskell-agentic/blob/main/examples/EmailApproval.hs)
+drafts it, asks for approval and exits. You can approve it, reject it, or ask
+for changes. Changes go round the loop: a new draft, then another question.
+
+This is a **control-flow sketch**. The
+[generated data-flow graph](https://github.com/drshade/haskell-agentic/blob/main/examples/diagrams/README.md#email-approval)
+also shows how the brief and draft are carried through the flow.
+
+```mermaid
+flowchart TD
+  brief["email brief"] --> draft["draft email"]
+  draft --> review["await approval"]
+  review --> decision{"decision"}
+  decision -->|approve|send["durably: print approved email"]
+  decision -->|request changes|revise["draft revised email"]
+  revise --> review
+  decision -->|reject|stop["finish without sending"]
+```
+
+Try the demo in a new directory. Every command below starts a new process;
+none sits waiting for keyboard input. These are output excerpts: the email
+text, saved-file hints and idempotency key are omitted.
+
+```console
+$ cabal run -v0 email-approval -- start email-run --demo \
+    "Tell Sam the café opens on Friday."
+[demo] Drafting email.
+Awaiting approval for draft 0.
+
+$ cabal run -v0 email-approval -- resume email-run
+Awaiting approval for draft 0.
+
+$ cabal run -v0 email-approval -- reply email-run 0 revise "Make it warmer."
+[demo] Drafting email.
+Awaiting approval for draft 1.
+
+$ cabal run -v0 email-approval -- reply email-run 1 approve
+FAKE SEND (no email delivered)
+Done: approved email sent by the fake sender.
+
+$ cabal run -v0 email-approval -- resume email-run
+Done: approved email sent by the fake sender.
+```
+
+The second command shows the same draft without calling the model again.
+The last one restores the completed send, so there is no second `FAKE SEND`.
+Use `reject` instead of `approve` to finish without sending anything.
+
+Each reply names the draft you read. Draft 0's answer can't approve draft 1,
+and the CLI refuses replies to closed drafts. The directory holds the original
+brief and mode in `run.json`, the completion journal in `journal.jsonl`, numbered
+`pending-N.json` questions, and the current open question in `state.json`.
+Run one command at a time per directory. `start` refuses an existing directory.
+
+The demo uses a deterministic model: on revision it quotes your requested
+changes in the email. For real drafting, put `ANTHROPIC_API_KEY` in the
+environment or `.env` and start a separate run:
+
+```sh
+cabal run email-approval -- start email-live --live \
+  "Tell Sam the café opens on Friday."
+```
+
+Sending is still fake in both modes. The sender prints the approved email and
+receives a run-scoped idempotency key. A real sender would pass that key to the
+email service; `durably` can repeat an effect if it happened before its result
+was saved. Nothing in this example delivers email.
 
 ## History
 

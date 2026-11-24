@@ -11,6 +11,7 @@ import Data.List (nub)
 import KitchenSink (kitchenSink)
 import Dino (dinoProject)
 import DinoSpec qualified
+import EmailApproval qualified
 import TicTacToe (game)
 import Review (review)
 import System.Environment (getArgs)
@@ -63,6 +64,7 @@ main = do
               fail (name <> "." <> extension
                 <> " differs; inspect the rendering before regenerating")
           _ -> fail "usage: diagram-test [--write directory]") outputs
+  check "email-approval" (describe (EmailApproval.emailApproval EmailApproval.fakeSend))
   check "dino" (describe dinoProject)
   check "tictactoe" (describe game)
   check "review" (describe review)
