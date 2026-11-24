@@ -9,8 +9,9 @@
 -- changes that wire form. Missing and extra fields fail decoding, without
 -- defaults. Bump the flow revision when changing types or codecs.
 --
--- Nested optional values round-trip. Floating-point instances are not supplied:
--- JSON cannot preserve every IEEE value. Ordinary recursive Generic schemas
+-- Nested optional values round-trip. No Double, Float, Char or String instances
+-- are supplied: JSON cannot preserve all their values faithfully in their usual
+-- wire form. Use Text for strings or provide a custom codec. Recursive Generic schemas
 -- raise RecursivePersistence when a codec or inferred flow step is forced,
 -- including through describe, preflight or first interpretation. The guard
 -- cannot see through custom instances or detect polymorphic recursion whose
@@ -69,7 +70,7 @@ forceSchema s = case s.shape of
   SNullable inner -> forceSchema inner
   _ -> ()
 
--- | Internal constraint supporting Generic derivation.
+-- | Internal constraint, exported only for the Generic default signature.
 class GPersist (f :: Type -> Type) where
   pcases :: [SomeTypeRep] -> [CaseCodec (f p)]
 instance GPersist f => GPersist (M1 D d f) where
@@ -95,7 +96,7 @@ instance (Constructor c, PFields f) => GPersist (M1 C c f) where
 wrapCase :: (a -> b) -> (b -> Maybe a) -> CaseCodec a -> CaseCodec b
 wrapCase f g c = CaseCodec c.tag c.doc c.fields (\b -> g b >>= c.encode) (fmap f . c.decode)
 
--- | Internal field traversal constraint supporting Generic derivation.
+-- | Internal field constraint, exported only for the Generic default signature.
 class PFields (f :: Type -> Type) where
   pfields :: [SomeTypeRep] -> Int -> (Int, ObjectCodec (f p) (f p))
 instance PFields U1 where pfields _ n = (n,pure U1)
@@ -131,12 +132,9 @@ instance Persist Integer where
     v -> mismatch "an integer" v
 instance Persist Int where
   persist = persistWith $ primitive SInteger (Integer . toInteger) $ \case
-    Integer n | n >= toInteger (minBound :: Int), n <= toInteger (maxBound :: Int) -> Right (fromInteger n)
+    Integer n | n >= toInteger (minBound :: Int), n <= toInteger (maxBound :: Int) ->
+      Right (fromInteger n)
     v -> mismatch "an Int in range" v
-instance Persist Char where
-  persist = persistWith $ primitive (SString Nothing) (String . T.singleton) $ \case
-    String t | [c] <- T.unpack t -> Right c
-    v -> mismatch "one character" v
 instance Persist () where
   persist = persistWith $ primitive SNull (const Null) $ \case
     Null -> Right ()

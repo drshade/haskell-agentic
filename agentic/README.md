@@ -29,9 +29,10 @@ in the providers you actually use:
 | `agentic-aeson` | shared by the providers: JSON conversions and strict JSON Schema |
 | `examples` | the examples in this README (not published) |
 
-All the examples below live in `examples/` and use real models. Copy
-`.env.example` to `.env` and fill in your keys first. The email approval
-example uses Claude to draft, but its sender only prints the email.
+All the examples below live in `examples/` and run against the real models -
+`cabal run dino`, `cabal run tictactoe`, `cabal run review`,
+`cabal run kitchensink` and `cabal run email-approval`. Copy `.env.example` to
+`.env` and fill in your keys first.
 
 ## The big idea
 
@@ -721,8 +722,8 @@ particular run is a different job, and that's `withJournal`. It saves every
 model turn, judgement and completed tool call by where it sits in the run, so
 the next attempt picks up where the last one stopped.
 
-An `act` has no way to save its result, so there's `durably`. It uses
-`Persist` to save its input and result:
+An `act` has no way to save its result, so there's `durably` - an `act` whose
+input and result are saved:
 
 ```haskell
 import Agentic
@@ -740,26 +741,6 @@ resume = do
   interpret rt sendStep "Hello"
 ```
 
-For your own records and sum types, derive `Persist` alongside `Generic`:
-
-```haskell
-data Approval = Approve | Reject
-  deriving (Generic, Persist)
-```
-
-Persistence saves every field, independently of what a model's `Contract`
-shows. Stock instances cover text, booleans, integers, characters, lists,
-optional values, tuples and `Either`. Nested `Maybe` values stay distinct.
-There are no floating-point instances. Generic recursive schemas fail with
-`RecursivePersistence` when the codec is built, rather than hanging.
-
-Names are stored verbatim. Records and newtypes use a constructor tag and a
-`fields` object. All-nullary enums use strings, so adding the first constructor
-with a payload changes the enum's stored form. Missing or extra fields fail
-decoding. Bump the flow revision when changing a persisted type or codec.
-For a custom type, write `persist = persistWith myCodec`. `awaitWith` and
-`durablyWith` also accept explicit codecs for individual steps.
-
 `sendMessage` is yours. Run `resume` twice and the message goes out once - the
 second time the saved result comes back through the codec, and anything past
 the saved part runs live.
@@ -771,6 +752,34 @@ So the same request in two places is two entries.
 A tool call that finished is restored whole, and its body doesn't run. One that
 stopped part way runs its body again, restoring the `durably` steps and inner
 tool calls that did finish.
+
+Saving goes through `Persist`. Text, integers, booleans, lists, tuples, `Maybe`
+and `Either` already have it. For your own types, derive it next to `Generic`:
+
+```haskell
+data Approval = Approve | Reject
+  deriving (Generic, Persist)
+```
+
+This isn't the `Contract`. A contract is what the model sees, and it can leave
+fields out. `Persist` saves every field.
+
+What to know about it:
+
+- There's no `Double` or `Float`, and no `Char` or `String`. JSON can't hold
+  every one of them, so use `Text`, or bring your own codec.
+- A type that contains itself isn't supported. A derived one gets you
+  `RecursivePersistence` as soon as the flow is built - it doesn't hang. One
+  hidden behind a hand-written codec, or one whose type grows at every level,
+  isn't caught and can still hang.
+- Names are stored as you wrote them. Rename a field or a constructor, or add
+  a field, and old journals stop decoding. Nothing is defaulted. Change the
+  revision when you change a type.
+- An enum with no fields is stored as a string. Give one of its constructors a
+  field and the stored form of all of them changes.
+- For a type that needs its own codec, write `persist = persistWith myCodec`.
+  Or use `durablyWith` and `awaitWith`, which take the codecs for that one
+  step.
 
 A few things that will bite you:
 
@@ -785,8 +794,8 @@ A few things that will bite you:
   something different and that changes a branch or a loop, the run just goes
   the new way. If it changes the input of a step that was saved, the resume
   fails there - it won't hand you a stale result.
-- With the low-level interpreter, resume with the same input you started with.
-  The `runIn` helper below saves and restores that input for you.
+- Resume with the same input you started with. Nothing can check that either.
+  `runIn` (further down) saves the input and hands it back for you.
 - The second name in `JournalIdentity` is your revision. Change it when the
   code, the codecs or the provider config change, and old journals are refused.
   They don't migrate.
@@ -819,55 +828,68 @@ their own recording.
 Sometimes a flow has to ask a person something, and the answer might take two
 days. You don't want a process sat there for two days. `await` asks, and if
 the reply isn't in the journal yet the run stops and tells you what it's
-waiting for:
+waiting for.
 
-For a local application, `Agentic.IO` can own the saved input and questions:
+The easy way is to let `Agentic.IO` look after the files:
 
 ```haskell
 askStep :: Agentic IO Text Bool
 askStep = await @Bool
 
-run = runIn "leave-request" (JournalIdentity "request-42" "leave-v1")
-  runtime askStep
+leave :: Run Text Bool
+leave = runIn "leave-request"
+  (JournalIdentity "request-42" "leave-v1") runtime askStep
 
--- In one process:
-startRun run "Can Sam take Friday off?"
--- In a later process, after showing question 0 to Sam:
-answerRun run 0 True
+ask :: IO ()
+ask = startRun leave "Can Sam take Friday off?" >>= report
+
+answer :: Int -> Bool -> IO ()
+answer ticket yes = answerRun leave ticket yes >>= \case
+  Right progress -> report progress
+  Left refused -> T.putStrLn (answerRefusalText refused)
+
+report :: Progress Bool -> IO ()
+report = \case
+  RunFinished yes -> print yes
+  RunWaiting _ -> questions leave >>= mapM_ sendQuestion
 ```
 
-`startRun` needs a new or empty directory. `resumeRun` restores the original input.
-`questions run` reads the last successful question set without running any
-work, and `asked @RequestType question` decodes a question for your UI.
-Each question has a short ticket that stays the same across resumes and is
-never reused. `answerRun` rejects closed tickets, validates the reply, saves it
-and resumes. Reply types are checked against the addressed wait at runtime,
-so a wrong type comes back as `AnswerRejected` without being saved.
-`answerRunValue` accepts a JSON-shaped `Value` for hosts with a web interface.
+`sendQuestion` is yours. `ask` comes back `RunWaiting` and the process can
+exit. Every question has a ticket - a small number that stays the same across
+restarts and is never used twice - and that's what you hand to whoever is
+answering. `answer` checks the reply, saves it and carries on with the run.
 
-Use one command at a time per run directory. The helper publishes questions
-only after a successful attempt. A failure leaves the previous set intact.
-The run id must be unique within your application, and the revision is your
-promise that code, types and model configuration still match. A runtime passed
-to `runIn` must not already have a journal. Storage failures are `RunError`
-exceptions, while expected answer refusals are returned as `Either`.
+`runIn` keeps everything in that directory: the input you started with, the
+journal and the questions that are open. So `resumeRun leave` needs nothing
+from you, and `questions leave` reads the open questions without running
+anything. `asked @Text question` gives you the request back as your own type.
 
-If you own the storage, the lower-level operations are still available:
+- `startRun` wants a directory that doesn't exist yet, or an empty one. For a
+  run that's already there, use `resumeRun`.
+- One command at a time per directory.
+- The open questions only change when an attempt comes back `RunFinished` or
+  `RunWaiting`. One that fails leaves them as they were.
+- A ticket that's closed comes back as `QuestionClosed`.
+- A reply of the wrong type comes back as `AnswerRejected` and nothing is
+  saved. That's checked when you answer - the compiler can't see it.
+- If the reply arrives as JSON, `answerRunValue` takes a `Value`.
+- Give `runIn` a runtime without a journal. It adds its own.
+- Trouble with the files is an exception, not a refusal.
+
+If you'd rather own the storage - a database, a queue, whatever you have - the
+pieces underneath are there. This is the same `askStep`:
 
 ```haskell
-askStep :: Agentic IO Text Text
-askStep = await @Text
-
 attempt :: IO ()
 attempt = do
   rt <- withJournal "run-42.jsonl"
     (JournalIdentity "run-42" "workflow-v1") runtime
   resumable rt askStep "Can Sam take Friday off?" >>= \case
     RunFinished reply -> print reply
-    RunWaiting waits -> mapM_ sendQuestion waits
+    RunWaiting waits -> mapM_ sendWait waits
 
-answer :: PendingWait -> Value -> IO ()
-answer wait reply = do
+answerWait :: PendingWait -> Value -> IO ()
+answerWait wait reply = do
   rt <- withJournal "run-42.jsonl"
     (JournalIdentity "run-42" "workflow-v1") runtime
   fulfil rt askStep wait reply >>= \case
@@ -875,11 +897,11 @@ answer wait reply = do
     Left refused -> askAgain wait refused
 ```
 
-`sendQuestion` and `askAgain` are yours. The first `attempt` comes back
-`RunWaiting` and the process can exit. When the reply turns up, `answer` checks
-it and saves it, and the next `attempt` picks up from the journal and carries
-on past the `await`. There's no separate resume - it's the same replay as
-before, with one more entry to restore.
+`sendWait` and `askAgain` are yours. The first `attempt` comes back
+`RunWaiting` and the process can exit. When the reply turns up, `answerWait`
+checks it and saves it, and the next `attempt` picks up from the journal and
+carries on past the `await`. There's no separate resume - it's the same replay
+as before, with one more entry to restore.
 
 The library never sends anything. It hands you the request and you get it to
 whoever needs to see it, however you like.
@@ -940,11 +962,9 @@ is in, the step emits `Restored` like any other saved step.
 
 ### Example: email approval
 
-Claude drafts an email, then the flow asks you to approve it and the process
-exits. Approve it in a later invocation and it prints the email. Reject it and
-it finishes without printing. The workflow in
-[EmailApproval.hs](https://github.com/drshade/haskell-agentic/blob/main/examples/EmailApproval.hs)
-is:
+Claude drafts an email and you get to read it before it goes out. The flow
+asks, the process exits, and you approve or reject it whenever you get round
+to it. This is the whole flow, from `examples/EmailApproval.hs`:
 
 ```haskell
 data Email = Email {subject :: Text, body :: Text}
@@ -959,10 +979,10 @@ emailApproval send =
     >>> arr (\(mail,approved) -> if approved == Approve then Left mail else Right ())
     >>> ((durably (\_ mail -> send mail) `named` "print approved email")
       ||| arr id `named` "finish without sending") `named` "approved?"
-
 ```
 
-The generated diagram shows the draft carried alongside your answer:
+And the diagram it generates. The draft goes two ways - to you, and to the
+choice at the end:
 
 ```mermaid
 flowchart TD
@@ -983,35 +1003,31 @@ flowchart TD
   n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0 --> output
 ```
 
-With `ANTHROPIC_API_KEY` in the environment or `.env`, start a run from
-`examples/` in a directory without an existing `email-run`:
+Start a run, and give it a directory that doesn't exist yet:
 
 ```sh
 cabal run email-approval -- email-run start "Tell Sam the café opens on Friday."
 ```
 
-It prints the draft and `Approve or reject question 0.` The process has exited.
-You can show the same draft again without another model call:
+It prints the draft and `Approve or reject question 0.` and exits. `resume`
+shows you the same draft again, and Claude isn't called a second time:
 
 ```sh
 cabal run email-approval -- email-run resume
 ```
 
-Then answer the numbered question:
+Then answer it:
 
 ```sh
 cabal run email-approval -- email-run approve 0
-# Or: cabal run email-approval -- email-run reject 0
 ```
 
-Approval prints `FAKE SEND (no email delivered)` and the draft, then `Finished.`
-Rejection just prints `Finished.` Resuming a completed run doesn't print the
-email again. The library owns the files in `email-run`, and a reply to a closed
-question is refused.
+That prints `FAKE SEND (no email delivered)` and the email, then `Finished.`
+With `reject 0` you just get `Finished.` Run `resume` after that and nothing is
+sent again, and a second answer to question 0 is refused.
 
-Choose another directory name to start another run. The example also uses that
-name as its local run identity. A real host supplies a unique run id. Its sender
-is only a print statement, so it ignores the idempotency key.
+Nothing is really sent - the sender is a print. Each run lives in its own
+directory, so pick another name to start another one.
 
 ## History
 

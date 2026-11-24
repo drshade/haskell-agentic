@@ -162,7 +162,8 @@ load run@(Run directory identity _ _ _) = do
   exists <- doesFileExist file
   unless exists (throwIO (RunNotStarted directory))
   bytes <- BS.readFile file
-  value <- either (invalid run . T.pack) (canonical run . fromAeson) (JSON.eitherDecodeStrict' bytes)
+  value <- either (invalid run . T.pack) (canonical run . fromAeson)
+    (JSON.eitherDecodeStrict' bytes)
   fs <- either (invalid run) pure (object value)
   unless (lookupField "run" fs == Just (String identity.namespace)
     && lookupField "revision" fs == Just (String identity.revision))
@@ -182,7 +183,8 @@ load run@(Run directory identity _ _ _) = do
  where
   question value = do
     fs <- object value
-    Question <$> (readField "ticket" fs >>= index) <*> (readField "pending" fs >>= pendingWaitFromValue)
+    Question <$> (readField "ticket" fs >>= index)
+      <*> (readField "pending" fs >>= pendingWaitFromValue)
   index (Integer n) | n >= 0, n <= toInteger (maxBound :: Int) = Right (fromInteger n)
   index _ = Left "expected nonnegative ticket"
   object (Object fs) = Right fs
