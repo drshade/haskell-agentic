@@ -206,6 +206,8 @@ start :: FilePath -> Bool -> Text -> IO (Progress Delivery)
 start directory live brief = do
   when (T.null (T.strip brief)) (fail "provide a nonempty email brief")
   -- Refuse existing directories instead of replacing an earlier run.
+  exists <- doesDirectoryExist directory
+  when exists (fail (directory <> " already exists; start needs a new directory"))
   createDirectory directory
   -- A real host would mint a unique run id; a directory path suffices only for this local demo.
   namespace <- T.pack <$> canonicalizePath directory

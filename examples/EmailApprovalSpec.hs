@@ -114,7 +114,8 @@ cliTests root = do
   check "resume generated another draft" (not ("[demo]" `isInfixOf` resumed))
   samePending <- BS.readFile (E.pendingFile directory 0)
   check "resume changed the pending descriptor" (samePending == originalPending)
-  _ <- refused ["start",directory,"new brief"] "already exists"
+  _ <- refused ["start",directory,"new brief"]
+    (directory <> " already exists; start needs a new directory")
   _ <- refused ["start",root </> "empty",""] "provide a nonempty email brief"
   _ <- refused [] "usage: email-approval"
   afterStart <- BS.readFile journal
