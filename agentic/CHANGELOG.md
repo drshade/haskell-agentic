@@ -8,10 +8,8 @@
   proves invocation or completion; an unanswered await suspends without it.
   Summary JSON adds the `executing` event tag. Document attempt identity,
   occurrence-to-journal-key projection and incomplete-prefix semantics.
-  The additional callback costs allocation even with a no-op observer: on
-  GHC 9.14.1, +56 bytes per plain action and +104 per durable miss. Journal-hit
-  and no-operation allocation is unchanged. The 10,000-action unobserved
-  benchmark increased from 3.168 to 3.468 ms (three runs of median samples).
+  On GHC 9.14.1 the extra event costs about 56 bytes/30 ns per unobserved
+  plain action and 104 bytes per durable miss; hit/no-operation allocation is unchanged.
 
 * Add Generic-derived full-value `Persist` codecs, independent of model
   contracts. `await @Reply` and `durably action` use them by default. The old
