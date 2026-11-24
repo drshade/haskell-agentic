@@ -2,7 +2,7 @@
 -- provider or email service. Run with cabal test email-approval-test.
 module Main (main) where
 
-import Agentic hiding (key)
+import Agentic
 import Agentic.IO (withJournal)
 import Agentic.Runtime (Conversation (..))
 import Agentic.Scripted (modelContract, respond)

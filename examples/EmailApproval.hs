@@ -2,7 +2,7 @@
 -- No email is delivered. Default drafting is deterministic; --live uses Claude.
 module EmailApproval where
 
-import Agentic hiding (key, record)
+import Agentic
 import Agentic.Anthropic (anthropic)
 import Agentic.Aeson (fromAeson)
 import Agentic.Codec qualified as C
@@ -133,9 +133,9 @@ demoModel = SystemTwo $ \conversation -> do
 
 fakeSend :: Sender
 fakeSend stableKey mail = do
-  key <- maybe (fail "the fake sender expects a journaled run") pure stableKey
+  sendKey <- maybe (fail "the fake sender expects a journaled run") pure stableKey
   T.putStrLn "FAKE SEND (no email delivered)"
-  T.putStrLn ("Idempotency key: " <> durableKeyText key)
+  T.putStrLn ("Idempotency key: " <> durableKeyText sendKey)
   printEmail mail
 
 printEmail :: Email -> IO ()
