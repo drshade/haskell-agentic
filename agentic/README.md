@@ -49,8 +49,8 @@ The main steps are:
 | `draft` | an LLM writes a value, optionally using tools along the way | any `Contract o` |
 | `judge` | Jev answers typed questions about the input | answers with calibrated probabilities |
 | `act` | plain code, with any effect `m` | whatever it returns |
-| `durably` | an effect whose completed result is saved and restored with a journal | any `Persist o` |
-| `await` | waits for an external reply, suspending if it has not arrived | any `Persist o` |
+| `durably` | an effect whose saved result is reused when the run resumes | any `Persist o` |
+| `await` | asks for an external reply, suspending its branch until answered | any `Persist o` |
 | `arr` | a pure function - glue between steps | whatever it returns |
 
 Because a flow is just data, you can `describe` it (print it, or draw it) before
@@ -89,12 +89,15 @@ data Agentic m i o where
   Noted  :: Note -> Agentic m i o -> Agentic m i o               -- named, note
 ```
 
-`Await` is the suspension point in the flow. The interpreter handles waiting
-and replay using the journal; the surrounding `Agentic` structure stays the
-same. `await` and `durably` get their input and output codecs from `Persist`;
-`awaitWith` and `durablyWith` take codecs explicitly. The
-[external reply example](#wait-for-an-external-reply) shows how to answer a
-question and resume the run.
+`Await` marks where a flow can suspend for an external reply. It doesn't do
+any waiting itself - it's just data like the rest. In a resumable run, the
+interpreter hands the question back if the journal has no answer yet, or carries
+on with the answer if it does. Other parallel branches can finish or reach their
+own waits before the run returns its questions. `Durable` and `Await` carry codecs
+because their values have to survive in that journal. `durably` and `await` pick
+them up from `Persist`, and `durablyWith` and `awaitWith` take them by hand.
+[Wait for an external reply](#wait-for-an-external-reply) shows how to answer a
+question and resume.
 
 The `Arrow` and `ArrowChoice` instances build these constructors directly,
 otherwise `describe` would see a tangle of `arr swap` instead of "these run side
