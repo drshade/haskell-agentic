@@ -42,13 +42,15 @@ steps and click them together with the normal `Arrow` combinators (`>>>`, `&&&`,
 `|||`), sort of like lego. Nothing runs until you hand the flow to an
 interpreter.
 
-There are four kinds of step:
+The main steps are:
 
 | Step | What it does | Returns |
 |---|---|---|
 | `draft` | an LLM writes a value, optionally using tools along the way | any `Contract o` |
 | `judge` | Jev answers typed questions about the input | answers with calibrated probabilities |
 | `act` | plain code, with any effect `m` | whatever it returns |
+| `durably` | an effect whose completed result is saved and restored with a journal | any `Persist o` |
+| `await` | waits for an external reply, suspending if it has not arrived | any `Persist o` |
 | `arr` | a pure function - glue between steps | whatever it returns |
 
 Because a flow is just data, you can `describe` it (print it, or draw it) before
@@ -60,24 +62,39 @@ work, and `Agentic` for the structure, which wires them together:
 
 ```haskell
 data Step m i o where
-  Pass  ::                                                        Step m i i  -- returnA
-  Wrap  :: (i -> o)                                            -> Step m i o  -- Left, Right
-  Arr   :: (i -> o)                                            -> Step m i o
-  Act   :: (i -> m o)                                          -> Step m i o
-  Draft :: Structure i -> Structure o -> Instruction -> [Tool m]       -> Step m i o
-  Judge :: Structure i -> Questions o                              -> Step m i o
+  Pass       :: Step m i i                            -- returnA
+  Wrap       :: (i -> o) -> Step m i o                -- Left, Right
+  Arr        :: (i -> o) -> Step m i o
+  TakeFirst  :: Step m (a, b) a                       -- takeFirst
+  TakeSecond :: Step m (a, b) b                       -- takeSecond
+  Act        :: (i -> m o) -> Step m i o
+  Durable    :: Codec i -> Codec o
+             -> (Maybe DurableKey -> i -> m o) -> Step m i o
+  Await      :: Codec i -> Codec o -> Step m i o
+  Draft      :: Structure i -> Structure o
+             -> Instruction -> [Tool m] -> Step m i o
+  Judge      :: Structure i -> Questions o -> Step m i o
 
 data Agentic m i o where
-  Step   :: Step m i o                     -> Agentic m i o
-  Seq    :: Agentic m a b -> Agentic m b c -> Agentic m a c        -- >>>
-  Fanout :: Agentic m a b -> Agentic m a c -> Agentic m a (b, c)   -- &&&
-  Split  :: Agentic m a b -> Agentic m c d -> Agentic m (a, c) (b, d)  -- ***
-  First  :: Agentic m a b                  -> Agentic m (a, c) (b, c)
-  Choose :: Agentic m a c -> Agentic m b c -> Agentic m (Either a b) c  -- |||
-  Each   :: Agentic m a b                  -> Agentic m [a] [b]
-  Repeat :: (a -> Bool) -> Agentic m a a   -> Agentic m a a        -- repeatUntil
-  Noted  :: Note -> Agentic m i o          -> Agentic m i o        -- named, note
+  Step   :: Step m i o -> Agentic m i o
+  Seq    :: Agentic m a b -> Agentic m b c -> Agentic m a c       -- >>>
+  Fanout :: Agentic m a b -> Agentic m a c -> Agentic m a (b, c)  -- &&&
+  Split  :: Agentic m a b -> Agentic m c d
+         -> Agentic m (a, c) (b, d)                             -- ***
+  First  :: Agentic m a b -> Agentic m (a, c) (b, c)
+  Choose :: Agentic m a c -> Agentic m b c
+         -> Agentic m (Either a b) c                           -- |||
+  Each   :: Agentic m a b -> Agentic m [a] [b]
+  Repeat :: (a -> Bool) -> Agentic m a a -> Agentic m a a        -- repeatUntil
+  Noted  :: Note -> Agentic m i o -> Agentic m i o               -- named, note
 ```
+
+`Await` is the suspension point in the flow. The interpreter handles waiting
+and replay using the journal; the surrounding `Agentic` structure stays the
+same. `await` and `durably` get their input and output codecs from `Persist`;
+`awaitWith` and `durablyWith` take codecs explicitly. The
+[external reply example](#wait-for-an-external-reply) shows how to answer a
+question and resume the run.
 
 The `Arrow` and `ArrowChoice` instances build these constructors directly,
 otherwise `describe` would see a tangle of `arr swap` instead of "these run side
