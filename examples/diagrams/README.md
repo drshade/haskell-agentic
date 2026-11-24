@@ -2,7 +2,8 @@
 
 These diagrams come from the runnable examples, without invoking providers.
 The main README embeds [Dino](../../README.md#example-the-dino-project) and
-[Tic-tac-toe](../../README.md#example-tic-tac-toe).
+[Tic-tac-toe](../../README.md#example-tic-tac-toe). The email-approval walkthrough
+uses a labelled control-flow sketch; its full generated graph is below.
 
 ## Review
 
@@ -15,6 +16,30 @@ flowchart TD
   output(["output"])
   input --> n_flow_0
   n_flow_0 --> output
+```
+
+## Email approval
+
+Claude drafts an email and waits for approval in a later process.
+[Source](../EmailApproval.hs) · [Walkthrough](../../README.md#example-email-approval)
+
+```mermaid
+flowchart TD
+  input(["input"])
+  n_flow_seq_0_0["draft @Email<br/>#quot;Draft a short email from this brief.#quot;"]
+  n_flow_seq_1_seq_0_fan_1_note_0["await<br/>approve this email?"]
+  n_flow_seq_1_seq_1_seq_1_note_0{"approved?"}
+  n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0["durably<br/>print approved email"]
+  n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0["arr<br/>finish without sending"]
+  output(["output"])
+  input --> n_flow_seq_0_0
+  n_flow_seq_0_0 --> n_flow_seq_1_seq_0_fan_1_note_0
+  n_flow_seq_0_0 --> n_flow_seq_1_seq_1_seq_1_note_0
+  n_flow_seq_1_seq_0_fan_1_note_0 --> n_flow_seq_1_seq_1_seq_1_note_0
+  n_flow_seq_1_seq_1_seq_1_note_0 -->|left| n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0
+  n_flow_seq_1_seq_1_seq_1_note_0 -->|right| n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0
+  n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0 --> output
+  n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0 --> output
 ```
 
 ## KitchenSink

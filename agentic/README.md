@@ -30,9 +30,9 @@ in the providers you actually use:
 | `examples` | the examples in this README (not published) |
 
 All the examples below live in `examples/` and run against the real models -
-`cabal run dino`, `cabal run tictactoe`, `cabal run review` and
-`cabal run kitchensink`. Copy `.env.example` to `.env` and fill in your keys
-first.
+`cabal run dino`, `cabal run tictactoe`, `cabal run review`,
+`cabal run kitchensink` and `cabal run email-approval`. Copy `.env.example` to
+`.env` and fill in your keys first.
 
 ## The big idea
 
@@ -722,25 +722,16 @@ particular run is a different job, and that's `withJournal`. It saves every
 model turn, judgement and completed tool call by where it sits in the run, so
 the next attempt picks up where the last one stopped.
 
-An `act` has no way to save its result, so there's `durably` - an `act` with a
-codec on each side:
+An `act` has no way to save its result, so there's `durably` - an `act` whose
+input and result are saved:
 
 ```haskell
-{-# LANGUAGE ImportQualifiedPost, LambdaCase, OverloadedStrings #-}
-
 import Agentic
-import Agentic.Codec qualified as C
 import Agentic.IO (withJournal)
-import Agentic.Schema (Shape (..))
 import Data.Text (Text)
 
-textCodec :: C.Codec Text
-textCodec = C.primitive (SString Nothing) String $ \case
-  String value -> Right value
-  _ -> Left "expected text"
-
 sendStep :: Agentic IO Text Text
-sendStep = durably textCodec textCodec $ \stableKey message ->
+sendStep = durably $ \stableKey message ->
   sendMessage (durableKeyText <$> stableKey) message
 
 resume :: IO Text
@@ -762,6 +753,34 @@ A tool call that finished is restored whole, and its body doesn't run. One that
 stopped part way runs its body again, restoring the `durably` steps and inner
 tool calls that did finish.
 
+Saving goes through `Persist`. Text, integers, booleans, lists, tuples, `Maybe`
+and `Either` already have it. For your own types, derive it next to `Generic`:
+
+```haskell
+data Approval = Approve | Reject
+  deriving (Generic, Persist)
+```
+
+This isn't the `Contract`. A contract is what the model sees, and it can leave
+fields out. `Persist` saves every field.
+
+What to know about it:
+
+- There's no `Double` or `Float`, and no `Char` or `String`. JSON can't hold
+  every one of them, so use `Text`, or bring your own codec.
+- A type that contains itself isn't supported. A derived one gets you
+  `RecursivePersistence` as soon as the flow is built - it doesn't hang. One
+  hidden behind a hand-written codec, or one whose type grows at every level,
+  isn't caught and can still hang.
+- Names are stored as you wrote them. Rename a field or a constructor, or add
+  a field, and old journals stop decoding. Nothing is defaulted. Change the
+  revision when you change a type.
+- An enum with no fields is stored as a string. Give one of its constructors a
+  field and the stored form of all of them changes.
+- For a type that needs its own codec, write `persist = persistWith myCodec`.
+  Or use `durablyWith` and `awaitWith`, which take the codecs for that one
+  step.
+
 A few things that will bite you:
 
 - A `durably` step can run more than once. If it ran but its result wasn't
@@ -776,6 +795,7 @@ A few things that will bite you:
   the new way. If it changes the input of a step that was saved, the resume
   fails there - it won't hand you a stale result.
 - Resume with the same input you started with. Nothing can check that either.
+  `runIn` (further down) saves the input and hands it back for you.
 - The second name in `JournalIdentity` is your revision. Change it when the
   code, the codecs or the provider config change, and old journals are refused.
   They don't migrate.
@@ -808,22 +828,68 @@ their own recording.
 Sometimes a flow has to ask a person something, and the answer might take two
 days. You don't want a process sat there for two days. `await` asks, and if
 the reply isn't in the journal yet the run stops and tells you what it's
-waiting for:
+waiting for.
+
+The easy way is to let `Agentic.IO` look after the files:
 
 ```haskell
-askStep :: Agentic IO Text Text
-askStep = await textCodec textCodec
+askStep :: Agentic IO Text Bool
+askStep = await @Bool
 
+leave :: Run Text Bool
+leave = runIn "leave-request"
+  (JournalIdentity "request-42" "leave-v1") runtime askStep
+
+ask :: IO ()
+ask = startRun leave "Can Sam take Friday off?" >>= report
+
+answer :: Int -> Bool -> IO ()
+answer ticket yes = answerRun leave ticket yes >>= \case
+  Right progress -> report progress
+  Left refused -> T.putStrLn (answerRefusalText refused)
+
+report :: Progress Bool -> IO ()
+report = \case
+  RunFinished yes -> print yes
+  RunWaiting _ -> questions leave >>= mapM_ sendQuestion
+```
+
+`sendQuestion` is yours. `ask` comes back `RunWaiting` and the process can
+exit. Every question has a ticket - a small number that stays the same across
+restarts and is never used twice - and that's what you hand to whoever is
+answering. `answer` checks the reply, saves it and carries on with the run.
+
+`runIn` keeps everything in that directory: the input you started with, the
+journal and the questions that are open. So `resumeRun leave` needs nothing
+from you, and `questions leave` reads the open questions without running
+anything. `asked @Text question` gives you the request back as your own type.
+
+- `startRun` wants a directory that doesn't exist yet, or an empty one. For a
+  run that's already there, use `resumeRun`.
+- One command at a time per directory.
+- The open questions only change when an attempt comes back `RunFinished` or
+  `RunWaiting`. One that fails leaves them as they were.
+- A ticket that's closed comes back as `QuestionClosed`.
+- A reply of the wrong type comes back as `AnswerRejected` and nothing is
+  saved. That's checked when you answer - the compiler can't see it.
+- If the reply arrives as JSON, `answerRunValue` takes a `Value`.
+- Give `runIn` a runtime without a journal. It adds its own.
+- Trouble with the files is an exception, not a refusal.
+
+If you'd rather own the storage - a database, a queue, whatever you have - the
+pieces underneath are there. This is the same `askStep`:
+
+```haskell
 attempt :: IO ()
 attempt = do
   rt <- withJournal "run-42.jsonl"
     (JournalIdentity "run-42" "workflow-v1") runtime
   resumable rt askStep "Can Sam take Friday off?" >>= \case
     RunFinished reply -> print reply
-    RunWaiting waits -> mapM_ sendQuestion waits
+    RunWaiting waits -> mapM_ sendWait waits
 
-answer :: PendingWait -> Value -> IO ()
-answer wait reply = do
+answerWait :: PendingWait -> Value -> IO ()
+answerWait wait reply = do
   rt <- withJournal "run-42.jsonl"
     (JournalIdentity "run-42" "workflow-v1") runtime
   fulfil rt askStep wait reply >>= \case
@@ -831,11 +897,11 @@ answer wait reply = do
     Left refused -> askAgain wait refused
 ```
 
-`sendQuestion` and `askAgain` are yours. The first `attempt` comes back
-`RunWaiting` and the process can exit. When the reply turns up, `answer` checks
-it and saves it, and the next `attempt` picks up from the journal and carries
-on past the `await`. There's no separate resume - it's the same replay as
-before, with one more entry to restore.
+`sendWait` and `askAgain` are yours. The first `attempt` comes back
+`RunWaiting` and the process can exit. When the reply turns up, `answerWait`
+checks it and saves it, and the next `attempt` picks up from the journal and
+carries on past the `await`. There's no separate resume - it's the same replay
+as before, with one more entry to restore.
 
 The library never sends anything. It hands you the request and you get it to
 whoever needs to see it, however you like.
@@ -893,6 +959,75 @@ None of this needs `IO`. It works in any monad a flow already runs in.
 When you're observing, a step that is waiting ends with `Suspended`, and so
 does every scope that stopped because of it. It isn't `Failed`. Once the reply
 is in, the step emits `Restored` like any other saved step.
+
+### Example: email approval
+
+Claude drafts an email and you get to read it before it goes out. The flow
+asks, the process exits, and you approve or reject it whenever you get round
+to it. This is the whole flow, from `examples/EmailApproval.hs`:
+
+```haskell
+data Email = Email {subject :: Text, body :: Text}
+  deriving (Eq, Show, Generic, Contract, Persist)
+
+data Decision = Approve | Reject deriving (Eq, Show, Generic, Persist)
+
+emailApproval :: (Email -> IO ()) -> Agentic IO Text ()
+emailApproval send =
+  draft @Email "Draft a short email from this brief."
+    >>> (returnA &&& await @Decision `named` "approve this email?")
+    >>> arr (\(mail,approved) -> if approved == Approve then Left mail else Right ())
+    >>> ((durably (\_ mail -> send mail) `named` "print approved email")
+      ||| arr id `named` "finish without sending") `named` "approved?"
+```
+
+And the diagram it generates. The draft goes two ways - to you, and to the
+choice at the end:
+
+```mermaid
+flowchart TD
+  input(["input"])
+  n_flow_seq_0_0["draft @Email<br/>#quot;Draft a short email from this brief.#quot;"]
+  n_flow_seq_1_seq_0_fan_1_note_0["await<br/>approve this email?"]
+  n_flow_seq_1_seq_1_seq_1_note_0{"approved?"}
+  n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0["durably<br/>print approved email"]
+  n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0["arr<br/>finish without sending"]
+  output(["output"])
+  input --> n_flow_seq_0_0
+  n_flow_seq_0_0 --> n_flow_seq_1_seq_0_fan_1_note_0
+  n_flow_seq_0_0 --> n_flow_seq_1_seq_1_seq_1_note_0
+  n_flow_seq_1_seq_0_fan_1_note_0 --> n_flow_seq_1_seq_1_seq_1_note_0
+  n_flow_seq_1_seq_1_seq_1_note_0 -->|left| n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0
+  n_flow_seq_1_seq_1_seq_1_note_0 -->|right| n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0
+  n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0 --> output
+  n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0 --> output
+```
+
+Start a run, and give it a directory that doesn't exist yet:
+
+```sh
+cabal run email-approval -- email-run start "Tell Sam the café opens on Friday."
+```
+
+It prints the draft and `Approve or reject question 0.` and exits. `resume`
+shows you the same draft again, and Claude isn't called a second time:
+
+```sh
+cabal run email-approval -- email-run resume
+```
+
+Then answer it:
+
+```sh
+cabal run email-approval -- email-run approve 0
+```
+
+That prints `FAKE SEND (no email delivered)` and the email, then `Finished.`
+With `reject 0` you just get `Finished.` Run `resume` after that and nothing is
+sent again, and a second answer to question 0 is refused.
+
+Nothing is really sent - the sender is a print. Each run lives in its own
+directory, so pick another name to start another one.
 
 ## History
 

@@ -96,7 +96,7 @@ behaviour = do
   check "observer failure wins" (observerFailure == Left FetchError && Failed `elem` obsEvents)
   let (seqResult,_,_) = runGuest (run guest (awaitInt >>> awaitInt) 10) Map.empty
   check "sequence frontier" (case seqResult of Right (Left ws) -> NE.length ws == 1; _ -> False)
-  let flow = awaitInt &&& durably intCodec intCodec (\_ -> pure . (+1))
+  let flow = awaitInt &&& durablyWith intCodec intCodec (\_ -> pure . (+1))
       (mixed,saved,_) = runGuest (run guest flow 5) Map.empty
   check "sibling saved" (Map.size saved == 1 && case mixed of Right (Left _) -> True; _ -> False)
   let self = recursiveTool (\t -> tool @Int @Int "self" ""
@@ -139,7 +139,7 @@ spec = H.describe "external replies in a pure Program under ExceptT" $ do
       Left (CoreError (AwaitNeedsResume _)) -> Failed `shouldSatisfy` (`elem` events)
       _ -> expectationFailure (show nested)
   it "fails without a journal and never demands persistence codecs" $ do
-    let flow = await (error "request codec forced") (error "reply codec forced") :: Agentic Guest Int Int
+    let flow = awaitWith (error "request codec forced") (error "reply codec forced") :: Agentic Guest Int Int
         (result,_,_) = runGuest (resumable guest{journal=Nothing} flow 1) Map.empty
     result `shouldBe` Left (CoreError AwaitWithoutJournal)
   it "refuses invalid identities, non-wait keys, non-await addresses and conflicting replies" $ do
@@ -180,7 +180,7 @@ spec = H.describe "external replies in a pure Program under ExceptT" $ do
           ])
         codec = C.Codec schema (Integer . toInteger) intCodec.decode
         w = onePending (runGuest
-          (resumable guest (await codec intCodec `named` "question") 1) Map.empty)
+          (resumable guest (awaitWith codec intCodec `named` "question") 1) Map.empty)
     let address = w.key.key.address
         framed = w{R.key=w.key{J.key=w.key.key{J.context=
           [ElementFrame address 0,IterationFrame address 1,InvocationFrame address 2 3 "provider-id"]}}}
@@ -196,7 +196,7 @@ spec = H.describe "external replies in a pure Program under ExceptT" $ do
     pendingWaitFromValue (String "bad") `shouldSatisfy` \case Left _ -> True; _ -> False
     pendingWaitFromValue (Object [("version",Integer 99)]) `shouldSatisfy` \case Left _ -> True; _ -> False
   it "describes await without evaluating codecs or running actions" $ do
-    let flow = await (error "request codec forced") (error "reply codec forced") :: Agentic Guest Int Int
+    let flow = awaitWith (error "request codec forced") (error "reply codec forced") :: Agentic Guest Int Int
     case describe flow of
       Left e -> expectationFailure (show e)
       Right d -> renderTree d `shouldBe` "await"

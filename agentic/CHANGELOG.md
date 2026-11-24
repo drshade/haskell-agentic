@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+* Add Generic-derived full-value `Persist` codecs, independent of model
+  contracts. `await @Reply` and `durably action` use them by default. The old
+  explicit-codec functions are now `awaitWith` and `durablyWith` (API break).
+  Low-level `resumable`, `fulfil`, descriptors and journal wire format are unchanged.
+* Simplify email approval to a Claude draft, typed approval and fake durable
+  sender, using the file-backed run helper. Embed its generated diagram.
+
 * Add `await`, `resumable` and `fulfil` for typed external replies. Independent
   branches collect their reached waits, ordinary failures stay separate, and
   completed journaled work replays after a reply. This works in pure monads

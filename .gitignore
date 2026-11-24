@@ -3,3 +3,6 @@ dist-newstyle/
 .worktrees/
 *.jsonl
 dist-*/
+
+# Local run directory used by the README approval walkthrough.
+email-run/

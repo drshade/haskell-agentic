@@ -17,7 +17,9 @@ module Agentic.Core
   , judge
   , act
   , durably
+  , durablyWith
   , await
+  , awaitWith
     -- * Tools
   , tool
   , recursiveTool

@@ -1,0 +1,20 @@
+digraph flow {
+  compound=true;
+  node [shape=box, style=rounded, fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  input [label="input", shape=oval];
+  n_flow_seq_0_0 [label="draft @Email\n\"Draft a short email from this brief.\""];
+  n_flow_seq_1_seq_0_fan_1_note_0 [label="await\napprove this email?"];
+  n_flow_seq_1_seq_1_seq_1_note_0 [label="approved?", shape=diamond, style=solid];
+  n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0 [label="durably\nprint approved email"];
+  n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0 [label="arr\nfinish without sending"];
+  output [label="output", shape=oval];
+  input -> n_flow_seq_0_0;
+  n_flow_seq_0_0 -> n_flow_seq_1_seq_0_fan_1_note_0;
+  n_flow_seq_0_0 -> n_flow_seq_1_seq_1_seq_1_note_0;
+  n_flow_seq_1_seq_0_fan_1_note_0 -> n_flow_seq_1_seq_1_seq_1_note_0;
+  n_flow_seq_1_seq_1_seq_1_note_0 -> n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0 [label="left"];
+  n_flow_seq_1_seq_1_seq_1_note_0 -> n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0 [label="right"];
+  n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0 -> output;
+  n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0 -> output;
+}

@@ -32,11 +32,13 @@ main = do
           _ <- interpret rt durable [1..5000]
           pure rt
     measure (name <> "-journal-cheap") fresh (completed cheap)
+    measure (name <> "-inferred-miss") fresh (completed inferred)
+    measure (name <> "-inferred-hit") warm (completed inferred)
     measure (name <> "-durable-miss") fresh (completed durable)
     measure (name <> "-durable-hit") warm (completed durable)
 #ifdef HAS_AWAIT
     measure (name <> "-waiting") fresh $ \rt ->
-      resumable rt (each (await intCodec intCodec)) [1..5000] >>= \case
+      resumable rt (each (awaitWith intCodec intCodec)) [1..5000] >>= \case
         RunWaiting waits -> evaluate (NE.length waits)
         RunFinished _ -> error "expected pending waits"
 #endif
@@ -47,7 +49,10 @@ cheap :: Agentic IO [Int] [Int]
 cheap = each ((arr (+1) `named` "increment") >>> arr (*2))
 
 durable :: Agentic IO [Int] [Int]
-durable = each (durably intCodec intCodec (\_ -> pure . (+1)))
+durable = each (durablyWith intCodec intCodec (\_ -> pure . (+1)))
+
+inferred :: Agentic IO [Int] [Int]
+inferred = each (durably (\_ -> pure . (+1)))
 
 intCodec :: C.Codec Int
 intCodec = C.primitive SInteger (Integer . toInteger) $ \case

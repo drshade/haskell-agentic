@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+* Add `runIn`, `startRun`, `resumeRun` and `answerRun` for local resumable
+  applications. The helper owns saved input, stable question tickets and the
+  last successful frontier. `questions` and `asked` expose typed requests;
+  closed tickets and invalid replies are refused before resuming.
+
 * Write model caches and journals as UTF-8 bytes, independent of locale.
 
 * Add `openJournal` and `withJournal` for strict JSONL workflow replay. Writes
