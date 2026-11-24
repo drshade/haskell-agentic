@@ -98,15 +98,15 @@ spec = H.describe "flowGraphValue" $ do
     resolved `shouldSatisfy` all (\(a,b) -> any (\r -> field "binding" r == a && field "bodyRoot" r == b) relations)
 
   it "uses explicit node and edge tags and retains labels and nullable fields" $ do
-    let kinds = [Terminal,StepNode,ToolNode,DecisionNode,JunctionNode]
+    let kinds = [Terminal,StepNode,ToolNode,DecisionNode,LoopTestNode,JunctionNode]
         styles = [Flow,Uses,Again,Reference]
         g = FlowGraph [ItemBox "root" ["box"] [ItemNode "node" k ["line one","line two"] | k <- kinds]]
               [Edge "root" "node" label style Nothing [] | style <- styles, label <- [Nothing,Just "label"]] [] []
         v = flowGraphValue g
         ns = array (field "items" (only (array (field "items" v))))
         es = array (field "edges" v)
-    map (field "nodeKind") ns `shouldBe` map String ["terminal","step","tool","decision","junction"]
-    map (field "labels") ns `shouldBe` replicate 5 (Array [String "line one",String "line two"])
+    map (field "nodeKind") ns `shouldBe` map String ["terminal","step","tool","decision","loop-test","junction"]
+    map (field "labels") ns `shouldBe` replicate 6 (Array [String "line one",String "line two"])
     map (field "style") es `shouldBe` concatMap (replicate 2 . String) ["flow","uses","again","reference"]
     map (field "label") es `shouldBe` concat (replicate 4 [Null,String "label"])
     map (field "referenceTarget") es `shouldBe` replicate 8 Null

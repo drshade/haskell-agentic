@@ -176,6 +176,9 @@ spec = H.describe "execution observations" $ do
     length (entries PureNode zero) `shouldBe` 0
     (_,es) <- capture runtime f 0
     let loop = one (entries RepeatNode es)
+    let graph = flowGraph (either (error . show) id (describe f))
+        gateway = one [i | (i,LoopTestNode) <- allNodes graph.items]
+    lookup loop.occurrence.address graph.addressItems `shouldBe` Just gateway
     loop.happened `shouldBe` Entered Nothing
     map (last . (.context) . (.occurrence)) (entries PureNode es) `shouldBe` [RepeatFrame loop.occurrence.address i | i <- [0..2]]
 

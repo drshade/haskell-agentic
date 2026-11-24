@@ -1,0 +1,14 @@
+flowchart TD
+  input(["input"])
+  subgraph n_flow_0["repeatUntil"]
+    n_flow_1{"Done?"}
+    n_flow_repeat_seq_0_fan_0_0["act"]
+    n_flow_repeat_seq_0_fan_1_0["act"]
+  end
+  output(["output"])
+  input --> n_flow_1
+  n_flow_1 -->|continue| n_flow_repeat_seq_0_fan_0_0
+  n_flow_1 -->|continue| n_flow_repeat_seq_0_fan_1_0
+  n_flow_repeat_seq_0_fan_0_0 -.->|again| n_flow_1
+  n_flow_repeat_seq_0_fan_1_0 -.->|again| n_flow_1
+  n_flow_1 -->|done| output

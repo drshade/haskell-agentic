@@ -1,0 +1,15 @@
+digraph flow {
+  compound=true;
+  node [shape=box, style=rounded, fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  input [label="input", shape=oval];
+  subgraph cluster_n_flow_0 {
+    label="repeatUntil";
+    style=rounded;
+    n_flow_1 [label="Done?", shape=diamond, style=solid];
+  }
+  output [label="output", shape=oval];
+  input -> n_flow_1;
+  n_flow_1 -> n_flow_1 [label="continue", style=dashed];
+  n_flow_1 -> output [label="done"];
+}

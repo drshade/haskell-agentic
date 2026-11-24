@@ -530,20 +530,25 @@ flowchart TD
   input(["input"])
   subgraph n_flow_0["play until the game ends"]
     subgraph n_flow_note_0["repeatUntil"]
+      n_flow_note_1{"Done?"}
       n_flow_note_repeat_seq_0_0["draft @Game<br/>#quot;Play the next move!#quot;"]
       n_flow_note_repeat_seq_1_note_0["act<br/>print the board"]
     end
   end
   output(["output"])
-  input --> n_flow_note_repeat_seq_0_0
+  input --> n_flow_note_1
+  n_flow_note_1 -->|continue| n_flow_note_repeat_seq_0_0
   n_flow_note_repeat_seq_0_0 --> n_flow_note_repeat_seq_1_note_0
-  n_flow_note_repeat_seq_1_note_0 -.->|again| n_flow_note_repeat_seq_0_0
-  input --> output
-  n_flow_note_repeat_seq_1_note_0 --> output
+  n_flow_note_repeat_seq_1_note_0 -.->|again| n_flow_note_1
+  n_flow_note_1 -->|done| output
 ```
 
 `repeatUntil` is the only loop in the language, and it checks its condition
-before each round. `cabal run tictactoe` plays a game on OpenAI, where the dino
+before each round. Its diagram shows that check as a `Done?` diamond:
+`continue` enters the body, and `done` leaves the loop, even if it has run
+zero times. Every body exit returns to the diamond.
+
+`cabal run tictactoe` plays a game on OpenAI, where the dino
 project runs on Claude - same flow code either way.
 
 The [other example diagrams](https://github.com/drshade/haskell-agentic/blob/main/examples/diagrams/README.md)

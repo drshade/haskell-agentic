@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+* Draw every `repeatUntil` with an explicit `Done?` predicate diamond:
+  `continue` enters the body, body exits return to the predicate, and only
+  `done` reaches the continuation. This also shows zero iterations correctly.
+  The loop address maps to the new `LoopTestNode` (graph JSON `loop-test`);
+  loop routes carry no choice selection ids. Runtime behaviour is unchanged.
+
 * Add metadata-only `Executing LiveOperation` observations before live provider
   calls, tool evaluation and effects, including plain `act`. `Restored` remains
   a validated journal hit. Classification is per operation/model turn and never
