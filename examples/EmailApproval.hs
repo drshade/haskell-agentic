@@ -8,9 +8,9 @@ import Agentic.Aeson (fromAeson)
 import Agentic.Codec qualified as C
 import Agentic.IO (loadDotEnv, withJournal)
 import Agentic.Runtime (Conversation (..))
-import Agentic.Schema (Shape (..), Field (..), Variant (..))
+import Agentic.Schema (Shape (..), Field (..))
 import Agentic.Scripted (modelContract, respond)
-import Control.Exception (throwIO)
+import Control.Exception (IOException, catch, throwIO)
 import Control.Monad (unless, when)
 import Data.Aeson qualified as JSON
 import Data.ByteString qualified as BS
@@ -22,6 +22,8 @@ import Data.Text.IO qualified as T
 import GHC.Generics (Generic)
 import System.Directory
 import System.Environment (getArgs)
+import System.Exit (die)
+import System.IO.Error (ioeGetErrorString)
 import System.FilePath ((</>))
 import Text.Read (readMaybe)
 
@@ -104,23 +106,17 @@ approvalCodec = C.record "Email to review" $ ApprovalRequest
   <*> C.requiredWith "email" Nothing emailCodec (.email)
 
 decisionCodec :: C.Codec Decision
-decisionCodec = C.primitive schema encode decode
- where
-  schema = SSum
-    [Variant "approve" Nothing [],Variant "reject" Nothing []
-    ,Variant "revise" Nothing [Field "changes" textCodec.schema True]]
-  encode = \case
-    Approve -> Object [("tag",String "approve")]
-    Reject -> Object [("tag",String "reject")]
-    RequestChanges edits -> Object [("tag",String "revise"),("changes",String edits)]
-  decode (Object fs) = case lookupField "tag" fs of
-    Just (String "approve") -> Right Approve
-    Just (String "reject") -> Right Reject
-    Just (String "revise") -> case lookupField "changes" fs of
-      Just (String edits) | not (T.null (T.strip edits)) -> Right (RequestChanges edits)
-      _ -> Left "describe the changes you want"
-    _ -> Left "choose approve, revise or reject"
-  decode _ = Left "expected a decision object"
+decisionCodec = C.sumOf "Approval decision"
+  [ C.CaseCodec "approve" Nothing []
+      (\case Approve -> Just []; _ -> Nothing) (const (Right Approve))
+  , C.CaseCodec "reject" Nothing []
+      (\case Reject -> Just []; _ -> Nothing) (const (Right Reject))
+  , C.CaseCodec "revise" Nothing [Field "changes" textCodec.schema True]
+      (\case RequestChanges edits -> Just [("changes",String edits)]; _ -> Nothing)
+      (\fs -> case lookupField "changes" fs of
+        Just (String edits) | not (T.null (T.strip edits)) -> Right (RequestChanges edits)
+        _ -> Left "describe the changes you want")
+  ]
 
 -- An intentionally simple, deterministic provider for trying the CLI without
 -- credentials. In a revision it quotes the requested changes; it is not an LLM.
@@ -211,6 +207,7 @@ start directory live brief = do
   when (T.null (T.strip brief)) (fail "provide a nonempty email brief")
   -- Refuse existing directories instead of replacing an earlier run.
   createDirectory directory
+  -- A real host would mint a unique run id; a directory path suffices only for this local demo.
   namespace <- T.pack <$> canonicalizePath directory
   writeValue (directory </> "run.json") (Object
     [("brief",String brief),("live",Bool live),("run",String namespace)])
@@ -234,7 +231,13 @@ reply directory revision decision = do
     Right () -> attempt directory
 
 main :: IO ()
-main = getArgs >>= \case
+main = runCLI `catch` report
+ where
+  report :: IOException -> IO ()
+  report = die . ioeGetErrorString
+
+runCLI :: IO ()
+runCLI = getArgs >>= \case
   ["--mermaid"] -> either throwIO (T.putStrLn . mermaid) (describe (emailApproval fakeSend))
   ["start",directory,brief] -> start directory False (T.pack brief) >> pure ()
   ["start",directory,"--demo",brief] -> start directory False (T.pack brief) >> pure ()

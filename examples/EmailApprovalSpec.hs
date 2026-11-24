@@ -93,6 +93,13 @@ cli args = do
   check ("command failed: " <> show args <> "\n" <> err) (status == ExitSuccess)
   pure out
 
+refused :: [String] -> String -> IO String
+refused args message = do
+  (status,out,err) <- readProcessWithExitCode "email-approval" args ""
+  check ("expected refusal: " <> show args) (status /= ExitSuccess && message `isInfixOf` err)
+  check "refusal printed an exception backtrace" (not ("Uncaught exception" `isInfixOf` err))
+  pure out
+
 cliTests :: FilePath -> IO ()
 cliTests root = do
   let directory = root </> "approval"
@@ -107,12 +114,12 @@ cliTests root = do
   check "resume generated another draft" (not ("[demo]" `isInfixOf` resumed))
   samePending <- BS.readFile (E.pendingFile directory 0)
   check "resume changed the pending descriptor" (samePending == originalPending)
-  (again,_,_) <- readProcessWithExitCode "email-approval" ["start",directory,"new brief"] ""
-  check "start overwrote an existing run" (again /= ExitSuccess)
+  _ <- refused ["start",directory,"new brief"] "already exists"
+  _ <- refused ["start",root </> "empty",""] "provide a nonempty email brief"
+  _ <- refused [] "usage: email-approval"
   afterStart <- BS.readFile journal
   check "failed start changed the journal" (afterStart == originalJournal)
-  (invalid,_,_) <- readProcessWithExitCode "email-approval" ["reply",directory,"0","revise",""] ""
-  check "empty revision accepted" (invalid /= ExitSuccess)
+  _ <- refused ["reply",directory,"0","revise",""] "Reply refused:"
   afterInvalid <- BS.readFile journal
   check "invalid reply changed the journal" (afterInvalid == originalJournal)
   revision <- cli ["reply",directory,"0","revise","Make it warmer."]
@@ -121,18 +128,13 @@ cliTests root = do
   firstWait <- E.readValue (E.pendingFile directory 0) >>= either (fail . T.unpack) pure . pendingWaitFromValue
   secondWait <- E.readValue (E.pendingFile directory 1) >>= either (fail . T.unpack) pure . pendingWaitFromValue
   check "CLI reused the answered wait" (firstWait.key /= secondWait.key)
-  (stale,staleOut,staleErr) <- readProcessWithExitCode "email-approval" ["reply",directory,"0","approve"] ""
-  check "old draft approval sent the revision" (stale /= ExitSuccess && not ("FAKE SEND" `isInfixOf` staleOut)
-    && "is no longer awaiting approval" `isInfixOf` staleErr)
-  (duplicate,_,_) <- readProcessWithExitCode "email-approval"
-    ["reply",directory,"0","revise","Make it warmer."] ""
-  check "closed draft still accepted replies" (duplicate /= ExitSuccess)
+  staleOut <- refused ["reply",directory,"0","approve"] "is no longer awaiting approval"
+  check "old draft approval sent the revision" (not ("FAKE SEND" `isInfixOf` staleOut))
+  _ <- refused ["reply",directory,"0","revise","Make it warmer."] "is no longer awaiting approval"
   approved <- cli ["reply",directory,"1","approve"]
   check "approved draft not sent" ("FAKE SEND (no email delivered)" `isInfixOf` approved
     && "Requested changes: Make it warmer." `isInfixOf` approved)
-  (closed,_,_) <- readProcessWithExitCode "email-approval"
-    ["reply",directory,"1","approve"] ""
-  check "completed run accepted another approval" (closed /= ExitSuccess)
+  _ <- refused ["reply",directory,"1","approve"] "is no longer awaiting approval"
   repeated <- cli ["resume",directory]
   check "duplicate approval sent again" (not ("FAKE SEND" `isInfixOf` repeated)
     && not ("[demo]" `isInfixOf` repeated))
