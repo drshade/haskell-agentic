@@ -408,6 +408,7 @@ spec = H.describe "durable journal" $ do
     failRight <- newIORef True
     rightSelected <- newEmptyMVar
     leftRestored <- newEmptyMVar
+    leftWasGated <- newIORef False
     let leftBranch = durably (\_ () -> pure (1 :: Int))
         rightBranch = durably $ \_ () -> readIORef failRight >>= \bad ->
           if bad then throwIO (ErrorCall "right interrupted")
@@ -419,10 +420,14 @@ spec = H.describe "durable journal" $ do
     original <- firstEvents
     [leftLive,_] <- pure [e | e <- original, e.happened == Executing (KeyedOperation DurableEffect)]
     writeIORef failRight False
+    -- Lookup receives canonical keys; Value equality retains object field order.
+    leftKey <- either (fail . T.unpack) pure $
+      canonicalValue (journalKeyValue (journalKey DurableEffect leftLive.occurrence))
     let j = case rt.journal of Just journal -> journal; Nothing -> error "missing journal"
-        leftKey = journalKeyValue (journalKey DurableEffect leftLive.occurrence)
         lookupAfterSelection k = do
-          when (k == leftKey) (readMVar rightSelected)
+          when (k == leftKey) $ do
+            writeIORef leftWasGated True
+            readMVar rightSelected
           j.lookupRecord k
         coordinate e = case e.happened of
           Executing (KeyedOperation DurableEffect) -> putMVar rightSelected ()
@@ -431,6 +436,7 @@ spec = H.describe "durable journal" $ do
     (secondAttempt,secondEvents) <- capture rt{journal=Just j{lookupRecord=lookupAfterSelection}}
     Timeout.timeout 5000000 (interpret (concurrently (observing coordinate secondAttempt)) flow ())
       `shouldReturn` Just (1,2)
+    readIORef leftWasGated `shouldReturn` True
     events <- secondEvents
     [e.happened | e <- events, case e.happened of Executing _ -> True; Restored _ -> True; _ -> False]
       `shouldBe` [Executing (KeyedOperation DurableEffect),Restored DurableEffect]
