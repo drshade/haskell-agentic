@@ -52,7 +52,7 @@ spec = H.describe "IO observation scopes" $ do
     interpret (concurrently rt) flow () `shouldThrow` (== BodyFailure)
     es <- readEvents
     checkPrefixes flow es
-    [e.happened | e <- es, e.nodeType == EffectNode, e.happened /= Entered Nothing] `shouldMatchList` [Failed,Cancelled]
+    [e.happened | e <- es, e.nodeType == EffectNode, e.happened `elem` [Failed,Cancelled]] `shouldMatchList` [Failed,Cancelled]
     (last es).happened `shouldBe` Failed
 
   it "records two concurrent failures without claiming a causal origin" $ do
@@ -70,7 +70,7 @@ spec = H.describe "IO observation scopes" $ do
     interpret (concurrently (observing waitForBoth rt)) flow [(),()] `shouldThrow` (== BodyFailure)
     es <- readEvents
     checkPrefixes flow es
-    [e.happened | e <- es, e.nodeType == EffectNode, e.happened /= Entered Nothing] `shouldBe` [Failed,Failed]
+    [e.happened | e <- es, e.nodeType == EffectNode, e.happened `elem` [Failed,Cancelled]] `shouldBe` [Failed,Failed]
     (last es).happened `shouldBe` Failed
 
   it "joins children before reporting parent cancellation" $ do
@@ -89,7 +89,7 @@ spec = H.describe "IO observation scopes" $ do
       Right _ -> expectationFailure "cancelled run returned"
     es <- readEvents
     checkPrefixes flow es
-    [e.happened | e <- es, e.nodeType == EffectNode, e.happened /= Entered Nothing] `shouldBe` [Cancelled,Cancelled]
+    [e.happened | e <- es, e.nodeType == EffectNode, e.happened `elem` [Failed,Cancelled]] `shouldBe` [Cancelled,Cancelled]
     (last es).happened `shouldBe` Cancelled
 
   it "classifies timeout as cancellation and resource exceptions as failure" $ do
@@ -97,12 +97,12 @@ spec = H.describe "IO observation scopes" $ do
     blocked <- newEmptyMVar
     timeout 10000 (interpret rt (act (\() -> takeMVar blocked) :: Agentic IO () ()) ()) `shouldReturn` Nothing
     es <- readEvents
-    [e.happened | e <- es, e.nodeType == EffectNode] `shouldBe` [Entered Nothing,Cancelled]
+    [e.happened | e <- es, e.nodeType == EffectNode] `shouldBe` [Entered Nothing,Executing PlainAction,Cancelled]
     mapM_ (\exception -> do
       (rt',readEvents') <- record
       interpret rt' (act (\() -> throwIO exception) :: Agentic IO () ()) () `shouldThrow` (== exception)
       es' <- readEvents'
-      [e.happened | e <- es', e.nodeType == EffectNode] `shouldBe` [Entered Nothing,Failed]) [StackOverflow,HeapOverflow]
+      [e.happened | e <- es', e.nodeType == EffectNode] `shouldBe` [Entered Nothing,Executing PlainAction,Failed]) [StackOverflow,HeapOverflow]
 
   it "preserves the original exception type through custom parallel" $ do
     caught <- newIORef False

@@ -67,9 +67,9 @@ spec = H.describe "ExceptT scopes" $ do
     let flow = act (\() -> throwE NoSystemOne) `named` "body"
     runExceptT (interpret rt flow ()) `shouldReturn` (Left NoSystemOne :: Either FlowError ())
     es <- events
-    map (.happened) es `shouldBe` replicate 3 (Entered Nothing) <> replicate 3 Failed
-    map (.nodeType) es `shouldBe` [RunNode,NoteNode,EffectNode,EffectNode,NoteNode,RunNode]
-    map (.occurrence) (drop 3 es) `shouldBe` reverse (map (.occurrence) (take 3 es))
+    map (.happened) es `shouldBe` replicate 3 (Entered Nothing) <> [Executing PlainAction] <> replicate 3 Failed
+    map (.nodeType) es `shouldBe` [RunNode,NoteNode,EffectNode,EffectNode,EffectNode,NoteNode,RunNode]
+    map (.occurrence) (drop 4 es) `shouldBe` reverse (map (.occurrence) (take 3 es))
 
   it "observes FlowError from the runtime failure function" $ do
     (rt,events) <- flowRuntime
@@ -184,7 +184,7 @@ spec = H.describe "ExceptT scopes" $ do
       Just (Right value) -> value `shouldBe` Left NoSystemOne
       _ -> expectationFailure "original Left lost or worker did not unwind"
     es <- events
-    map (.happened) es `shouldBe` [Entered Nothing,Entered Nothing,Failed,Failed]
+    map (.happened) es `shouldBe` [Entered Nothing,Entered Nothing,Executing PlainAction,Failed,Failed]
 
   it "documents the real timeout consequence at the failure-report boundary" $ do
     blocked <- newEmptyMVar

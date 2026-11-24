@@ -130,7 +130,7 @@ worker execution rt flow input = within root Nothing RunNode [] Nothing Nothing 
     -> [Note] -> Value -> (a -> Value) -> (Value -> Either Text a)
     -> (Maybe DurableKey -> n a) -> n a
   recorded op occurrence parent kind path request encode decode live = case rt.journal of
-    Nothing -> live Nothing
+    Nothing -> startLive Nothing
     Just j -> do
       let key = journalKey op occurrence
       keyValue <- canonical (journalKeyValue key)
@@ -150,11 +150,17 @@ worker execution rt flow input = within root Nothing RunNode [] Nothing Nothing 
           emit occurrence parent kind path (Restored op) Nothing
           pure value
         Nothing -> do
-          value <- live (Just (DurableKey j.identity.namespace key))
+          value <- startLive (Just (DurableKey j.identity.namespace key))
           result <- canonical (encode value)
           let record = Object [("request",fingerprint),("result",result)]
           liftRun execution (j.saveRecord keyValue record)
           pure value
+   where
+    startLive stable = do
+      case op of
+        AwaitedReply -> pure ()
+        _ -> emit occurrence parent kind path (Executing (KeyedOperation op)) Nothing
+      live stable
   canonical = either (raise . JournalFailure . JournalInvalidValue) pure . canonicalValue
   corrupt :: forall a. JournalKey -> Text -> n a
   corrupt key = raise . JournalFailure . JournalDecodeError key
@@ -204,7 +210,9 @@ worker execution rt flow input = within root Nothing RunNode [] Nothing Nothing 
       (TakeFirst, SFirstHalf) -> pure (fst x)
       (TakeSecond, SSecondHalf) -> pure (snd x)
       (Arr f, SGlue) -> pure (f x)
-      (Act f, SEffect) -> liftRun execution (f x)
+      (Act f, SEffect) -> do
+        emit key parent EffectNode path (Executing PlainAction) Nothing
+        liftRun execution (f x)
       (Await input output, SAwait _ _) -> case rt.journal of
         Nothing -> raise AwaitWithoutJournal
         Just j -> do

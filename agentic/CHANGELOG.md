@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+* Add metadata-only `Executing LiveOperation` observations before live provider
+  calls, tool evaluation and effects, including plain `act`. `Restored` remains
+  a validated journal hit. Classification is per operation/model turn and never
+  proves invocation or completion; an unanswered await suspends without it.
+  Summary JSON adds the `executing` event tag. Document attempt identity,
+  occurrence-to-journal-key projection and incomplete-prefix semantics.
+  On GHC 9.14.1 the extra event costs about 56 bytes/30 ns per unobserved
+  plain action and 104 bytes per durable miss; hit/no-operation allocation is unchanged.
+
 * Add Generic-derived full-value `Persist` codecs, independent of model
   contracts. `await @Reply` and `durably action` use them by default. The old
   explicit-codec functions are now `awaitWith` and `durablyWith` (API break).

@@ -74,7 +74,7 @@ test-suite agentic-test
   type:             exitcode-stdio-1.0
   hs-source-dirs:   test
   main-is:          Spec.hs
-  other-modules:    PersistSpec RecursionSpec ObservationSpec ObservationModel GraphValueSpec ExceptScopeSpec JournalSpec AwaitSpec
+  other-modules:    OperationSpec PersistSpec RecursionSpec ObservationSpec ObservationModel GraphValueSpec ExceptScopeSpec JournalSpec AwaitSpec
   build-depends:
     , agentic          >=0.2.1 && <0.3
     , base             >=4.18 && <5

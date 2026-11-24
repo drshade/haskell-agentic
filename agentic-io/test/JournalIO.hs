@@ -175,7 +175,8 @@ spec = H.describe "durable journal" $ do
     interpret rt (counted n) 1 `shouldThrow` anyErrorCall
     readIORef n `shouldReturn` 1
     es <- events
-    [e.happened | e <- es, e.nodeType == EffectNode] `shouldBe` [Entered Nothing,Failed]
+    [e.happened | e <- es, e.nodeType == EffectNode] `shouldBe`
+      [Entered Nothing,Executing (KeyedOperation DurableEffect),Failed]
     again <- recording file runtime
     interpret again (counted n) 1 `shouldReturn` 2
     readIORef n `shouldReturn` 2 -- the agreed uncommitted-effect window
@@ -402,6 +403,38 @@ spec = H.describe "durable journal" $ do
     (j.saveRecord (String "key") record `shouldThrow` anyIOException)
       `finally` removeDirectory file
     j.lookupRecord (String "key") `shouldThrow` isJournal
+
+  it "overlaps live and restored parallel branches without a global replay phase" $ withFilePath $ \file -> do
+    failRight <- newIORef True
+    rightSelected <- newEmptyMVar
+    leftRestored <- newEmptyMVar
+    let leftBranch = durably (\_ () -> pure (1 :: Int))
+        rightBranch = durably $ \_ () -> readIORef failRight >>= \bad ->
+          if bad then throwIO (ErrorCall "right interrupted")
+          else readMVar leftRestored >> pure (2 :: Int)
+        flow = leftBranch &&& rightBranch
+    rt <- recording file runtime
+    (firstAttempt,firstEvents) <- capture rt
+    interpret firstAttempt flow () `shouldThrow` anyErrorCall
+    original <- firstEvents
+    [leftLive,_] <- pure [e | e <- original, e.happened == Executing (KeyedOperation DurableEffect)]
+    writeIORef failRight False
+    let j = case rt.journal of Just journal -> journal; Nothing -> error "missing journal"
+        leftKey = journalKeyValue (journalKey DurableEffect leftLive.occurrence)
+        lookupAfterSelection k = do
+          when (k == leftKey) (readMVar rightSelected)
+          j.lookupRecord k
+        coordinate e = case e.happened of
+          Executing (KeyedOperation DurableEffect) -> putMVar rightSelected ()
+          Restored DurableEffect -> putMVar leftRestored ()
+          _ -> pure ()
+    (secondAttempt,secondEvents) <- capture rt{journal=Just j{lookupRecord=lookupAfterSelection}}
+    Timeout.timeout 5000000 (interpret (concurrently (observing coordinate secondAttempt)) flow ())
+      `shouldReturn` Just (1,2)
+    events <- secondEvents
+    [e.happened | e <- events, case e.happened of Executing _ -> True; Restored _ -> True; _ -> False]
+      `shouldBe` [Executing (KeyedOperation DurableEffect),Restored DurableEffect]
+    [e.occurrence | e <- events, e.happened == Restored DurableEffect] `shouldBe` [leftLive.occurrence]
 
 
 shouldReturnSatisfy :: Show a => IO a -> (a -> Bool) -> Expectation
