@@ -1,5 +1,5 @@
 -- A deliberately test-only consumer: graph + recorded metadata, no interpreter.
-module ObservationModel (replay, closeRecording, openItems, State (..), Status (..), prefixesValid) where
+module ObservationModel (replay, closeRecording, openItems, State (..), Status (..), prefixesValid, OperationOrigin (..), operationOrigins) where
 
 import Agentic
 import Data.List (inits, nub)
@@ -46,4 +46,42 @@ replay graph = foldl advance (Right (State []))
   terminal = \case Returned _ -> True; Failed -> True; Cancelled -> True; Suspended -> True; _ -> False
 
 prefixesValid :: FlowGraph -> [Summary] -> Bool
-prefixesValid graph = all (either (const False) (const True) . replay graph) . inits
+prefixesValid graph = all valid . inits
+ where
+  valid events = either (const False) (const True) (replay graph events)
+    && either (const False) (const True) (operationOrigins events)
+
+-- A recording is one attempt. Start a fresh fold for another attempt: repeating
+-- an occurrence there is a retry, not duplicate delivery in this attempt.
+data OperationOrigin = Live | FromJournal deriving (Eq, Show)
+
+-- Missing rows are deliberately unclassified. In particular, Entered and
+-- Drafting do not invent an origin or tell a viewer to animate new work.
+operationOrigins :: [Summary] -> Either String [(Occurrence,LiveOperation,OperationOrigin)]
+operationOrigins = foldl advance (Right [])
+ where
+  advance prior e = do
+    rows <- prior
+    case e.happened of
+      Executing (KeyedOperation AwaitedReply) -> Left "await miss cannot execute"
+      Executing op -> insert rows e op Live
+      Restored op -> insert rows e (KeyedOperation op) FromJournal
+      Returned _ | e.nodeType `elem` [EffectNode,CallNode,AwaitNode,DraftNode]
+        , not (any (\(key,_,_) -> key == e.occurrence) rows) ->
+          Left "operation returned without classification"
+      Turned n _ | not (any (\(key,op,_) -> key == e.occurrence
+                      && op == KeyedOperation (DraftTurn n)) rows) ->
+        Left "turned without operation classification"
+      _ -> Right rows
+  insert rows e op origin
+    | expectedNode op /= e.nodeType = Left "operation has wrong node kind"
+    | any (\(key,old,_) -> key == e.occurrence && (old == op || e.nodeType == EffectNode)) rows =
+        Left "operation classified twice"
+    | otherwise = Right (rows <> [(e.occurrence,op,origin)])
+  expectedNode = \case
+    PlainAction -> EffectNode
+    KeyedOperation DurableEffect -> EffectNode
+    KeyedOperation (DraftTurn _) -> DraftNode
+    KeyedOperation Judgement -> JudgeNode
+    KeyedOperation ToolExecution -> CallNode
+    KeyedOperation AwaitedReply -> AwaitNode

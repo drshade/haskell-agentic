@@ -37,6 +37,7 @@ module Agentic.Runtime
   , edgeIdText
   , Outcome (..)
   , ActionKind (..)
+  , LiveOperation (..)
   , EventPayload (..)
   , Summary (..)
   , summaryValue
@@ -132,6 +133,10 @@ data ToolCall = ToolCall
 -- including an @interpret@ nested inside an @act@.
 -- Equality uses addresses and the full frame stack, never notes or provider
 -- call ids alone. Serialise with 'occurrenceValue', not derived 'Show'.
+-- The same occurrence can appear in several resume attempts. Recorders must
+-- keep an attempt/recording id to distinguish execution episodes, and the run
+-- namespace and flow revision to group them. Neither is inferred from time.
+-- Addresses and context remain meaningful within the same flow revision.
 data Occurrence = Occurrence
   { address :: !Address
   , context :: ![ContextFrame]
@@ -140,12 +145,21 @@ data Occurrence = Occurrence
 
 data ContextFrame
   = EachFrame !Address !Int !Int
+    -- ^ Each address, zero-based element index, total elements this attempt.
   | RepeatFrame !Address !Int
+    -- ^ Repeat address and zero-based iteration; iterations never share a key.
   | CallFrame !Address !Int !Int !Text
+    -- ^ Caller address, zero-based model turn and call position, provider call id.
+    -- Reused provider ids remain distinct by turn and position, including recursion.
   deriving (Eq, Ord, Show)
 
 -- | Project every observation frame to its journal identity. Observation
 -- occurrences retain element totals; journal keys deliberately do not.
+-- Project Executing (KeyedOperation op) and Restored op with the same op: for
+-- the same run/revision and logical operation they identify the same completion.
+-- A changed Each total can change observation equality without changing that
+-- journal key. Do not deduplicate occurrences to infer restored work: plain
+-- actions execute again, and retries are new episodes at the same key.
 journalKey :: JournalOperation -> Occurrence -> JournalKey
 journalKey op occurrence = JournalKey op occurrence.address (map frame occurrence.context)
  where
@@ -172,7 +186,41 @@ data NodeType
 data Outcome = Completed | CallOk | UnknownTool | InvalidInput deriving (Eq, Ord, Show)
 data ActionKind = ToolBatch | Response deriving (Eq, Ord, Show)
 
+-- | The operation selected for live execution. KeyedOperation names the
+-- operation's journal-key projection even when no journal is installed.
+-- KeyedOperation AwaitedReply is representable but never emitted: an await
+-- miss suspends instead of invoking an action.
+data LiveOperation = PlainAction | KeyedOperation !JournalOperation
+  deriving (Eq, Show)
+
 -- | Metadata never contains provider values or diagnostic exceptions.
+--
+-- Operation grammar within one occurrence in one recording attempt:
+--
+-- +----------------------+---------------------------------------------------+
+-- | Operation            | Classification before its existing result events  |
+-- +======================+===================================================+
+-- | Plain act            | Executing PlainAction, then callback              |
+-- +----------------------+---------------------------------------------------+
+-- | Durable / judge /    | Restored op, OR Executing (KeyedOperation op)      |
+-- | tool evaluation      | followed by callback                              |
+-- +----------------------+---------------------------------------------------+
+-- | Draft turn n         | Restored (DraftTurn n), OR Executing keyed turn n; |
+-- |                      | then Turned n (unless interrupted or failed)       |
+-- +----------------------+---------------------------------------------------+
+-- | Await miss           | Neither; then Suspended                           |
+-- +----------------------+---------------------------------------------------+
+-- | Await hit            | Restored AwaitedReply; then Returned              |
+-- +----------------------+---------------------------------------------------+
+-- | Empty judge batch    | Neither; then Judged                              |
+-- +----------------------+---------------------------------------------------+
+--
+-- These sequences admit incomplete prefixes. Entered, Drafting and
+-- CallResolved do not classify work. A prefix with neither Executing nor
+-- Restored is unclassified, not evidence that execution or restoration began.
+-- Each operation episode has at most one classification. A retry in a new
+-- recording attempt is another episode, even at the same logical journal key.
+-- There is no global replay/live phase: branches and turns may interleave.
 data Happened
   = Entered !(Maybe Int)
     -- ^ Exact total for Each, including zero; no total for other scopes.
@@ -189,6 +237,13 @@ data Happened
   | Drafting
   | Turned !Int !ActionKind
   | OutputRejected !Int
+  | Executing !LiveOperation
+    -- ^ Selected for live execution, not proof of starting, delivery or
+    -- completion. Emitted before invoking the callback. Observer failure or
+    -- cancellation at this point prevents the callback. ToolExecution covers
+    -- evaluation including unknown tools and invalid input, not just body entry.
+    -- A known tool emits CallResolved first; an unknown tool cannot resolve.
+    -- This event has no rich payload.
   | Restored !JournalOperation
     -- ^ A validated journal hit; a draft identifies each restored turn separately.
   | Judged
@@ -253,6 +308,9 @@ occurrenceValue (Occurrence a frames) = Object
     CallFrame a t i c -> Array [String "call", String (addressText a), number t, number i, String c]
 
 -- | Portable metadata encoding, with optional payloads already discarded.
+-- There is no format-version field. Executing adds an @executing@ event tag;
+-- strict consumers must recognise it. Older recordings lack live classification,
+-- and absence of a classification must remain unknown, never inferred live.
 summaryValue :: Summary -> Value
 summaryValue e = Object
   [ ("occurrence", occurrenceValue e.occurrence)
@@ -275,10 +333,15 @@ summaryValue e = Object
     Drafting -> Object [("kind",String "drafting")]
     Turned i action -> Object [("kind",String "turned"),("turn",number i),("action",String (case action of ToolBatch -> "tools"; Response -> "response"))]
     OutputRejected i -> Object [("kind",String "outputRejected"),("turn",number i)]
-    Restored op -> Object [("kind",String "restored"),("operation",case op of
-      DurableEffect -> String "effect"; ToolExecution -> String "tool"
-      Judgement -> String "judge"; AwaitedReply -> String "wait"; DraftTurn i -> Object [("turn",number i)])]
+    Executing op -> Object [("kind",String "executing"),("operation",case op of
+      PlainAction -> Object [("kind",String "action")]
+      KeyedOperation keyed -> Object [("kind",String "keyed"),("operation",operationValue keyed)])]
+    Restored op -> Object [("kind",String "restored"),("operation",operationValue op)]
     Judged -> Object [("kind",String "judged")]
+  operationValue = \case
+    DurableEffect -> String "effect"; ToolExecution -> String "tool"
+    Judgement -> String "judge"; AwaitedReply -> String "wait"
+    DraftTurn i -> Object [("turn",number i)]
   nodeName = \case
     RunNode -> "run"; IdentityNode -> "identity"; PureNode -> "pure"
     FirstHalfNode -> "firstHalf"; SecondHalfNode -> "secondHalf"; EffectNode -> "effect"

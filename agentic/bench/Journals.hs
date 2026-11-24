@@ -24,6 +24,7 @@ main :: IO ()
 main = do
   putStrLn "case,median_ms,allocated_MB (5000 elements; median 7; GHC -O1; RTS -T)"
   measure "no-journal-cheap" (pure runtime) (completed cheap)
+  measure "no-journal-actions" (pure runtime) (completed actions)
   forM_ [False,True] $ \parallel -> do
     let name = if parallel then "concurrent" else "sequential"
         fresh = memoryRuntime parallel
@@ -44,6 +45,9 @@ main = do
 #endif
  where
   completed flow rt = interpret rt flow [1..5000] >>= evaluate . sum
+
+actions :: Agentic IO [Int] [Int]
+actions = each (act (pure . (+1)))
 
 cheap :: Agentic IO [Int] [Int]
 cheap = each ((arr (+1) `named` "increment") >>> arr (*2))

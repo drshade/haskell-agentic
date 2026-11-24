@@ -676,6 +676,17 @@ and `graph.bodies` identifies loop bodies and possible tool-call targets.
 selection IDs and reference edges. Save it next to the summaries
 from the same flow - `descriptionValue` is for reading, this is for replaying.
 
+`Entered` and `Drafting` tell you where the interpreter is, not whether it's
+doing new work. For that there are two events. `Restored` means the result
+came out of the journal. `Executing` means the step was picked to run for
+real - and picked is all it means, because the observer can still fail or be
+cancelled before the action or the model is called. If you've seen neither
+yet, you don't know yet.
+
+It's per step, and per turn inside a draft. A resumed run can restore one turn
+and run the next one live, so there's no point where the whole run flips from
+replay to live.
+
 A few things that will bite you:
 
 - An occurrence is `Entered`, then `Returned`, `Failed` or `Cancelled`. A

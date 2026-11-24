@@ -7,16 +7,18 @@ import Data.IORef
 import Data.List (sort)
 import Data.Text.IO qualified as T
 import GHC.Clock (getMonotonicTimeNSec)
+import GHC.Stats (getRTSStats, RTSStats (..))
+import System.Mem (performGC)
 import System.Directory (getTemporaryDirectory, removeFile)
 import System.IO
 import Text.Printf (printf)
 
 flow :: Agentic IO [Int] [Int]
-flow = each ((arr (+1) `named` "increment") >>> arr (*2))
+flow = each ((act (pure . (+1)) `named` "increment") >>> arr (*2))
 
 main :: IO ()
 main = do
-  putStrLn "10,000 elements; each body = named arr (+1) >>> arr (*2); median of 5 runs"
+  putStrLn "10,000 elements; each body = named act (pure . (+1)) >>> arr (*2); median of 5 runs"
   measure "no observer" (pure runtime)
   measure "strict summary + count" $ do
     count <- newIORef (0::Int)
@@ -33,9 +35,15 @@ main = do
   measure label setup = do
     times <- replicateM 5 $ do
       rt <- setup
+      performGC
+      before <- getRTSStats
       begin <- getMonotonicTimeNSec
       result <- interpret rt flow [1..10000]
       _ <- evaluate (sum result)
       end <- getMonotonicTimeNSec
-      pure (fromIntegral (end-begin) / 1000000 :: Double)
-    printf "%s: %.3f ms\n" (label :: String) (sort times !! 2)
+      performGC
+      after <- getRTSStats
+      pure (fromIntegral (end-begin) / 1000000 :: Double,
+        fromIntegral (allocated_bytes after-allocated_bytes before) / 1000000 :: Double)
+    printf "%s: %.3f ms, %.3f MB allocated\n" (label :: String)
+      (sort (map fst times) !! 2) (sort (map snd times) !! 2)

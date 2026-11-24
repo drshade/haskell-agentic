@@ -167,7 +167,7 @@ spec = H.describe "execution observations" $ do
     interpret rt f () `shouldThrow` errorCall "later"
     es <- reverse <$> readIORef ref
     [e.happened | e <- es, e.nodeType == PureNode] `shouldBe` [Entered Nothing, Returned Completed]
-    [e.happened | e <- es, e.nodeType == EffectNode] `shouldBe` [Entered Nothing, Failed]
+    [e.happened | e <- es, e.nodeType == EffectNode] `shouldBe` [Entered Nothing, Executing PlainAction, Failed]
     validate f es
 
   it "records zero and multiple Repeat passes without a total" $ do
@@ -248,13 +248,13 @@ spec = H.describe "execution observations" $ do
             Trace (Right (Right value), events) -> Trace (Right (), events) >> returned value
         Trace (hooked,hs) = interpret rt{scope=hook} flow ()
     result `shouldBe` Left NoSystemOne
-    map (.happened) es `shouldBe` [Entered Nothing,Entered Nothing]
+    map (.happened) es `shouldBe` [Entered Nothing,Entered Nothing,Executing PlainAction]
     prefixesValid graph es `shouldBe` True
     case closeRecording <$> replay graph es of
       Right (State rows) -> [status | (_,_,_,status) <- rows] `shouldBe` [Unknown,Unknown]
       Left problem -> expectationFailure problem
     hooked `shouldBe` result
-    map (.happened) hs `shouldBe` [Entered Nothing,Entered Nothing,Failed,Failed]
+    map (.happened) hs `shouldBe` [Entered Nothing,Entered Nothing,Executing PlainAction,Failed,Failed]
     prefixesValid graph hs `shouldBe` True
 
   it "keeps conversation labels and capped errors independent of occurrence context" $ do
@@ -266,7 +266,8 @@ spec = H.describe "execution observations" $ do
     interpret rt f [()] `shouldThrow` (== TurnLimit 1)
     readIORef seen `shouldReturn` [[Note "outer" Nothing,Note "inner" Nothing]]
     es <- reverse <$> readIORef events
-    [e.happened | e <- es, e.nodeType == DraftNode] `shouldBe` [Entered Nothing,Drafting,Turned 0 ToolBatch,Failed]
+    [e.happened | e <- es, e.nodeType == DraftNode] `shouldBe` [Entered Nothing,Drafting,Executing (KeyedOperation (DraftTurn 0)),Turned 0 ToolBatch
+      ,Executing (KeyedOperation (DraftTurn 1)),Failed]
 
   it "discards optional payloads without evaluating them" $ do
     (_,es) <- capture runtime (arr id :: Agentic IO Int Int) 1
