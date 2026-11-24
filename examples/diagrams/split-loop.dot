@@ -1,0 +1,29 @@
+digraph flow {
+  compound=true;
+  node [shape=box, style=rounded, fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  input [label="input", shape=oval];
+  subgraph cluster_n_flow_seq_0_0 {
+    label="repeatUntil";
+    style=rounded;
+    n_flow_seq_0_1 [label="Done?", shape=diamond, style=solid];
+    route_n_flow_seq_0_repeat_0 [label="", shape=point, width=0.06];
+    n_flow_seq_0_repeat_split_0_0 [label="act"];
+    n_flow_seq_0_repeat_split_1_0 [label="act"];
+  }
+  route_n_flow_seq_1_0 [label="", shape=point, width=0.06];
+  n_flow_seq_1_split_0_0 [label="act"];
+  n_flow_seq_1_split_1_0 [label="act"];
+  output [label="output", shape=oval];
+  input -> n_flow_seq_0_1;
+  n_flow_seq_0_1 -> route_n_flow_seq_0_repeat_0 [label="continue"];
+  route_n_flow_seq_0_repeat_0 -> n_flow_seq_0_repeat_split_0_0 [label="first"];
+  route_n_flow_seq_0_repeat_0 -> n_flow_seq_0_repeat_split_1_0 [label="second"];
+  n_flow_seq_0_repeat_split_0_0 -> n_flow_seq_0_1 [label="again", style=dashed];
+  n_flow_seq_0_repeat_split_1_0 -> n_flow_seq_0_1 [label="again", style=dashed];
+  n_flow_seq_0_1 -> route_n_flow_seq_1_0 [label="done"];
+  route_n_flow_seq_1_0 -> n_flow_seq_1_split_0_0 [label="first"];
+  route_n_flow_seq_1_0 -> n_flow_seq_1_split_1_0 [label="second"];
+  n_flow_seq_1_split_0_0 -> output;
+  n_flow_seq_1_split_1_0 -> output;
+}

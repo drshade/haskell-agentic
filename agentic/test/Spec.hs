@@ -267,7 +267,7 @@ main = hspec $ do
       let flow :: Agentic IO Joke Joke
           flow = repeatUntil ((== "kids") . (.genre)) (draft @Joke "make it kid-friendly") >>> act pure `named` "show it"
           edges = filter (T.isInfixOf "-->") (T.lines (mermaid (described flow)))
-      edges `shouldBe` ["  input --> n_flow_seq_0_repeat_0", "  input --> n_flow_seq_1_note_0", "  n_flow_seq_0_repeat_0 --> n_flow_seq_1_note_0", "  n_flow_seq_1_note_0 --> output"]
+      edges `shouldBe` ["  input --> n_flow_seq_0_1", "  n_flow_seq_0_1 -->|continue| n_flow_seq_0_repeat_0", "  n_flow_seq_0_1 -->|done| n_flow_seq_1_note_0", "  n_flow_seq_1_note_0 --> output"]
 
     it "draws the same graph as DOT, with boxes as clusters" $ do
       let flow :: Agentic IO [Joke] [Joke]
@@ -278,12 +278,12 @@ main = hspec $ do
       length (filter (T.isInfixOf "subgraph cluster_") dotOut) `shouldBe` 2
       length (filter (T.isInfixOf "subgraph ") (T.lines out)) `shouldBe` 2
 
-    it "sends a loop's again edge back to the body's first step, in both formats" $ do
+    it "sends a loop's again edge back to the predicate, in both formats" $ do
       let flow :: Agentic IO Joke Joke
           flow = repeatUntil ((== "kids") . (.genre)) (draft @Joke "make it kid-friendly" >>> act pure `named` "show it")
           d = described flow
-      filter (T.isInfixOf "again") (T.lines (mermaid d)) `shouldBe` ["  n_flow_repeat_seq_1_note_0 -.->|again| n_flow_repeat_seq_0_0"]
-      filter (T.isInfixOf "again") (T.lines (dot d)) `shouldBe` ["  n_flow_repeat_seq_1_note_0 -> n_flow_repeat_seq_0_0 [label=\"again\", style=dashed];"]
+      filter (T.isInfixOf "again") (T.lines (mermaid d)) `shouldBe` ["  n_flow_repeat_seq_1_note_0 -.->|again| n_flow_1"]
+      filter (T.isInfixOf "again") (T.lines (dot d)) `shouldBe` ["  n_flow_repeat_seq_1_note_0 -> n_flow_1 [label=\"again\", style=dashed];"]
 
     it "describes an explicit recursive tool with a finite reference" $ do
       let researcher = recursiveTool $ \self -> tool @Text @Text "research" "Research deeper" (draftWith [self] "research this")

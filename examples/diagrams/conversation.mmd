@@ -1,0 +1,38 @@
+flowchart TD
+  input(["input"])
+  n_flow_seq_0_note_0["arr<br/>Prepare greeting"]
+  subgraph n_flow_seq_1_seq_0_0["Chat until exit"]
+    subgraph n_flow_seq_1_seq_0_note_0["repeatUntil"]
+      n_flow_seq_1_seq_0_note_1{"Done?"}
+      subgraph n_flow_seq_1_seq_0_note_repeat_seq_0_0["Ask a question and wait for reply"]
+        n_flow_seq_1_seq_0_note_repeat_seq_0_note_fan_0_0["arr"]
+        n_flow_seq_1_seq_0_note_repeat_seq_0_note_fan_1_seq_1_0["await"]
+      end
+      n_flow_seq_1_seq_0_note_repeat_seq_1_seq_0_note_0["arr<br/>Is the reply exit?"]
+      n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_0{" "}
+      entry_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_select_1((" "))
+      n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_0_note_0["arr<br/>Exit without calling the model"]
+      n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_1_seq_0_fan_0_0["arr"]
+      n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_1_seq_0_fan_1_seq_1_note_0["draft @Text<br/>Generate answer<br/>#quot;Reply briefly to the user's message.#quot;"]
+      n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_1_seq_1_note_0["arr<br/>Remember answer for next turn"]
+    end
+  end
+  n_flow_seq_1_seq_1_note_0["arr<br/>Finish conversation"]
+  output(["output"])
+  input --> n_flow_seq_0_note_0
+  n_flow_seq_0_note_0 --> n_flow_seq_1_seq_0_note_1
+  n_flow_seq_1_seq_0_note_1 -->|continue| n_flow_seq_1_seq_0_note_repeat_seq_0_note_fan_0_0
+  n_flow_seq_1_seq_0_note_1 -->|continue| n_flow_seq_1_seq_0_note_repeat_seq_0_note_fan_1_seq_1_0
+  n_flow_seq_1_seq_0_note_repeat_seq_0_note_fan_0_0 --> n_flow_seq_1_seq_0_note_repeat_seq_1_seq_0_note_0
+  n_flow_seq_1_seq_0_note_repeat_seq_0_note_fan_1_seq_1_0 --> n_flow_seq_1_seq_0_note_repeat_seq_1_seq_0_note_0
+  n_flow_seq_1_seq_0_note_repeat_seq_1_seq_0_note_0 --> n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_0
+  n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_0 -->|left| n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_0_note_0
+  n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_0 -->|right| entry_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_select_1
+  entry_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_select_1 --> n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_1_seq_0_fan_0_0
+  entry_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_select_1 --> n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_1_seq_0_fan_1_seq_1_note_0
+  n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_1_seq_0_fan_0_0 --> n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_1_seq_1_note_0
+  n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_1_seq_0_fan_1_seq_1_note_0 --> n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_1_seq_1_note_0
+  n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_0_note_0 -.->|again| n_flow_seq_1_seq_0_note_1
+  n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_1_seq_1_note_0 -.->|again| n_flow_seq_1_seq_0_note_1
+  n_flow_seq_1_seq_0_note_1 -->|done| n_flow_seq_1_seq_1_note_0
+  n_flow_seq_1_seq_1_note_0 --> output

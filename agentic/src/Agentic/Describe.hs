@@ -254,6 +254,8 @@ draw lead childLead (Node t cs) = (lead <> t) : go cs
 -- @***@ and @|||@ forking into their branches and joining again at the next
 -- step, with a pass-through drawn as an edge straight to the join; @each@,
 -- @repeatUntil@ and named sub-flows as boxes; tools hanging off their draft.
+-- Each repeat box contains a predicate diamond: continue enters the body,
+-- body exits return to the predicate, and done leaves the loop.
 -- 'mermaid' and 'dot' render it.
 data FlowGraph = FlowGraph
   { items :: [Item]
@@ -279,12 +281,16 @@ data Item
     -- ^ An id, its label's lines, and what's inside.
 
 data NodeKind = Terminal | StepNode | ToolNode | DecisionNode
+  | LoopTestNode
+    -- ^ The pre-body predicate of a repeatUntil, mapped to the loop address.
+    -- Its done/continue routes have no choice selection ids. Body entry under
+    -- a RepeatFrame indicates continuation; the loop's Returned marks completion.
+    -- The predicate itself emits no observation.
   | JunctionNode
     -- ^ Graph-only routing point, with no occurrence/address mapping. A
     -- projected fork can span several syntax positions (including a later
     -- fanout after a pass-through choice), so it does not identify one AST node.
-    -- A dot also appears where a selected side feeds both a loop's Again edge
-    -- and its exit.
+    -- Dots also preserve loop route labels before a split or outer loop.
   deriving (Eq, Show)
 
 data Edge = Edge
@@ -474,16 +480,25 @@ item i = Build $ \s -> ((), s {open = case s.open of
 edge :: Edge -> Build ()
 edge e = Build (\s -> ((), s {links = e:s.links}))
 
-edgeCount :: Build Int
-edgeCount = Build (\s -> (length s.links,s))
-
-entriesSince :: Int -> [Text] -> Build [Text]
-entriesSince before sources = Build $ \s ->
-  let new = reverse (take (length s.links - before) s.links)
-   in (foldr (\x acc -> x : filter (/= x) acc) [] [e.to | e <- new, e.from `elem` sources],s)
-
 connect :: From -> Text -> Build ()
 connect from to = mapM_ (\(f,l,ids) -> edge (Edge f to l Flow Nothing ids)) (sources from)
+
+-- Preserve predicate labels before another construct needs to label its own
+-- routes (a split's first/second, or an enclosing loop's again edge).
+loopLabel :: Maybe Text -> Bool
+loopLabel l = l == Just "done" || l == Just "continue"
+
+loopRoutes :: Maybe Text -> From -> Build From
+loopRoutes self from = Sources <$> mapM route (sources from)
+  where
+    route source@(f,l,ids)
+      | Just f /= self, null ids, loopLabel l = do
+          junction <- Build $ \s ->
+            ("route_" <> itemId s.current s.next, s {next = s.next + 1})
+          item (ItemNode junction JunctionNode [])
+          edge (Edge f junction l Flow Nothing [])
+          pure (junction, Nothing, [])
+      | otherwise = pure source
 
 node :: From -> [Text] -> Build From
 node from label = do
@@ -518,7 +533,8 @@ build context from = \case
     -- An @arr@ can take a pair apart any way it likes, so its halves are lost,
     -- and so is what the edge labels inside it said.
     InSequence -> pure $ case from of
-      Pair _ _ -> Sources [(n, Nothing, ids) | (n, _, ids) <- sources from]
+      Pair _ _ -> Sources
+        [(n, if loopLabel l then l else Nothing, ids) | (n, l, ids) <- sources from]
       Sources _ -> from
     InBranch -> node from ["arr"]
   Leaf info -> step Nothing info
@@ -528,20 +544,23 @@ build context from = \case
   -- source might hold either half, so the edges say which half they carry.
   Halves l r -> case from of
     Pair a b -> Pair <$> build InBranch a l <*> build InBranch b r
-    _ -> Pair <$> build InBranch (labelled "first") l <*> build InBranch (labelled "second") r
+    _ -> do
+      routed <- loopRoutes Nothing from
+      let half label = Sources [(f, Just label, ids) | (f, _, ids) <- sources routed]
+      Pair <$> build InBranch (half "first") l <*> build InBranch (half "second") r
   Branch l r -> decision Nothing from l r
   ForEach f -> Sources . sources . snd <$> box ["each"] (build InSequence (Sources (sources from)) f)
-  -- "Again" goes back to where the body starts: the steps the loop's input
-  -- flows into. If the body has none, it goes to the box.
-  Repeated f -> do
-    before <- edgeCount
-    (b, exits) <- box ["repeatUntil"] (build InSequence from f)
-    entries <- entriesSince before ([f | (f,_,_) <- sources from])
-    let targets = if null entries then [b] else entries
-    mapM_ (\(e, _, ids) -> mapM_ (\t -> edge (Edge e t (Just "again") Again Nothing ids)) targets) (sources exits)
-    -- The condition is checked before the first run, so the input can leave
-    -- without going through the body.
-    pure (merge from exits)
+  -- The predicate is checked before entry and after every body iteration.
+  -- Only its done route reaches the continuation, including zero iterations.
+  Repeated f -> snd <$> box ["repeatUntil"] (do
+    gateway <- fresh
+    item (ItemNode gateway LoopTestNode ["Done?"])
+    connect from gateway
+    exits <- build InSequence (Sources [(gateway, Just "continue", [])]) f
+    routed <- loopRoutes (Just gateway) exits
+    mapM_ (\(e, l, ids) -> edge (Edge e gateway
+      (if e == gateway then l else Just "again") Again Nothing ids)) (sources routed)
+    pure (Sources [(gateway, Just "done", [])]))
   Annotated n (Located a (Branch l r)) -> do
     exits <- located a (decision (Just n.name) from l r)
     Build (\s -> ((),s {mapped = (s.current,itemId a 0):s.mapped}))
@@ -553,7 +572,6 @@ build context from = \case
   Annotated n (Leaf info) | not (passes (Leaf info)) -> step (Just n) info
   Annotated n f -> snd <$> box (n.name : maybe [] pure n.description) (build InSequence from f)
   where
-    labelled l = Sources [(f, Just l, ids) | (f, _, ids) <- sources from]
     -- A half of a pair the graph can't follow: plumbing, like @arr@.
     half name = case context of
       InSequence -> pure from
@@ -646,6 +664,7 @@ mermaid d = T.unlines ("flowchart TD" : concatMap (items' "  ") is <> map edge' 
       Terminal -> "([\"" <> l <> "\"])"
       StepNode -> "[\"" <> l <> "\"]"
       ToolNode -> "[/\"" <> l <> "\"/]"
+      LoopTestNode -> "{\"" <> l <> "\"}"
       DecisionNode -> "{\"" <> (if T.null l then " " else l) <> "\"}"
       JunctionNode -> "((\" \"))"
     edge' (Edge f t l style _ _) = "  " <> f <> arrow style <> maybe "" (\x -> "|" <> escape x <> "|") l <> " " <> t
@@ -676,6 +695,7 @@ dot d =
       Terminal -> ", shape=oval"
       StepNode -> ""
       ToolNode -> ", shape=parallelogram, style=\"\""
+      LoopTestNode -> ", shape=diamond, style=solid"
       DecisionNode -> ", shape=diamond, style=solid" <> if null ls then ", width=0.3, height=0.3, fixedsize=true" else ""
       JunctionNode -> ", shape=point, width=0.06"
     -- An edge into a box points at the box's first node, clipped to the box.
@@ -774,6 +794,7 @@ flowGraphValue graph = Object
     StepNode -> "step"
     ToolNode -> "tool"
     DecisionNode -> "decision"
+    LoopTestNode -> "loop-test"
     JunctionNode -> "junction"
   edgeValue e = Object
     [("from", String e.from), ("to", String e.to)
