@@ -187,6 +187,7 @@ worker execution rt flow input = within root Nothing RunNode [] Nothing Nothing 
             [Left b, Right c] -> pure (b, c)
             _ -> error "Agentic.interpret: the runtime's parallel changed its results"
         (First f, SFirst b) -> case x of (a,c) -> (\v -> (v,c)) <$> descend b f a
+        (Second f, SSecond b) -> case x of (c,a) -> (\v -> (c,v)) <$> descend b f a
         (Split f g, SSplit l r) -> case x of
           (a,c) -> do
             results <- parallelW [Left <$> descend l f a, Right <$> descend r g c]
@@ -343,6 +344,7 @@ kind cursor = case cursor.shape of
   SFanout {} -> FanoutNode
   SSplit {} -> SplitNode
   SFirst {} -> FirstNode
+  SSecond {} -> SecondNode
   SChoose {} -> ChoiceNode
   SEach {} -> EachNode
   SRepeat {} -> RepeatNode

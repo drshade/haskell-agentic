@@ -249,7 +249,7 @@ main = hspec $ do
       let flow :: Agentic IO Joke (Joke, Rating)
           flow = (draft @Joke "retell it" &&& draft @Rating "rate it") >>> second (draft @Rating "rate it again")
           edges = filter (T.isInfixOf "-->") (T.lines (mermaid (described flow)))
-      edges `shouldBe` ["  input --> n_flow_seq_0_fan_0_0", "  input --> n_flow_seq_0_fan_1_0", "  n_flow_seq_0_fan_1_0 --> n_flow_seq_1_split_1_0", "  n_flow_seq_0_fan_0_0 --> output", "  n_flow_seq_1_split_1_0 --> output"]
+      edges `shouldBe` ["  input --> n_flow_seq_0_fan_0_0", "  input --> n_flow_seq_0_fan_1_0", "  n_flow_seq_0_fan_1_0 --> n_flow_seq_1_second_0", "  n_flow_seq_0_fan_0_0 --> output", "  n_flow_seq_1_second_0 --> output"]
 
     it "routes both sides of a choice through distinct fork points" $ do
       let flow :: Agentic IO (Either Joke Joke) (Joke, Rating)

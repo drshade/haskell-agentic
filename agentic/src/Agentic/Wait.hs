@@ -93,6 +93,7 @@ addressFromText encoded = case T.splitOn "/" encoded of
   segments (tag:rest) = do
     s <- case tag of
       "run" -> Right RunRoot; "call" -> Right CallScope
+      "second" -> Right SecondBody
       "first" -> Right FirstBody; "each" -> Right EachBody
       "repeat" -> Right RepeatBody; "note" -> Right NotedBody
       _ -> Left "invalid address segment"

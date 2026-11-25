@@ -102,6 +102,7 @@ data Agentic m i o where
   Fanout :: Agentic m a b -> Agentic m a c -> Agentic m a (b, c)
   Split :: Agentic m a b -> Agentic m c d -> Agentic m (a, c) (b, d)
   First :: Agentic m a b -> Agentic m (a, c) (b, c)
+  Second :: Agentic m a b -> Agentic m (c, a) (c, b)
   Choose :: Agentic m a c -> Agentic m b c -> Agentic m (Either a b) c
   Each :: Agentic m a b -> Agentic m [a] [b]
   Repeat :: (a -> Bool) -> Agentic m a a -> Agentic m a a
@@ -222,7 +223,7 @@ instance Category.Category (Agentic m) where
 instance Arrow (Agentic m) where
   arr = Step . Arr
   first = First
-  second = Split (Step Pass)
+  second = Second
   (***) = Split
   f &&& g = Fanout f g
 

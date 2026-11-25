@@ -36,6 +36,7 @@ import qualified Data.Text as T
 data Description
   = Located Address Description
   | FirstOnly Description
+  | SecondOnly Description
   | Leaf StepInfo
   | Sequence [Description]
     -- ^ Composition, retaining structural addresses.
@@ -105,6 +106,7 @@ fromStatic flow = Located flow.address $ case flow.shape of
   S.SFanout f g -> Together [fromStatic f, fromStatic g]
   S.SSplit f g -> Halves (fromStatic f) (fromStatic g)
   S.SFirst f -> FirstOnly (fromStatic f)
+  S.SSecond f -> SecondOnly (fromStatic f)
   S.SChoose f g -> Branch (fromStatic f) (fromStatic g)
   S.SEach f -> ForEach (fromStatic f)
   S.SRepeat f -> Repeated (fromStatic f)
@@ -149,6 +151,7 @@ displayTree :: Description -> Description
 displayTree = \case
   Located _ d -> displayTree d
   FirstOnly d -> Halves (displayTree d) (Leaf Identity)
+  SecondOnly d -> Halves (Leaf Identity) (displayTree d)
   Sequence ds -> Sequence (concatMap (flatten . displayTree) ds)
     where flatten (Sequence xs) = xs; flatten d = [d]
   Together ds -> Together (concatMap (flatten . displayTree) ds)
@@ -164,6 +167,7 @@ trees :: Description -> [Tree]
 trees = \case
   Located _ d -> trees (displayTree d)
   FirstOnly d -> trees (displayTree (FirstOnly d))
+  SecondOnly d -> trees (displayTree (SecondOnly d))
   Leaf Identity -> []
   Leaf Glue -> []
   Leaf FirstHalf -> []
@@ -388,6 +392,7 @@ structure = go flowAddress
   go a = \case
     Located address d -> let (as,bs) = go address d in (address:as,bs)
     FirstOnly d -> go a d
+    SecondOnly d -> go a d
     Sequence ds -> many ds
     Together ds -> many ds
     Halves l r -> both (go a l) (go a r)
@@ -523,6 +528,9 @@ build context from = \case
   FirstOnly d -> case from of
     Pair a b -> (\x -> Pair x b) <$> build InBranch a d
     _ -> (\x -> Pair x from) <$> build InBranch from d
+  SecondOnly d -> case from of
+    Pair a b -> Pair a <$> build InBranch b d
+    _ -> Pair from <$> build InBranch from d
   Leaf Identity -> pure from
   -- A known pair's half goes on exactly; otherwise it's like any @arr@.
   Leaf FirstHalf | Pair a _ <- from -> pure a
@@ -816,6 +824,7 @@ descriptionValue = \case
     Object fields -> Object (("address",String (addressText a)):fields)
     value -> value
   FirstOnly d -> Object [("kind",String "first"),("step",descriptionValue d)]
+  SecondOnly d -> Object [("kind",String "second"),("step",descriptionValue d)]
   Leaf info -> leaf info
   Sequence ds -> node "sequence" [("steps", Array (map descriptionValue (concatMap sequenceParts ds)))]
   Together ds -> node "together" [("steps", Array (map descriptionValue (concatMap togetherParts ds)))]

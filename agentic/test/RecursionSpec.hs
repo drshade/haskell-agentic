@@ -65,6 +65,7 @@ toolsIn :: Description -> [ToolInfo]
 toolsIn = \case
   Located _ d -> toolsIn d
   FirstOnly d -> toolsIn d
+  SecondOnly d -> toolsIn d
   Leaf (DraftInfo _ _ _ ts) -> concatMap collect ts
   Leaf _ -> []
   Sequence ds -> concatMap toolsIn ds

@@ -21,6 +21,7 @@ data StaticNode
   | SFanout StaticFlow StaticFlow
   | SSplit StaticFlow StaticFlow
   | SFirst StaticFlow
+  | SSecond StaticFlow
   | SChoose StaticFlow StaticFlow
   | SEach StaticFlow
   | SRepeat StaticFlow
@@ -72,6 +73,7 @@ walk depth env address flow = StaticFlow address <$> case flow of
   Split f g -> SSplit <$> descend SplitLeft f <*> descend SplitRight g
   Choose f g -> SChoose <$> descend ChooseLeft f <*> descend ChooseRight g
   First f -> SFirst <$> descend FirstBody f
+  Second f -> SSecond <$> descend SecondBody f
   Each f -> SEach <$> descend EachBody f
   Repeat _ f -> SRepeat <$> descend RepeatBody f
   Noted n f -> SNoted n <$> descend NotedBody f
@@ -123,6 +125,7 @@ bodyAt root (Address path) = go root path
     (SChoose l _, ChooseLeft) -> go l rest
     (SChoose _ r, ChooseRight) -> go r rest
     (SFirst b, FirstBody) -> go b rest
+    (SSecond b, SecondBody) -> go b rest
     (SEach b, EachBody) -> go b rest
     (SRepeat b, RepeatBody) -> go b rest
     (SNoted _ b, NotedBody) -> go b rest
@@ -155,6 +158,7 @@ validate = go []
     SSplit l r -> both l r
     SChoose l r -> both l r
     SFirst b -> go notes b
+    SSecond b -> go notes b
     SEach b -> go notes b
     SRepeat b -> go notes b
     SNoted n b -> go (notes <> [n]) b
