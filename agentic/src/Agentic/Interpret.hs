@@ -187,6 +187,7 @@ worker execution rt flow input = within root Nothing RunNode [] Nothing Nothing 
             [Left b, Right c] -> pure (b, c)
             _ -> error "Agentic.interpret: the runtime's parallel changed its results"
         (First f, SFirst b) -> case x of (a,c) -> (\v -> (v,c)) <$> descend b f a
+        (Second f, SSecond b) -> case x of (c,a) -> (\v -> (c,v)) <$> descend b f a
         (Split f g, SSplit l r) -> case x of
           (a,c) -> do
             results <- parallelW [Left <$> descend l f a, Right <$> descend r g c]
@@ -196,9 +197,12 @@ worker execution rt flow input = within root Nothing RunNode [] Nothing Nothing 
         (Choose f g, SChoose l r) -> case x of
           Left a -> emit key (Just parent) ChoiceNode path (Selected (EdgeId address LeftSide)) Nothing >> descend l f a
           Right a -> emit key (Just parent) ChoiceNode path (Selected (EdgeId address RightSide)) Nothing >> descend r g a
-        (Repeat done f, SRepeat b) ->
-          let loop pass a = if done a then pure a else
-                go b (RepeatFrame address pass : context) key path f a >>= loop (pass + 1)
+        (Repeat done f, SRepeat p b) ->
+          let loop pass a = do
+                let frames = RepeatFrame address pass : context
+                finished <- go p frames key path done a
+                if finished then pure a else
+                  go b frames key path f a >>= loop (pass + 1)
            in loop 0 x
         (Noted n f, SNoted _ b) -> go b context key (path <> [n]) f x
         _ -> raise (InvalidRecursion "runtime structure differs from the static flow")
@@ -206,10 +210,11 @@ worker execution rt flow input = within root Nothing RunNode [] Nothing Nothing 
     step :: forall a b. StaticStep -> Occurrence -> Maybe Occurrence -> [Note] -> Step m a b -> a -> n b
     step shape key parent path s x = case (s, shape) of
       (Pass, SIdentity) -> pure x
-      (Wrap f, SIdentity) -> pure (f x)
+      (InjectLeft, SIdentity) -> pure (Left x)
+      (InjectRight, SIdentity) -> pure (Right x)
       (TakeFirst, SFirstHalf) -> pure (fst x)
       (TakeSecond, SSecondHalf) -> pure (snd x)
-      (Arr f, SGlue) -> pure (f x)
+      (Purely f, SGlue) -> pure (f x)
       (Act f, SEffect) -> do
         emit key parent EffectNode path (Executing PlainAction) Nothing
         liftRun execution (f x)
@@ -342,6 +347,7 @@ kind cursor = case cursor.shape of
   SFanout {} -> FanoutNode
   SSplit {} -> SplitNode
   SFirst {} -> FirstNode
+  SSecond {} -> SecondNode
   SChoose {} -> ChoiceNode
   SEach {} -> EachNode
   SRepeat {} -> RepeatNode

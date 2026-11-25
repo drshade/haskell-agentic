@@ -21,9 +21,10 @@ data StaticNode
   | SFanout StaticFlow StaticFlow
   | SSplit StaticFlow StaticFlow
   | SFirst StaticFlow
+  | SSecond StaticFlow
   | SChoose StaticFlow StaticFlow
   | SEach StaticFlow
-  | SRepeat StaticFlow
+  | SRepeat StaticFlow StaticFlow
   | SNoted Note StaticFlow
 
 data StaticStep where
@@ -57,8 +58,9 @@ walk :: forall m i o. Int -> Env m -> Address -> Agentic m i o -> Either FlowErr
 walk depth env address flow = StaticFlow address <$> case flow of
   Step s -> SStep <$> case s of
     Pass -> pure SIdentity
-    Wrap _ -> pure SIdentity
-    Arr _ -> pure SGlue
+    InjectLeft -> pure SIdentity
+    InjectRight -> pure SIdentity
+    Purely _ -> pure SGlue
     TakeFirst -> pure SFirstHalf
     TakeSecond -> pure SSecondHalf
     Act _ -> pure SEffect
@@ -71,8 +73,9 @@ walk depth env address flow = StaticFlow address <$> case flow of
   Split f g -> SSplit <$> descend SplitLeft f <*> descend SplitRight g
   Choose f g -> SChoose <$> descend ChooseLeft f <*> descend ChooseRight g
   First f -> SFirst <$> descend FirstBody f
+  Second f -> SSecond <$> descend SecondBody f
   Each f -> SEach <$> descend EachBody f
-  Repeat _ f -> SRepeat <$> descend RepeatBody f
+  Repeat p f -> SRepeat <$> descend RepeatTest p <*> descend RepeatBody f
   Noted n f -> SNoted n <$> descend NotedBody f
  where
   descend :: Segment -> Agentic m a b -> Either FlowError StaticFlow
@@ -122,8 +125,10 @@ bodyAt root (Address path) = go root path
     (SChoose l _, ChooseLeft) -> go l rest
     (SChoose _ r, ChooseRight) -> go r rest
     (SFirst b, FirstBody) -> go b rest
+    (SSecond b, SecondBody) -> go b rest
     (SEach b, EachBody) -> go b rest
-    (SRepeat b, RepeatBody) -> go b rest
+    (SRepeat p _, RepeatTest) -> go p rest
+    (SRepeat _ b, RepeatBody) -> go b rest
     (SNoted _ b, NotedBody) -> go b rest
     (SStep (SDraft _ _ _ ts), ToolAt k) -> at ts k >>= (`inside` rest)
     _ -> Nothing
@@ -154,8 +159,9 @@ validate = go []
     SSplit l r -> both l r
     SChoose l r -> both l r
     SFirst b -> go notes b
+    SSecond b -> go notes b
     SEach b -> go notes b
-    SRepeat b -> go notes b
+    SRepeat p b -> both p b
     SNoted n b -> go (notes <> [n]) b
    where both l r = go notes l >> go notes r
   toolCheck notes (StaticTool _ name _ i o body) = case body of

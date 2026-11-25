@@ -1,0 +1,26 @@
+digraph flow {
+  compound=true;
+  node [shape=box, style=rounded, fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  input [label="input", shape=oval];
+  subgraph cluster_n_flow_0 {
+    label="repeatUntil";
+    style=rounded;
+    n_flow_1 [label="Done?", shape=diamond, style=solid];
+    subgraph cluster_n_flow_repeat_test_seq_0_0 {
+      label="repeatUntil";
+      style=rounded;
+      n_flow_repeat_test_seq_0_1 [label="Done?", shape=diamond, style=solid];
+      n_flow_repeat_test_seq_0_repeat_0 [label="act"];
+    }
+    n_flow_repeat_0 [label="act"];
+  }
+  output [label="output", shape=oval];
+  n_flow_repeat_test_seq_0_1 -> n_flow_repeat_test_seq_0_repeat_0 [label="continue"];
+  n_flow_repeat_test_seq_0_repeat_0 -> n_flow_repeat_test_seq_0_1 [label="again", style=dashed];
+  n_flow_repeat_test_seq_0_1 -> n_flow_1 [label="done"];
+  input -> n_flow_repeat_test_seq_0_1;
+  n_flow_1 -> n_flow_repeat_0 [label="continue"];
+  n_flow_repeat_0 -> n_flow_repeat_test_seq_0_1 [label="again", style=dashed];
+  n_flow_1 -> output [label="done"];
+}

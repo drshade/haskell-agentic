@@ -8,7 +8,7 @@ digraph flow {
     label="each";
     style=rounded;
     n_flow_seq_1_seq_0_each_seq_0_fan_1_0 [label="judge\nchoice of 6 \"What kind of animal was this creature?\""];
-    n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0 [label="arr\ndinosaur or other creature"];
+    n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0 [label="purely\ndinosaur or other creature"];
     n_flow_seq_1_seq_0_each_seq_1_seq_1_note_0 [label="choose an exhibit", shape=diamond, style=solid];
     entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0 [label="", shape=point, width=0.06];
     subgraph cluster_n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_0 {

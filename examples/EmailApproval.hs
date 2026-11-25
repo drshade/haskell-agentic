@@ -23,9 +23,9 @@ emailApproval :: (Email -> IO ()) -> Agentic IO Text ()
 emailApproval send =
   draft @Email "Draft a short email from this brief."
     >>> (returnA &&& await @Decision `named` "approve this email?")
-    >>> arr (\(mail,approved) -> if approved == Approve then Left mail else Right ())
+    >>> purely (\(mail,approved) -> if approved == Approve then Left mail else Right ())
     >>> ((durably (\_ mail -> send mail) `named` "print approved email")
-      ||| arr id `named` "finish without sending") `named` "approved?"
+      ||| purely id `named` "finish without sending") `named` "approved?"
 
 fakeSend :: Email -> IO ()
 fakeSend mail = T.putStrLn ("FAKE SEND (no email delivered)\n" <> mail.subject <> "\n" <> mail.body)

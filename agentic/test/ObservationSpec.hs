@@ -108,7 +108,7 @@ spec = H.describe "execution observations" $ do
 
   it "keeps two selection edges when pass-through results fork later or feed a loop" $ do
     let forked = (returnA ||| returnA) >>> (act pure &&& act pure) :: Agentic IO (Either Int Int) (Int,Int)
-        looped = (returnA ||| returnA) >>> repeatUntil (>=3) (arr (+1)) :: Agentic IO (Either Int Int) Int
+        looped = (returnA ||| returnA) >>> repeatUntil (purely (>=3)) (arr (+1)) :: Agentic IO (Either Int Int) Int
         nested = (returnA ||| returnA) ||| returnA :: Agentic IO (Either (Either Int Int) Int) Int
     let graph = flowGraph (either (error . show) id (describe forked))
         junction = one [i | (i,JunctionNode) <- allNodes graph.items]
@@ -118,7 +118,7 @@ spec = H.describe "execution observations" $ do
     _ <- capture runtime forked (Right 1)
     _ <- capture runtime looped (Left 0)
     _ <- capture runtime nested (Left (Right 1))
-    let insideLoop = repeatUntil (>=3) (arr Left >>> (arr (+1) ||| returnA)) :: Agentic IO Int Int
+    let insideLoop = repeatUntil (purely (>=3)) (arr Left >>> (arr (+1) ||| returnA)) :: Agentic IO Int Int
     _ <- capture runtime insideLoop 0
     pure ()
 
@@ -171,16 +171,35 @@ spec = H.describe "execution observations" $ do
     validate f es
 
   it "records zero and multiple Repeat passes without a total" $ do
-    let f = repeatUntil (>=3) (arr (+1)) :: Agentic IO Int Int
+    let f = repeatUntil (purely (>=3)) (arr (+1)) :: Agentic IO Int Int
     (_,zero) <- capture runtime f 3
-    length (entries PureNode zero) `shouldBe` 0
+    length (entries PureNode zero) `shouldBe` 1
     (_,es) <- capture runtime f 0
     let loop = one (entries RepeatNode es)
     let graph = flowGraph (either (error . show) id (describe f))
         gateway = one [i | (i,LoopTestNode) <- allNodes graph.items]
     lookup loop.occurrence.address graph.addressItems `shouldBe` Just gateway
     loop.happened `shouldBe` Entered Nothing
-    map (last . (.context) . (.occurrence)) (entries PureNode es) `shouldBe` [RepeatFrame loop.occurrence.address i | i <- [0..2]]
+    map (last . (.context) . (.occurrence)) (entries PureNode es) `shouldBe` [RepeatFrame loop.occurrence.address i | i <- [0,0,1,1,2,2,3]]
+
+  it "maps effectful and named pure loop tests to visible items" $ do
+    let effectful = repeatUntil (act (pure . (>=3))) (purely (+1)) :: Agentic IO Int Int
+        namedTest = repeatUntil (purely (>=3) `named` "Finished?") (purely (+1)) :: Agentic IO Int Int
+    (_,effectEvents) <- capture runtime effectful 0
+    let effectGraph = flowGraph (either (error . show) id (describe effectful))
+        effectNodes = allNodes effectGraph.items
+        effectGateway = one [i | (i,LoopTestNode) <- effectNodes]
+        predicateItem = one [i | (i,StepNode) <- effectNodes]
+        mapped e = lookup e.occurrence.address effectGraph.addressItems
+    mapM_ (\e -> mapped e `shouldSatisfy` maybe False (`elem` itemIds effectGraph.items)) effectEvents
+    map mapped (entries EffectNode effectEvents) `shouldBe` replicate 4 (Just predicateItem)
+    map mapped (entries RepeatNode effectEvents) `shouldBe` [Just effectGateway]
+    (_,es) <- capture runtime namedTest 0
+    let graph = flowGraph (either (error . show) id (describe namedTest))
+        gateway = one [i | (i,LoopTestNode) <- allNodes graph.items]
+        tests = [e | e <- entries PureNode es, "repeat-test" `T.isInfixOf` addressText e.occurrence.address]
+    map (\e -> lookup e.occurrence.address graph.addressItems) tests `shouldBe` replicate 4 (Just gateway)
+    mermaid (either (error . show) id (describe namedTest)) `shouldSatisfy` T.isInfixOf "{\"Finished?\"}"
 
   it "separates duplicate call ids within/across turns, rejected calls and body entry" $ do
     let t = tool @Int @Int "same" "" (arr (+1))

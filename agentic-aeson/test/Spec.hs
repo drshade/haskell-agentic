@@ -22,7 +22,7 @@ main = hspec $ H.describe "flow graph JSON round trip" $ do
   let self = recursiveTool $ \s -> tool @Text @Text "same\n\"\\雪" "" (draftWith [s] "again")
       recursive = each (draftWith @Text @Text @IO [self,self] "start")
       routing = ((returnA &&& act pure) ||| (returnA &&& act pure)) >>> arr fst
-                >>> repeatUntil (>=3) (act (pure . (+1))) :: Agentic IO (Either Int Int) Int
+                >>> repeatUntil (purely (>=3)) (act (pure . (+1))) :: Agentic IO (Either Int Int) Int
       encode flow = flowGraphValue (flowGraph (either (error . show) id (describe flow)))
   mapM_ (\(name,value) -> it name $ do
     let parsed = J.eitherDecodeStrict (TE.encodeUtf8 (renderJson value))

@@ -1,0 +1,15 @@
+flowchart TD
+  input(["input"])
+  subgraph n_flow_0["repeatUntil"]
+    n_flow_1{"Done?"}
+    subgraph n_flow_repeat_test_0["Funny enough?"]
+      n_flow_repeat_test_note_seq_0_0["judge<br/>yes/no #quot;Would a 10-year-old laugh at this joke?#quot;"]
+    end
+    n_flow_repeat_note_0["draft @Joke<br/>Revise joke<br/>#quot;Improve this joke for a 10-year-old.#quot;"]
+  end
+  output(["output"])
+  n_flow_repeat_test_note_seq_0_0 --> n_flow_1
+  input --> n_flow_repeat_test_note_seq_0_0
+  n_flow_1 -->|continue| n_flow_repeat_note_0
+  n_flow_repeat_note_0 -.->|again| n_flow_repeat_test_note_seq_0_0
+  n_flow_1 -->|done| output

@@ -32,7 +32,7 @@ nextMove = draft @Game "Play the next move!"
 
 game :: Agentic IO Game Game
 game =
-  repeatUntil ((== Ended) . (.state))
+  repeatUntil (purely ((== Ended) . (.state)))
     (nextMove >>> act printBoard `named` "print the board")
     `named` "play until the game ends"
 

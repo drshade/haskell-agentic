@@ -180,7 +180,7 @@ edgeIdText (EdgeId a side) = addressText a <> case side of
 data NodeType
   = RunNode | IdentityNode | PureNode | FirstHalfNode | SecondHalfNode
   | EffectNode | AwaitNode | DraftNode | JudgeNode | SequenceNode | FanoutNode
-  | SplitNode | FirstNode | ChoiceNode | EachNode | RepeatNode | NoteNode | CallNode
+  | SplitNode | FirstNode | SecondNode | ChoiceNode | EachNode | RepeatNode | NoteNode | CallNode
   deriving (Eq, Ord, Show)
 
 data Outcome = Completed | CallOk | UnknownTool | InvalidInput deriving (Eq, Ord, Show)
@@ -346,7 +346,7 @@ summaryValue e = Object
     RunNode -> "run"; IdentityNode -> "identity"; PureNode -> "pure"
     FirstHalfNode -> "firstHalf"; SecondHalfNode -> "secondHalf"; EffectNode -> "effect"
     AwaitNode -> "await"; DraftNode -> "draft"; JudgeNode -> "judge"; SequenceNode -> "sequence"
-    FanoutNode -> "fanout"; SplitNode -> "split"; FirstNode -> "first"; ChoiceNode -> "choice"
+    FanoutNode -> "fanout"; SplitNode -> "split"; FirstNode -> "first"; SecondNode -> "second"; ChoiceNode -> "choice"
     EachNode -> "each"; RepeatNode -> "repeat"; NoteNode -> "note"; CallNode -> "call"
 
 -- | A scope hook owns entry, protected execution, and one terminal notification.

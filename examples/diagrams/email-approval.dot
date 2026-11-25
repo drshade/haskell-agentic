@@ -7,7 +7,7 @@ digraph flow {
   n_flow_seq_1_seq_0_fan_1_note_0 [label="await\napprove this email?"];
   n_flow_seq_1_seq_1_seq_1_note_0 [label="approved?", shape=diamond, style=solid];
   n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0 [label="durably\nprint approved email"];
-  n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0 [label="arr\nfinish without sending"];
+  n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0 [label="purely\nfinish without sending"];
   output [label="output", shape=oval];
   input -> n_flow_seq_0_0;
   n_flow_seq_0_0 -> n_flow_seq_1_seq_0_fan_1_note_0;

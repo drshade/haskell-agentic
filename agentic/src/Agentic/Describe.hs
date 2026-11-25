@@ -36,6 +36,7 @@ import qualified Data.Text as T
 data Description
   = Located Address Description
   | FirstOnly Description
+  | SecondOnly Description
   | Leaf StepInfo
   | Sequence [Description]
     -- ^ Composition, retaining structural addresses.
@@ -45,7 +46,7 @@ data Description
     -- ^ @a *** b@: one flow on each half of a pair.
   | Branch Description Description
   | ForEach Description
-  | Repeated Description
+  | Repeated Description Description
     -- ^ @repeatUntil@: run again on its own output until a condition holds.
   | Annotated Note Description
 
@@ -53,7 +54,7 @@ data StepInfo
   = Identity
     -- ^ The input, unchanged ('returnA').
   | Glue
-    -- ^ @arr@: a pure function.
+    -- ^ @purely@: a pure function.
   | FirstHalf
     -- ^ 'takeFirst'.
   | SecondHalf
@@ -105,9 +106,10 @@ fromStatic flow = Located flow.address $ case flow.shape of
   S.SFanout f g -> Together [fromStatic f, fromStatic g]
   S.SSplit f g -> Halves (fromStatic f) (fromStatic g)
   S.SFirst f -> FirstOnly (fromStatic f)
+  S.SSecond f -> SecondOnly (fromStatic f)
   S.SChoose f g -> Branch (fromStatic f) (fromStatic g)
   S.SEach f -> ForEach (fromStatic f)
-  S.SRepeat f -> Repeated (fromStatic f)
+  S.SRepeat p f -> Repeated (fromStatic p) (fromStatic f)
   S.SNoted n f -> Annotated n (fromStatic f)
 
 stepInfo :: S.StaticStep -> StepInfo
@@ -140,7 +142,7 @@ data Tree = Node Text [Tree]
 -- | The tree view. Recursive groups list their finite definitions; references
 -- point to members without expanding them. Unnamed glue between steps is
 -- hidden, but a branch is never hidden: inside @&&&@, @***@ and @|||@ it shows
--- as @arr@ (or @pass@), and a pass-through beside a step keeps its input.
+-- as @purely@ (or @pass@), and a pass-through beside a step keeps its input.
 renderTree :: Description -> Text
 renderTree = T.intercalate "\n" . concatMap (draw "" "") . trees . displayTree
 
@@ -149,6 +151,7 @@ displayTree :: Description -> Description
 displayTree = \case
   Located _ d -> displayTree d
   FirstOnly d -> Halves (displayTree d) (Leaf Identity)
+  SecondOnly d -> Halves (Leaf Identity) (displayTree d)
   Sequence ds -> Sequence (concatMap (flatten . displayTree) ds)
     where flatten (Sequence xs) = xs; flatten d = [d]
   Together ds -> Together (concatMap (flatten . displayTree) ds)
@@ -156,7 +159,7 @@ displayTree = \case
   Halves l r -> Halves (displayTree l) (displayTree r)
   Branch l r -> Branch (displayTree l) (displayTree r)
   ForEach d -> ForEach (displayTree d)
-  Repeated d -> Repeated (displayTree d)
+  Repeated p d -> Repeated (displayTree p) (displayTree d)
   Annotated n d -> Annotated n (displayTree d)
   d -> d
 
@@ -164,6 +167,7 @@ trees :: Description -> [Tree]
 trees = \case
   Located _ d -> trees (displayTree d)
   FirstOnly d -> trees (displayTree (FirstOnly d))
+  SecondOnly d -> trees (displayTree (SecondOnly d))
   Leaf Identity -> []
   Leaf Glue -> []
   Leaf FirstHalf -> []
@@ -177,7 +181,7 @@ trees = \case
           ts -> [Node ("together" <> keeping) ts]
   Halves l r -> [Node "both halves" [labelled "first" (branch l), labelled "second" (branch r)]]
   Branch l r -> [Node "branch" [labelled "left" (branch l), labelled "right" (branch r)]]
-  Repeated d -> loop "repeatUntil" d
+  Repeated p d -> [Node "repeatUntil" [labelled "test" (branch p), labelled "body" (branch d)]]
   ForEach d -> loop "each" d
   Annotated n (Leaf info) | not (passes (Leaf info)) -> leaf (Just n.name) info
   Annotated n d -> case trees d of
@@ -219,7 +223,7 @@ plumbing = \case
   Leaf FirstHalf -> "takeFirst"
   Leaf SecondHalf -> "takeSecond"
   Annotated _ d -> plumbing d
-  _ -> "arr"
+  _ -> "purely"
 
 -- | Does this part of a flow only pass its input through?
 passes :: Description -> Bool
@@ -266,7 +270,8 @@ data FlowGraph = FlowGraph
   , bodies :: [BodyRelation]
   }
 
--- | A loop body, or a possible call target with its binding-site address.
+-- | A loop test/body, or a possible call target with its binding-site address.
+-- Test and body relations share an owner but have distinct addressed roots.
 data BodyRelation = BodyRelation
   { owner :: Address
   , binding :: Maybe Address
@@ -283,9 +288,10 @@ data Item
 data NodeKind = Terminal | StepNode | ToolNode | DecisionNode
   | LoopTestNode
     -- ^ The pre-body predicate of a repeatUntil, mapped to the loop address.
-    -- Its done/continue routes have no choice selection ids. Body entry under
-    -- a RepeatFrame indicates continuation; the loop's Returned marks completion.
-    -- The predicate itself emits no observation.
+    -- Its done/continue routes have no choice selection ids. The test and body
+    -- have separate addresses under the same RepeatFrame pass. A pure test maps
+    -- here too; a compound test has its own items before the diamond.
+    -- Body entry indicates continuation; the loop's Returned marks completion.
   | JunctionNode
     -- ^ Graph-only routing point, with no occurrence/address mapping. A
     -- projected fork can span several syntax positions (including a later
@@ -340,7 +346,7 @@ selectionRoutes original = shareJunctions (foldl route ([], original) ids)
     let selected = [e | e <- edges, selection `elem` e.selections]
         diamond = itemId address 0
         label = case side of LeftSide -> "left"; RightSide -> "right"
-        junction = "entry_" <> T.replace "/" "_" (edgeIdText selection)
+        junction = "entry_" <> T.replace "-" "_" (T.replace "/" "_" (edgeIdText selection))
         isSelected e = selection `elem` e.selections
         redirect e = if isSelected e then
           e {from = junction, label = if e.label == Just label then Nothing else e.label, selections = []}
@@ -388,12 +394,13 @@ structure = go flowAddress
   go a = \case
     Located address d -> let (as,bs) = go address d in (address:as,bs)
     FirstOnly d -> go a d
+    SecondOnly d -> go a d
     Sequence ds -> many ds
     Together ds -> many ds
     Halves l r -> both (go a l) (go a r)
     Branch l r -> both (go a l) (go a r)
     ForEach d -> loop a d
-    Repeated d -> loop a d
+    Repeated p d -> both (loop a p) (loop a d)
     Annotated _ d -> go a d
     Leaf (DraftInfo _ _ _ ts) ->
       let call = child a CallScope
@@ -460,7 +467,7 @@ instance Monad Build where
   Build g >>= k = Build (\s -> let (a, s1) = g s in (k a).runBuild s1)
 
 itemId :: Address -> Int -> Text
-itemId a n = "n_" <> T.replace "/" "_" (addressText a) <> "_" <> T.pack (show n)
+itemId a n = "n_" <> T.replace "-" "_" (T.replace "/" "_" (addressText a)) <> "_" <> T.pack (show n)
 
 fresh :: Build Text
 fresh = Build $ \s ->
@@ -483,6 +490,30 @@ edge e = Build (\s -> ((), s {links = e:s.links}))
 connect :: From -> Text -> Build ()
 connect from to = mapM_ (\(f,l,ids) -> edge (Edge f to l Flow Nothing ids)) (sources from)
 
+-- A single pure predicate is the diamond itself, including its authored name.
+simpleTest :: Description -> Maybe (Maybe Note)
+simpleTest (Located _ d) = simpleTest d
+simpleTest (Leaf Glue) = Just Nothing
+simpleTest (Annotated n d) | Just _ <- simpleTest d = Just (Just n)
+simpleTest _ = Nothing
+
+-- A compound predicate has one loop entry even if it begins with a fork.
+-- Remove the routing dot when it just forwards to one visible step.
+predicateEntry :: Text -> Build Text
+predicateEntry start = Build $ \s -> case [e | e <- s.links, e.from == start] of
+  [e] | e.style == Flow, e.label == Nothing, null e.selections ->
+    let keep (ItemNode i _ _) = i /= start
+        keep _ = True
+     in (e.to, s {links = filter (/= e) s.links, open = map (filter keep) s.open})
+  _ -> (start,s)
+
+routingNode :: Build Text
+routingNode = do
+  junction <- Build $ \s ->
+    ("route_" <> itemId s.current s.next, s {next = s.next + 1})
+  item (ItemNode junction JunctionNode [])
+  pure junction
+
 -- Preserve predicate labels before another construct needs to label its own
 -- routes (a split's first/second, or an enclosing loop's again edge).
 loopLabel :: Maybe Text -> Bool
@@ -493,9 +524,7 @@ loopRoutes self from = Sources <$> mapM route (sources from)
   where
     route source@(f,l,ids)
       | Just f /= self, null ids, loopLabel l = do
-          junction <- Build $ \s ->
-            ("route_" <> itemId s.current s.next, s {next = s.next + 1})
-          item (ItemNode junction JunctionNode [])
+          junction <- routingNode
           edge (Edge f junction l Flow Nothing [])
           pure (junction, Nothing, [])
       | otherwise = pure source
@@ -523,20 +552,23 @@ build context from = \case
   FirstOnly d -> case from of
     Pair a b -> (\x -> Pair x b) <$> build InBranch a d
     _ -> (\x -> Pair x from) <$> build InBranch from d
+  SecondOnly d -> case from of
+    Pair a b -> Pair a <$> build InBranch b d
+    _ -> Pair from <$> build InBranch from d
   Leaf Identity -> pure from
-  -- A known pair's half goes on exactly; otherwise it's like any @arr@.
+  -- A known pair's half goes on exactly; otherwise it's like any @purely@.
   Leaf FirstHalf | Pair a _ <- from -> pure a
   Leaf SecondHalf | Pair _ b <- from -> pure b
   Leaf FirstHalf -> half "takeFirst"
   Leaf SecondHalf -> half "takeSecond"
   Leaf Glue -> case context of
-    -- An @arr@ can take a pair apart any way it likes, so its halves are lost,
+    -- A @purely@ can take a pair apart any way it likes, so its halves are lost,
     -- and so is what the edge labels inside it said.
     InSequence -> pure $ case from of
       Pair _ _ -> Sources
         [(n, if loopLabel l then l else Nothing, ids) | (n, l, ids) <- sources from]
       Sources _ -> from
-    InBranch -> node from ["arr"]
+    InBranch -> node from ["purely"]
   Leaf info -> step Nothing info
   Sequence ds -> chain from ds
   Together ds -> pairUp <$> mapM (build InBranch from) ds
@@ -552,13 +584,26 @@ build context from = \case
   ForEach f -> Sources . sources . snd <$> box ["each"] (build InSequence (Sources (sources from)) f)
   -- The predicate is checked before entry and after every body iteration.
   -- Only its done route reaches the continuation, including zero iterations.
-  Repeated f -> snd <$> box ["repeatUntil"] (do
+  Repeated predicate f -> snd <$> box ["repeatUntil"] (do
     gateway <- fresh
-    item (ItemNode gateway LoopTestNode ["Done?"])
-    connect from gateway
+    let label = case simpleTest predicate of
+          Just (Just n) -> n.name : maybe [] pure n.description
+          _ -> ["Done?"]
+    item (ItemNode gateway LoopTestNode label)
+    entry <- case simpleTest predicate of
+      Just _ -> do
+        let (addresses, _) = structure predicate
+        Build (\s -> ((),s {mapped = [(a,gateway) | a <- addresses] <> s.mapped}))
+        pure gateway
+      Nothing -> do
+        start <- routingNode
+        tested <- build InSequence (Sources [(start, Nothing, [])]) predicate
+        connect tested gateway
+        predicateEntry start
+    connect from entry
     exits <- build InSequence (Sources [(gateway, Just "continue", [])]) f
     routed <- loopRoutes (Just gateway) exits
-    mapM_ (\(e, l, ids) -> edge (Edge e gateway
+    mapM_ (\(e, l, ids) -> edge (Edge e entry
       (if e == gateway then l else Just "again") Again Nothing ids)) (sources routed)
     pure (Sources [(gateway, Just "done", [])]))
   Annotated n (Located a (Branch l r)) -> do
@@ -572,7 +617,7 @@ build context from = \case
   Annotated n (Leaf info) | not (passes (Leaf info)) -> step (Just n) info
   Annotated n f -> snd <$> box (n.name : maybe [] pure n.description) (build InSequence from f)
   where
-    -- A half of a pair the graph can't follow: plumbing, like @arr@.
+    -- A half of a pair the graph can't follow: plumbing, like @purely@.
     half name = case context of
       InSequence -> pure from
       InBranch -> node from [name]
@@ -634,7 +679,7 @@ stepLines name info = kind : maybe [] pure name <> details
   where
     (kind, details) = case info of
       Identity -> ("pass", [])
-      Glue -> ("arr", [])
+      Glue -> ("purely", [])
       FirstHalf -> ("takeFirst", [])
       SecondHalf -> ("takeSecond", [])
       Effect -> ("act", [])
@@ -816,13 +861,14 @@ descriptionValue = \case
     Object fields -> Object (("address",String (addressText a)):fields)
     value -> value
   FirstOnly d -> Object [("kind",String "first"),("step",descriptionValue d)]
+  SecondOnly d -> Object [("kind",String "second"),("step",descriptionValue d)]
   Leaf info -> leaf info
   Sequence ds -> node "sequence" [("steps", Array (map descriptionValue (concatMap sequenceParts ds)))]
   Together ds -> node "together" [("steps", Array (map descriptionValue (concatMap togetherParts ds)))]
   Halves l r -> node "halves" [("first", descriptionValue l), ("second", descriptionValue r)]
   Branch l r -> node "branch" [("left", descriptionValue l), ("right", descriptionValue r)]
   ForEach d -> node "each" [("step", descriptionValue d)]
-  Repeated d -> node "repeat" [("step", descriptionValue d)]
+  Repeated p d -> node "repeat" [("test", descriptionValue p), ("step", descriptionValue d)]
   Annotated n d ->
     node "note" $
       [("name", String n.name)]
@@ -838,7 +884,7 @@ descriptionValue = \case
     node kind fields = Object (("kind", String kind) : fields)
     leaf = \case
       Identity -> node "pass" []
-      Glue -> node "arr" []
+      Glue -> node "purely" []
       FirstHalf -> node "takeFirst" []
       SecondHalf -> node "takeSecond" []
       Effect -> node "act" []

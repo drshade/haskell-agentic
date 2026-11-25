@@ -19,20 +19,20 @@ judgements - and you can draw the whole flow before you spend a single token.
 It's split into a handful of packages, so the core stays tiny and you only pull
 in the providers you actually use:
 
-| Package | What it's for |
-|---|---|
-| `agentic` | flows, contracts, questions, the runtime and the interpreter (depends only on `base`, `text` and `transformers`; GHC 9.6+) |
-| `agentic-jev` | Jev as System One |
-| `agentic-anthropic` | Claude as System Two (or System One) |
-| `agentic-openai` | OpenAI as System Two (or System One) |
-| `agentic-io` | concurrency, recording and replay, and `.env` loading |
-| `agentic-aeson` | shared by the providers: JSON conversions and strict JSON Schema |
-| `examples` | the examples in this README (not published) |
+| Package             | What it's for                                                                                                              |
+|---------------------|----------------------------------------------------------------------------------------------------------------------------|
+| `agentic`           | flows, contracts, questions, the runtime and the interpreter (depends only on `base`, `text` and `transformers`; GHC 9.6+) |
+| `agentic-jev`       | Jev as System One                                                                                                          |
+| `agentic-anthropic` | Claude as System Two (or System One)                                                                                       |
+| `agentic-openai`    | OpenAI as System Two (or System One)                                                                                       |
+| `agentic-io`        | concurrency, recording and replay, and `.env` loading                                                                      |
+| `agentic-aeson`     | shared by the providers: JSON conversions and strict JSON Schema                                                           |
+| `examples`          | the examples in this README (not published)                                                                                |
 
 All the examples below live in `examples/` and run against the real models -
 `cabal run dino`, `cabal run tictactoe`, `cabal run review`,
-`cabal run kitchensink` and `cabal run email-approval`. Copy `.env.example` to
-`.env` and fill in your keys first.
+`cabal run kitchensink`, `cabal run revision` and `cabal run email-approval`.
+Copy `.env.example` to `.env` and fill in your keys first.
 
 ## The big idea
 
@@ -44,14 +44,14 @@ interpreter.
 
 The main steps are:
 
-| Step | What it does | Returns |
-|---|---|---|
-| `draft` | an LLM writes a value, optionally using tools along the way | any `Contract o` |
-| `judge` | Jev answers typed questions about the input | answers with calibrated probabilities |
-| `act` | plain code, with any effect `m` | whatever it returns |
-| `durably` | an effect whose saved result is reused when the run resumes | any `Persist o` |
-| `await` | asks for an external reply, suspending its branch until answered | any `Persist o` |
-| `arr` | a pure function - glue between steps | whatever it returns |
+| Step      | What it does                                                     | Returns                               |
+|-----------|------------------------------------------------------------------|---------------------------------------|
+| `draft`   | an LLM writes a value, optionally using tools along the way      | any `Contract o`                      |
+| `judge`   | Jev answers typed questions about the input                      | answers with calibrated probabilities |
+| `act`     | plain code, with any effect `m`                                  | whatever it returns                   |
+| `durably` | an effect whose saved result is reused when the run resumes      | any `Persist o`                       |
+| `await`   | asks for an external reply, suspending its branch until answered | any `Persist o`                       |
+| `purely`     | a pure function - glue between steps                             | whatever it returns                   |
 
 Because a flow is just data, you can `describe` it (print it, or draw it) before
 you spend a single token. And because the interpreter is separate, the same flow
@@ -62,31 +62,67 @@ work, and `Agentic` for the structure, which wires them together:
 
 ```haskell
 data Step m i o where
-  Pass       :: Step m i i                            -- returnA
-  Wrap       :: (i -> o) -> Step m i o                -- Left, Right
-  Arr        :: (i -> o) -> Step m i o
-  TakeFirst  :: Step m (a, b) a                       -- takeFirst
-  TakeSecond :: Step m (a, b) b                       -- takeSecond
-  Act        :: (i -> m o) -> Step m i o
-  Durable    :: Codec i -> Codec o
-             -> (Maybe DurableKey -> i -> m o) -> Step m i o
-  Await      :: Codec i -> Codec o -> Step m i o
-  Draft      :: Structure i -> Structure o
-             -> Instruction -> [Tool m] -> Step m i o
-  Judge      :: Structure i -> Questions o -> Step m i o
+  -- Pass the input through unchanged.
+  Pass :: Step m i i
+
+  -- Put the input into the Left or Right alternative of an Either.
+  InjectLeft  :: Step m a (Either a b)
+  InjectRight :: Step m b (Either a b)
+
+  -- Keep the first or second element of a pair.
+  TakeFirst  :: Step m (a, b) a
+  TakeSecond :: Step m (a, b) b
+
+  -- Lift a pure function.
+  Purely :: (i -> o) -> Step m i o
+
+  -- Lift an effectful function.
+  Act :: (i -> m o) -> Step m i o
+
+  -- Lift an effectful function whose result can be journaled and restored.
+  Durable :: Codec i -> Codec o
+          -> (Maybe DurableKey -> i -> m o) -> Step m i o
+
+  -- Request an external reply; suspend this branch if unanswered.
+  Await :: Codec i -> Codec o -> Step m i o
+
+  -- Generate a typed value using System Two, optionally calling tools.
+  Draft :: Structure i -> Structure o
+        -> Instruction -> [Tool m] -> Step m i o
+
+  -- Answer typed questions about the input using System One.
+  Judge :: Structure i -> Questions o -> Step m i o
 
 data Agentic m i o where
-  Step   :: Step m i o -> Agentic m i o
-  Seq    :: Agentic m a b -> Agentic m b c -> Agentic m a c       -- >>>
-  Fanout :: Agentic m a b -> Agentic m a c -> Agentic m a (b, c)  -- &&&
-  Split  :: Agentic m a b -> Agentic m c d
-         -> Agentic m (a, c) (b, d)                             -- ***
+  -- Make a one-step flow.
+  Step :: Step m i o -> Agentic m i o
+
+  -- Feed the first flow's output into the second.
+  Seq :: Agentic m a b -> Agentic m b c -> Agentic m a c
+
+  -- Give both flows the same input and pair their results.
+  Fanout :: Agentic m a b -> Agentic m a c -> Agentic m a (b, c)
+
+  -- Run each flow on its half of the input pair and pair their results.
+  Split :: Agentic m a b -> Agentic m c d
+        -> Agentic m (a, c) (b, d)
+
+  -- Transform one half of a pair; preserve the other.
   First  :: Agentic m a b -> Agentic m (a, c) (b, c)
-  Choose :: Agentic m a c -> Agentic m b c
-         -> Agentic m (Either a b) c                           -- |||
-  Each   :: Agentic m a b -> Agentic m [a] [b]
-  Repeat :: (a -> Bool) -> Agentic m a a -> Agentic m a a        -- repeatUntil
-  Noted  :: Note -> Agentic m i o -> Agentic m i o               -- named, note
+  Second :: Agentic m a b -> Agentic m (c, a) (c, b)
+
+  -- Run the first flow for Left input, or the second for Right input.
+  Choose :: Agentic m a c -> Agentic m b c -> Agentic m (Either a b) c
+
+  -- Apply the flow to every element of a list.
+  Each :: Agentic m a b -> Agentic m [a] [b]
+
+  -- Feed each result back into the flow until the predicate holds.
+  -- Check before each iteration, so the body may run zero times.
+  Repeat :: Agentic m a Bool -> Agentic m a a -> Agentic m a a
+
+  -- Attach a name and optional description to a flow.
+  Noted :: Note -> Agentic m i o -> Agentic m i o
 ```
 
 `Await` marks where a flow can suspend for an external reply. It doesn't do
@@ -99,8 +135,9 @@ them up from `Persist`, and `durablyWith` and `awaitWith` take them by hand.
 [Wait for an external reply](#wait-for-an-external-reply) shows how to answer a
 question and resume.
 
-The `Arrow` and `ArrowChoice` instances build these constructors directly,
-otherwise `describe` would see a tangle of `arr swap` instead of "these run side
+The standard Arrow method `arr` is also available; it means the same as
+`purely`. The `Arrow` and `ArrowChoice` instances build these constructors directly,
+otherwise `describe` would see a tangle of `purely swap` instead of "these run side
 by side".
 
 There's deliberately no `ArrowApply` and no `Monad`. I know, I know. But either
@@ -349,7 +386,7 @@ dinoProject =
   draft @[Creature] "Name 10 prehistoric creatures a grade 5 class might have heard of. \
     \Include a mix of kinds, not only dinosaurs."
     >>> each creatureExhibit
-    >>> arr Exhibit
+    >>> purely Exhibit
     >>> draft @Poster "Create a grade 5 poster from these exhibit entries. Keep the dinosaur \
       \pictures and trump cards, and give the other prehistoric creatures a \
       \Not a dinosaur! corner."
@@ -358,8 +395,8 @@ dinoProject =
 creatureExhibit :: Agentic IO Creature ExhibitEntry
 creatureExhibit =
   classify
-    >>> arr route `named` "dinosaur or other creature"
-    >>> ((exhibit >>> arr DinosaurExhibit) ||| (factCard >>> arr OtherExhibit))
+    >>> purely route `named` "dinosaur or other creature"
+    >>> ((exhibit >>> purely DinosaurExhibit) ||| (factCard >>> purely OtherExhibit))
           `named` "choose an exhibit"
 
 -- | Jev decides what kind of animal each creature was, keeping the creature.
@@ -383,7 +420,7 @@ exhibit =
   (returnA &&& draft @DinoPic "Draw an ascii picture of this dinosaur, 10 lines high"
            &&& draft @TrumpCard "Make a trump card for this dinosaur")
     `named` "exhibit"
-    >>> arr (\(dinosaur :/\ picture :/\ card) -> Entry dinosaur picture card)
+    >>> purely (\(dinosaur :/\ picture :/\ card) -> Entry dinosaur picture card)
 ```
 
 `route` makes the choice explicit: `Left` is a dinosaur, `Right` is another
@@ -431,7 +468,7 @@ ghci> print d
 draft @[Creature]  "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
 each
 ├─ judge  choice of 6 "What kind of animal was this creature?"  (keeping its input)
-├─ arr  dinosaur or other creature
+├─ purely  dinosaur or other creature
 └─ choose an exhibit  branch
    ├─ left → exhibit  together  (keeping its input)
    │  ├─ draft @DinoPic  "Draw an ascii picture of this dinosaur, 10 lines high"
@@ -451,7 +488,7 @@ flowchart TD
   n_flow_seq_0_0["draft @[Creature]<br/>#quot;Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs.#quot;"]
   subgraph n_flow_seq_1_seq_0_0["each"]
     n_flow_seq_1_seq_0_each_seq_0_fan_1_0["judge<br/>choice of 6 #quot;What kind of animal was this creature?#quot;"]
-    n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0["arr<br/>dinosaur or other creature"]
+    n_flow_seq_1_seq_0_each_seq_1_seq_0_note_0["purely<br/>dinosaur or other creature"]
     n_flow_seq_1_seq_0_each_seq_1_seq_1_note_0{"choose an exhibit"}
     entry_flow_seq_1_seq_0_each_seq_1_seq_1_note_select_0((" "))
     subgraph n_flow_seq_1_seq_0_each_seq_1_seq_1_note_choose_0_seq_0_seq_0_0["exhibit"]
@@ -490,17 +527,17 @@ bodies, with references for recursion. A choice is a diamond with a left and a
 right edge. A dot is just a fork in the picture, not another step to run.
 
 The diagram follows each half of a pair from `&&&` or `***` to wherever it
-goes next, but it can't see inside an `arr`, so `arr fst` loses track of which
+goes next, but it can't see inside a `purely`, so `purely fst` loses track of which
 step the half came from. `takeFirst` and `takeSecond` do the same job and keep
 it.
 
 ### Naming things
 
-An `arr` or an `act` is opaque to `describe`, so you name it. `named` binds as
+A `purely` or an `act` is opaque to `describe`, so you name it. `named` binds as
 tightly as function application, so it names exactly the expression before it:
 
 ```haskell
-    >>> arr route `named` "dinosaur or other creature"
+    >>> purely route `named` "dinosaur or other creature"
 ```
 
 Without it, the code that routes creatures to their exhibits would be invisible.
@@ -527,7 +564,7 @@ nextMove = draft @Game "Play the next move!"
 
 game :: Agentic IO Game Game
 game =
-  repeatUntil ((== Ended) . (.state))
+  repeatUntil (purely ((== Ended) . (.state)))
     (nextMove >>> act printBoard `named` "print the board")
     `named` "play until the game ends"
 ```
@@ -538,12 +575,14 @@ say there's a 3×3 board of `Blank`, `X` and `O`, and a game that's either
 
 ```
 play until the game ends  repeatUntil
-├─ draft @Game  "Play the next move!"
-└─ act  print the board
+├─ test → purely
+└─ body
+   ├─ draft @Game  "Play the next move!"
+   └─ act  print the board
 ```
 
-The loop is small enough to see at a glance. The `again` edge goes back for
-another move; the bypass lets an already-ended game leave without playing:
+The loop is small enough to see at a glance. The `again` edge returns to the
+test; the `done` edge lets an already-ended game leave without playing:
 
 ```mermaid
 flowchart TD
@@ -575,13 +614,33 @@ include the small Jev review and the much larger KitchenSink flow. KitchenSink
 has its own page so the full combination of tools, loops and choices doesn't
 swamp this walkthrough.
 
+## Example: Review and revise
+
+A loop's test is a flow too. It can call a model, perform an effect, or ask
+someone a question with `await`. Here Jev judges the current joke before
+Claude revises it:
+
+```haskell
+revise :: Agentic IO Joke Joke
+revise =
+  repeatUntil
+    ((judge (yesNo "Would a 10-year-old laugh at this joke?")
+      >>> purely ((>= 0.8) . (.yes))) `named` "Funny enough?")
+    (draft @Joke "Improve this joke for a 10-year-old." `named` "Revise joke")
+```
+
+The test returns a Bool; the body receives the current joke. If the first
+review passes, the joke is returned unchanged. Otherwise the revised joke
+goes through the test again. `cabal run revision` runs the
+[complete example](https://github.com/drshade/haskell-agentic/blob/main/examples/Revision.hs).
+
 ## Example: The kitchen sink
 
 Want to see everything at once? `examples/KitchenSink.hs` is a day of support
 email at an online bookshop. Claude writes the day's inbox. Jev drops the spam
 (`keep`) and triages each email with three questions in one request - a `choice`
 of topic, a `score` of urgency, and a `yesNo` "is the customer angry?" - and a
-named policy (`note`, `arr`) turns that into a ticket. Urgent and routine tickets
+named policy (`note`, `purely`) turns that into a ticket. Urgent and routine tickets
 are handled side by side (`***`). Refunds go to an agent with two tools, an
 order lookup (`act`) and a refund-policy check (`judge`), and everything else
 gets a plain reply (`|||`). Each reply is polished until Jev rates it polite
@@ -695,7 +754,7 @@ An occurrence is an address in the flow plus where it sits in its loops and tool
 calls (which element, which pass, which call). That is what makes recursion
 work: a tool that calls itself is one node in the graph and a new occurrence
 every time. `graph.addressItems` maps each address to the item that shows it,
-and `graph.bodies` identifies loop bodies and possible tool-call targets.
+and `graph.bodies` identifies loop tests, loop bodies and possible tool-call targets.
 `flowGraphValue` encodes the complete graph, including those relationships,
 selection IDs and reference edges. Save it next to the summaries
 from the same flow - `descriptionValue` is for reading, this is for replaying.
@@ -1011,9 +1070,9 @@ emailApproval :: (Email -> IO ()) -> Agentic IO Text ()
 emailApproval send =
   draft @Email "Draft a short email from this brief."
     >>> (returnA &&& await @Decision `named` "approve this email?")
-    >>> arr (\(mail,approved) -> if approved == Approve then Left mail else Right ())
+    >>> purely (\(mail,approved) -> if approved == Approve then Left mail else Right ())
     >>> ((durably (\_ mail -> send mail) `named` "print approved email")
-      ||| arr id `named` "finish without sending") `named` "approved?"
+      ||| purely id `named` "finish without sending") `named` "approved?"
 ```
 
 And the diagram it generates. The draft goes two ways - to you, and to the
@@ -1026,7 +1085,7 @@ flowchart TD
   n_flow_seq_1_seq_0_fan_1_note_0["await<br/>approve this email?"]
   n_flow_seq_1_seq_1_seq_1_note_0{"approved?"}
   n_flow_seq_1_seq_1_seq_1_note_choose_0_note_0["durably<br/>print approved email"]
-  n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0["arr<br/>finish without sending"]
+  n_flow_seq_1_seq_1_seq_1_note_choose_1_note_0["purely<br/>finish without sending"]
   output(["output"])
   input --> n_flow_seq_0_0
   n_flow_seq_0_0 --> n_flow_seq_1_seq_0_fan_1_note_0

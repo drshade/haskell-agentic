@@ -65,6 +65,7 @@ toolsIn :: Description -> [ToolInfo]
 toolsIn = \case
   Located _ d -> toolsIn d
   FirstOnly d -> toolsIn d
+  SecondOnly d -> toolsIn d
   Leaf (DraftInfo _ _ _ ts) -> concatMap collect ts
   Leaf _ -> []
   Sequence ds -> concatMap toolsIn ds
@@ -72,7 +73,7 @@ toolsIn = \case
   Halves l r -> toolsIn l <> toolsIn r
   Branch l r -> toolsIn l <> toolsIn r
   ForEach d -> toolsIn d
-  Repeated d -> toolsIn d
+  Repeated p d -> toolsIn p <> toolsIn d
   Annotated _ d -> toolsIn d
  where
   collect t = t : case t.body of

@@ -1,0 +1,5 @@
+play until the game ends  repeatUntil
+├─ test → purely
+└─ body
+   ├─ draft @Game  "Play the next move!"
+   └─ act  print the board

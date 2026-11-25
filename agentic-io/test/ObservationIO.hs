@@ -162,9 +162,9 @@ spec = H.describe "IO observation scopes" $ do
   it "allows a parent failure after its child has returned" $ do
     (rt,readEvents) <- record
     let condition n = if n == (0::Int) then False else error "predicate"
-        flow = repeatUntil condition (arr (+1))
+        flow = repeatUntil (purely condition) (arr (+1))
     interpret rt flow 0 `shouldThrow` (\(e :: ErrorCall) -> "predicate" `isInfixOf` show e)
     es <- readEvents
     checkPrefixes flow es
-    [e.happened | e <- es, e.nodeType == PureNode] `shouldBe` [Entered Nothing,Returned Completed]
+    [e.happened | e <- es, e.nodeType == PureNode] `shouldBe` concat (replicate 3 [Entered Nothing,Returned Completed])
     [e.happened | e <- es, e.nodeType == RepeatNode] `shouldBe` [Entered Nothing,Failed]

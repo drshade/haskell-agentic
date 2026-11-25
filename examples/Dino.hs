@@ -88,7 +88,7 @@ dinoProject =
   draft @[Creature] "Name 10 prehistoric creatures a grade 5 class might have heard of. \
     \Include a mix of kinds, not only dinosaurs."
     >>> each creatureExhibit
-    >>> arr Exhibit
+    >>> purely Exhibit
     >>> draft @Poster "Create a grade 5 poster from these exhibit entries. Keep the dinosaur \
       \pictures and trump cards, and give the other prehistoric creatures a \
       \Not a dinosaur! corner."
@@ -97,8 +97,8 @@ dinoProject =
 creatureExhibit :: Agentic IO Creature ExhibitEntry
 creatureExhibit =
   classify
-    >>> arr route `named` "dinosaur or other creature"
-    >>> ((exhibit >>> arr DinosaurExhibit) ||| (factCard >>> arr OtherExhibit))
+    >>> purely route `named` "dinosaur or other creature"
+    >>> ((exhibit >>> purely DinosaurExhibit) ||| (factCard >>> purely OtherExhibit))
           `named` "choose an exhibit"
 
 -- | Jev decides what kind of animal each creature was, keeping the creature.
@@ -122,7 +122,7 @@ exhibit =
   (returnA &&& draft @DinoPic "Draw an ascii picture of this dinosaur, 10 lines high"
            &&& draft @TrumpCard "Make a trump card for this dinosaur")
     `named` "exhibit"
-    >>> arr (\(dinosaur :/\ picture :/\ card) -> Entry dinosaur picture card)
+    >>> purely (\(dinosaur :/\ picture :/\ card) -> Entry dinosaur picture card)
 
 -- ---------------------------------------------------------------------------
 

@@ -3,7 +3,7 @@ digraph flow {
   node [shape=box, style=rounded, fontname="Helvetica"];
   edge [fontname="Helvetica"];
   input [label="input", shape=oval];
-  n_flow_seq_0_note_0 [label="arr\nPrepare greeting"];
+  n_flow_seq_0_note_0 [label="purely\nPrepare greeting"];
   subgraph cluster_n_flow_seq_1_seq_0_0 {
     label="Chat until exit";
     style=rounded;
@@ -14,19 +14,19 @@ digraph flow {
       subgraph cluster_n_flow_seq_1_seq_0_note_repeat_seq_0_0 {
         label="Ask a question and wait for reply";
         style=rounded;
-        n_flow_seq_1_seq_0_note_repeat_seq_0_note_fan_0_0 [label="arr"];
+        n_flow_seq_1_seq_0_note_repeat_seq_0_note_fan_0_0 [label="purely"];
         n_flow_seq_1_seq_0_note_repeat_seq_0_note_fan_1_seq_1_0 [label="await"];
       }
-      n_flow_seq_1_seq_0_note_repeat_seq_1_seq_0_note_0 [label="arr\nIs the reply exit?"];
+      n_flow_seq_1_seq_0_note_repeat_seq_1_seq_0_note_0 [label="purely\nIs the reply exit?"];
       n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_0 [label="", shape=diamond, style=solid, width=0.3, height=0.3, fixedsize=true];
       entry_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_select_1 [label="", shape=point, width=0.06];
-      n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_0_note_0 [label="arr\nExit without calling the model"];
-      n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_1_seq_0_fan_0_0 [label="arr"];
+      n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_0_note_0 [label="purely\nExit without calling the model"];
+      n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_1_seq_0_fan_0_0 [label="purely"];
       n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_1_seq_0_fan_1_seq_1_note_0 [label="draft @Text\nGenerate answer\n\"Reply briefly to the user's message.\""];
-      n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_1_seq_1_note_0 [label="arr\nRemember answer for next turn"];
+      n_flow_seq_1_seq_0_note_repeat_seq_1_seq_1_choose_1_seq_1_note_0 [label="purely\nRemember answer for next turn"];
     }
   }
-  n_flow_seq_1_seq_1_note_0 [label="arr\nFinish conversation"];
+  n_flow_seq_1_seq_1_note_0 [label="purely\nFinish conversation"];
   output [label="output", shape=oval];
   input -> n_flow_seq_0_note_0;
   n_flow_seq_0_note_0 -> n_flow_seq_1_seq_0_note_1;

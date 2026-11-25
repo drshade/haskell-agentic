@@ -206,14 +206,14 @@ kitchenSink =
   draft @[Email] "Write 8 emails to the support address of an online bookshop, as they \
     \might arrive in a day. Include one spam email, one refund request and \
     \one angry customer."
-    >>> (arr length `named` "count the emails"
+    >>> (purely length `named` "count the emails"
           &&& keep 0.5 (yesNo "Is this a genuine email from a customer, not spam?"))
     >>> second
       ( each triage
-          >>> arr (partition (.urgent)) `named` "split off the urgent tickets"
+          >>> purely (partition (.urgent)) `named` "split off the urgent tickets"
           >>> each (handle >>> act page `named` "page the on-call team") *** each handle
       )
-    >>> arr (\(received :/\ urgent :/\ routine) ->
+    >>> purely (\(received :/\ urgent :/\ routine) ->
           Day received (received - length urgent - length routine) urgent routine)
     >>> draft @Report "Summarise the day's support email for the support lead."
 
@@ -221,18 +221,18 @@ triage :: Agentic IO Email Ticket
 triage =
   (returnA &&& judge triageQuestions)
     >>> note "triage policy"
-          "Urgent if Jev scores it above Soon, or the customer is angry" (arr decide)
+          "Urgent if Jev scores it above Soon, or the customer is angry" (purely decide)
 
 -- | Reply, polish, send, and log it.
 handle :: Agentic IO Ticket Handled
 handle =
   ((route >>> polish) &&& draft @Text "Write a one-line log entry for this support ticket.")
-    >>> arr (\((ticket, reply), logEntry) -> Handled ticket reply logEntry)
+    >>> purely (\((ticket, reply), logEntry) -> Handled ticket reply logEntry)
     >>> act send `named` "send the reply"
 
 route :: Agentic IO Ticket (Ticket, Reply)
 route =
-  arr (\ticket -> if ticket.about == Refund then Left ticket else Right ticket)
+  purely (\ticket -> if ticket.about == Refund then Left ticket else Right ticket)
     `named` "refunds to the refund agent"
     >>> (returnA &&& refundAgent
           ||| returnA &&& draft @Reply "Write a helpful reply to this customer's email.")
@@ -250,7 +250,7 @@ polish :: Agentic IO (Ticket, Reply) (Ticket, Reply)
 polish =
   note "polish" "Revise until Jev rates the reply polite (≥ 0.9)" $
     rate
-      >>> repeatUntil ((>= 0.9) . (.yes) . snd)
+      >>> repeatUntil (purely ((>= 0.9) . (.yes) . snd))
         ( takeFirst
             >>> second
               (draft @Reply "Make this reply warmer and more polite, keeping what it says.")
@@ -259,7 +259,7 @@ polish =
       >>> takeFirst
   where
     rate = returnA
-      &&& (takeSecond >>> arr (.text) >>> judge (yesNo "Is this reply polite and warm?"))
+      &&& (takeSecond >>> purely (.text) >>> judge (yesNo "Is this reply polite and warm?"))
 
 send :: Handled -> IO Handled
 send h = do

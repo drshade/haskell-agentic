@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+* Replace `Step.Wrap` with typed `InjectLeft` and `InjectRight`; arbitrary
+  pure functions use `Purely` (renamed from `Arr`). Add the `purely` helper;
+  the standard Arrow `arr` method remains available.
+* Add an explicit `Second` flow constructor, used by Arrow `second`, with
+  a `second` address segment, description kind and observation node type.
+* Generalise `Repeat` and `repeatUntil` to take a test flow returning Bool.
+  Use `repeatUntil (purely done) body` for a pure predicate. Tests may call
+  models, perform effects or await replies. A test runs on passes 0..n and
+  the body on passes 0..n-1, with distinct addresses under each RepeatFrame.
+* Descriptions and their JSON now include the repeat's `test` as well as
+  `step`. Graph body relations include both roots. A compound test is drawn
+  before the loop diamond; back edges return to its single entry. A named
+  pure test labels the diamond. Human-facing pure step labels say `purely`.
+* These are API and captured-structure changes. Repeat tests add observations
+  and journal keys at `repeat-test`; existing loop body paths stay at `repeat`.
+  Paths under `second` change from its old Split expansion. Use a new workflow
+  revision and recapture graphs/observations when upgrading stored runs.
+  No compatibility aliases or journal migrations are provided.
+* Add a review-and-revise example (`cabal run revision`): Jev tests a joke
+  before each Claude revision, with scripted coverage and generated diagrams.
+
 * Draw every `repeatUntil` with an explicit `Done?` predicate diamond:
   `continue` enters the body, body exits return to the predicate, and only
   `done` reaches the continuation. This also shows zero iterations correctly.

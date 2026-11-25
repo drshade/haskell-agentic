@@ -1,0 +1,3 @@
+repeatUntil
+├─ test → Funny enough?  judge  yes/no "Would a 10-year-old laugh at this joke?"
+└─ body → draft @Joke  Revise joke  "Improve this joke for a 10-year-old."
