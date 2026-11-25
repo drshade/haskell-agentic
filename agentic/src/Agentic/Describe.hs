@@ -562,7 +562,7 @@ build context from = \case
   Leaf FirstHalf -> half "takeFirst"
   Leaf SecondHalf -> half "takeSecond"
   Leaf Glue -> case context of
-    -- An @purely@ can take a pair apart any way it likes, so its halves are lost,
+    -- A @purely@ can take a pair apart any way it likes, so its halves are lost,
     -- and so is what the edge labels inside it said.
     InSequence -> pure $ case from of
       Pair _ _ -> Sources

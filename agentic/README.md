@@ -31,8 +31,8 @@ in the providers you actually use:
 
 All the examples below live in `examples/` and run against the real models -
 `cabal run dino`, `cabal run tictactoe`, `cabal run review`,
-`cabal run kitchensink`, `cabal run revision` and `cabal run email-approval`. Copy `.env.example` to
-`.env` and fill in your keys first.
+`cabal run kitchensink`, `cabal run revision` and `cabal run email-approval`.
+Copy `.env.example` to `.env` and fill in your keys first.
 
 ## The big idea
 
@@ -527,13 +527,13 @@ bodies, with references for recursion. A choice is a diamond with a left and a
 right edge. A dot is just a fork in the picture, not another step to run.
 
 The diagram follows each half of a pair from `&&&` or `***` to wherever it
-goes next, but it can't see inside an `purely`, so `purely fst` loses track of which
+goes next, but it can't see inside a `purely`, so `purely fst` loses track of which
 step the half came from. `takeFirst` and `takeSecond` do the same job and keep
 it.
 
 ### Naming things
 
-An `purely` or an `act` is opaque to `describe`, so you name it. `named` binds as
+A `purely` or an `act` is opaque to `describe`, so you name it. `named` binds as
 tightly as function application, so it names exactly the expression before it:
 
 ```haskell

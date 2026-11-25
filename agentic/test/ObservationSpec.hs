@@ -185,7 +185,15 @@ spec = H.describe "execution observations" $ do
   it "maps effectful and named pure loop tests to visible items" $ do
     let effectful = repeatUntil (act (pure . (>=3))) (purely (+1)) :: Agentic IO Int Int
         namedTest = repeatUntil (purely (>=3) `named` "Finished?") (purely (+1)) :: Agentic IO Int Int
-    _ <- capture runtime effectful 0
+    (_,effectEvents) <- capture runtime effectful 0
+    let effectGraph = flowGraph (either (error . show) id (describe effectful))
+        effectNodes = allNodes effectGraph.items
+        effectGateway = one [i | (i,LoopTestNode) <- effectNodes]
+        predicateItem = one [i | (i,StepNode) <- effectNodes]
+        mapped e = lookup e.occurrence.address effectGraph.addressItems
+    mapM_ (\e -> mapped e `shouldSatisfy` maybe False (`elem` itemIds effectGraph.items)) effectEvents
+    map mapped (entries EffectNode effectEvents) `shouldBe` replicate 4 (Just predicateItem)
+    map mapped (entries RepeatNode effectEvents) `shouldBe` [Just effectGateway]
     (_,es) <- capture runtime namedTest 0
     let graph = flowGraph (either (error . show) id (describe namedTest))
         gateway = one [i | (i,LoopTestNode) <- allNodes graph.items]

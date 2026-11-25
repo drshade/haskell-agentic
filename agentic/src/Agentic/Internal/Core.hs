@@ -109,6 +109,8 @@ data Step m i o where
   -- | Answer typed questions about the input using System One.
   Judge :: Structure i -> Questions o -> Step m i o
 
+-- | A flow from @i@ to @o@ in effect @m@. Build flows from steps with the
+-- 'Arrow' combinators; run them with 'Agentic.Interpret.interpret'.
 data Agentic m i o where
   -- | Make a one-step flow.
   Step :: Step m i o -> Agentic m i o
@@ -134,7 +136,7 @@ data Agentic m i o where
   Each :: Agentic m a b -> Agentic m [a] [b]
 
   -- | Feed each result back into the flow until the predicate holds.
-  -- | Check before each iteration, so the body may run zero times.
+  -- Check before each iteration, so the body may run zero times.
   Repeat :: Agentic m a Bool -> Agentic m a a -> Agentic m a a
 
   -- | Attach a name and optional description to a flow.
