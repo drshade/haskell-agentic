@@ -79,9 +79,10 @@ data Note = Note
 data Step m i o where
   Pass :: Step m i i
     -- ^ The input, unchanged: 'id' and 'returnA'.
-  Wrap :: (i -> o) -> Step m i o
-    -- ^ The input re-wrapped without changing it ('Left', 'Right'), so that
-    -- 'Agentic.Describe.describe' can show it as a pass-through.
+  InjectLeft :: Step m a (Either a b)
+    -- ^ Put the input into the Left alternative, preserving its payload.
+  InjectRight :: Step m b (Either a b)
+    -- ^ Put the input into the Right alternative, preserving its payload.
   Arr :: (i -> o) -> Step m i o
   TakeFirst :: Step m (a, b) a
     -- ^ 'takeFirst': unlike @arr fst@, 'Agentic.Describe.describe' can see
@@ -226,9 +227,9 @@ instance Arrow (Agentic m) where
   f &&& g = Fanout f g
 
 instance ArrowChoice (Agentic m) where
-  left f = Choose (f >>> Step (Wrap Left)) (Step (Wrap Right))
-  right f = Choose (Step (Wrap Left)) (f >>> Step (Wrap Right))
-  f +++ g = Choose (f >>> Step (Wrap Left)) (g >>> Step (Wrap Right))
+  left f = Choose (f >>> Step InjectLeft) (Step InjectRight)
+  right f = Choose (Step InjectLeft) (f >>> Step InjectRight)
+  f +++ g = Choose (f >>> Step InjectLeft) (g >>> Step InjectRight)
   f ||| g = Choose f g
 
 -- | The first half of a pair. It does what @arr fst@ does, but a diagram can

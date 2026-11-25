@@ -206,7 +206,8 @@ worker execution rt flow input = within root Nothing RunNode [] Nothing Nothing 
     step :: forall a b. StaticStep -> Occurrence -> Maybe Occurrence -> [Note] -> Step m a b -> a -> n b
     step shape key parent path s x = case (s, shape) of
       (Pass, SIdentity) -> pure x
-      (Wrap f, SIdentity) -> pure (f x)
+      (InjectLeft, SIdentity) -> pure (Left x)
+      (InjectRight, SIdentity) -> pure (Right x)
       (TakeFirst, SFirstHalf) -> pure (fst x)
       (TakeSecond, SSecondHalf) -> pure (snd x)
       (Arr f, SGlue) -> pure (f x)

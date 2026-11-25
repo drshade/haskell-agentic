@@ -57,7 +57,8 @@ walk :: forall m i o. Int -> Env m -> Address -> Agentic m i o -> Either FlowErr
 walk depth env address flow = StaticFlow address <$> case flow of
   Step s -> SStep <$> case s of
     Pass -> pure SIdentity
-    Wrap _ -> pure SIdentity
+    InjectLeft -> pure SIdentity
+    InjectRight -> pure SIdentity
     Arr _ -> pure SGlue
     TakeFirst -> pure SFirstHalf
     TakeSecond -> pure SSecondHalf
