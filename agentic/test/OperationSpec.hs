@@ -64,6 +64,26 @@ spec = H.describe "live operation observations" $ do
     live.occurrence `shouldBe` restored.occurrence
     journalKey DurableEffect live.occurrence `shouldBe` journalKey DurableEffect restored.occurrence
 
+  it "journals loop tests and bodies independently on every pass" $ do
+    (rt,readEvents) <- fixture
+    calls <- newIORef ([] :: [String])
+    let test _ (n :: Int) = modifyIORef' calls (<> ["test"]) >> pure (n >= 2)
+        body _ n = modifyIORef' calls (<> ["body"]) >> pure (n+1)
+        flow = repeatUntil (durably test) (durably body)
+    interpret rt flow 0 `shouldReturn` 2
+    live <- readEvents
+    readIORef calls `shouldReturn` ["test","body","test","body","test"]
+    interpret rt flow 0 `shouldReturn` 2
+    restored <- readEvents
+    readIORef calls `shouldReturn` ["test","body","test","body","test"]
+    phases live `shouldBe` replicate 5 (Executing (KeyedOperation DurableEffect))
+    phases restored `shouldBe` replicate 5 (Restored DurableEffect)
+    let occurrences = map (.occurrence) (classified live)
+    length (nub (map (journalKey DurableEffect) occurrences)) `shouldBe` 5
+    map (.occurrence) (classified restored) `shouldBe` occurrences
+    operationOrigins live `shouldBe` Right [(o,KeyedOperation DurableEffect,Live) | o <- occurrences]
+    operationOrigins restored `shouldBe` Right [(o,KeyedOperation DurableEffect,FromJournal) | o <- occurrences]
+
   it "maps restoration to the original journal key even when Each totals change" $ do
     (rt,readEvents) <- fixture
     let flow = each (durably (\_ (n :: Int) -> pure (n+1)))
@@ -189,7 +209,7 @@ spec = H.describe "live operation observations" $ do
 
   it "keeps distinct loop iterations and call positions despite reused call ids" $ do
     (rt,readEvents) <- fixture
-    let loop = repeatUntil (>=3) (durably (\_ n -> pure (n+1))) :: Agentic IO Int Int
+    let loop = repeatUntil (purely (>=3)) (durably (\_ n -> pure (n+1))) :: Agentic IO Int Int
     interpret rt loop 0 `shouldReturn` 3
     events <- readEvents
     length (nub (map (journalKey DurableEffect . (.occurrence)) (classified events))) `shouldBe` 3

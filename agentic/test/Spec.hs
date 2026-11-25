@@ -172,13 +172,32 @@ main = hspec $ do
     it "runs structure: fanout and each" $ do
       rt <- testRuntime [respond joke, respond (Rating 3)] 1
       interpret rt (draft @Joke "a joke" >>> (returnA &&& draft @Rating "rate it")) () `shouldReturn` (joke, Rating 3)
-      interpret rt (each (arr (* 2))) [1, 2, 3 :: Int] `shouldReturn` [2, 4, 6]
-      interpret rt (arr (+ 1) *** arr (* 2)) (1, 5 :: Int) `shouldReturn` (2 :: Int, 10)
-      interpret rt (repeatUntil (>= 10) (arr (* 2))) (3 :: Int) `shouldReturn` 12
-      interpret rt (repeatUntil (>= 10) (arr (* 2))) (50 :: Int) `shouldReturn` 50
-      interpret rt (second (arr show)) ('a', 7 :: Int) `shouldReturn` ('a', "7")
-      interpret rt (left (arr (+ 1))) (Left 1 :: Either Int Char) `shouldReturn` Left (2 :: Int)
-      interpret rt (left (arr (+ 1))) (Right 'x' :: Either Int Char) `shouldReturn` (Right 'x' :: Either Int Char)
+      interpret rt (each (purely (* 2))) [1, 2, 3 :: Int] `shouldReturn` [2, 4, 6]
+      interpret rt (purely (+ 1) *** purely (* 2)) (1, 5 :: Int) `shouldReturn` (2 :: Int, 10)
+      interpret rt (repeatUntil (purely (>= 10)) (purely (* 2))) (3 :: Int) `shouldReturn` 12
+      interpret rt (repeatUntil (purely (>= 10)) (purely (* 2))) (50 :: Int) `shouldReturn` 50
+      interpret rt (second (purely show)) ('a', 7 :: Int) `shouldReturn` ('a', "7")
+      interpret rt (left (purely (+ 1))) (Left 1 :: Either Int Char) `shouldReturn` Left (2 :: Int)
+      interpret rt (left (purely (+ 1))) (Right 'x' :: Either Int Char) `shouldReturn` (Right 'x' :: Either Int Char)
+
+    it "tests before every iteration and returns the unchanged state when done" $ do
+      calls <- newIORef ([] :: [(String,Int)])
+      let flow = repeatUntil
+            (act (\n -> modifyIORef' calls (<> [("test",n)]) >> pure (n >= 2)))
+            (act (\n -> modifyIORef' calls (<> [("body",n)]) >> pure (n+1)))
+      interpret runtime flow 0 `shouldReturn` 2
+      readIORef calls `shouldReturn` [("test",0),("body",0),("test",1),("body",1),("test",2)]
+      writeIORef calls []
+      interpret runtime flow 5 `shouldReturn` 5
+      readIORef calls `shouldReturn` [("test",5)]
+
+    it "uses typed injections and preserves the untouched half of Second" $ do
+      interpret runtime (Step InjectLeft :: Agentic IO Int (Either Int Char)) 2 `shouldReturn` Left 2
+      interpret runtime (Step InjectRight :: Agentic IO Char (Either Int Char)) 'x' `shouldReturn` Right 'x'
+      interpret runtime (Second (purely (+1))) ('x',2::Int) `shouldReturn` ('x',3)
+      interpret runtime (right (purely (+1))) (Left 'x' :: Either Char Int) `shouldReturn` Left 'x'
+      interpret runtime (right (purely (+1))) (Right 2 :: Either Char Int) `shouldReturn` Right 3
+      interpret runtime (purely (+1) +++ purely not) (Right True :: Either Int Bool) `shouldReturn` Right False
 
     it "fails clearly without a System One" $ do
       interpret runtime (judge funny) joke `shouldThrow` (== NoSystemOne)
@@ -201,9 +220,9 @@ main = hspec $ do
 
     it "never hides a branch, even when it's only glue" $ do
       let flow :: Agentic IO (Joke, Joke) (Rating, Text)
-          flow = draft @Rating "rate it" *** arr (.genre)
+          flow = draft @Rating "rate it" *** purely (.genre)
       T.lines (renderTree (described flow))
-        `shouldBe` ["both halves", "├─ first → draft @Rating  \"rate it\"", "└─ second → arr"]
+        `shouldBe` ["both halves", "├─ first → draft @Rating  \"rate it\"", "└─ second → purely"]
 
     it "draws first and second alike, and left and right alike" $ do
       let d = draft @Rating "rate it"
@@ -215,11 +234,11 @@ main = hspec $ do
 
     it "puts a description under the name in diagrams, not in the tree" $ do
       let flow :: Agentic IO Joke Joke
-          flow = note "polish" "Tidy the wording" (draft @Joke "polish it" >>> note "check" "Make sure it's still a joke" (arr id))
+          flow = note "polish" "Tidy the wording" (draft @Joke "polish it" >>> note "check" "Make sure it's still a joke" (purely id))
           d = described flow
       any (T.isInfixOf "Tidy the wording") (T.lines (mermaid d)) `shouldBe` True
       any (T.isInfixOf "act\\ncheck\\nMake sure") (T.lines (dot d)) `shouldBe` False
-      any (T.isInfixOf "arr\\ncheck\\nMake sure it's still a joke") (T.lines (dot d)) `shouldBe` True
+      any (T.isInfixOf "purely\\ncheck\\nMake sure it's still a joke") (T.lines (dot d)) `shouldBe` True
       any (T.isInfixOf "Tidy the wording") (T.lines (renderTree d)) `shouldBe` False
 
     it "groups a parallel branch that's several steps in a row" $ do
@@ -235,9 +254,9 @@ main = hspec $ do
 
     it "shows a loop and what it runs" $ do
       let flow :: Agentic IO Joke Joke
-          flow = repeatUntil ((== "kids") . (.genre)) (draft @Joke "make it more kid-friendly") `named` "polish until it's for kids"
+          flow = repeatUntil (purely ((== "kids") . (.genre))) (draft @Joke "make it more kid-friendly") `named` "polish until it's for kids"
       T.lines (renderTree (described flow))
-        `shouldBe` ["polish until it's for kids  repeatUntil", "└─ draft @Joke  \"make it more kid-friendly\""]
+        `shouldBe` ["polish until it's for kids  repeatUntil", "├─ test → purely", "└─ body → draft @Joke  \"make it more kid-friendly\""]
 
     it "draws a fork that joins again in mermaid" $ do
       let flow :: Agentic IO Joke (Joke, Rating)
@@ -265,7 +284,7 @@ main = hspec $ do
 
     it "lets a loop's input leave without going through the body" $ do
       let flow :: Agentic IO Joke Joke
-          flow = repeatUntil ((== "kids") . (.genre)) (draft @Joke "make it kid-friendly") >>> act pure `named` "show it"
+          flow = repeatUntil (purely ((== "kids") . (.genre))) (draft @Joke "make it kid-friendly") >>> act pure `named` "show it"
           edges = filter (T.isInfixOf "-->") (T.lines (mermaid (described flow)))
       edges `shouldBe` ["  input --> n_flow_seq_0_1", "  n_flow_seq_0_1 -->|continue| n_flow_seq_0_repeat_0", "  n_flow_seq_0_1 -->|done| n_flow_seq_1_note_0", "  n_flow_seq_1_note_0 --> output"]
 
@@ -280,7 +299,7 @@ main = hspec $ do
 
     it "sends a loop's again edge back to the predicate, in both formats" $ do
       let flow :: Agentic IO Joke Joke
-          flow = repeatUntil ((== "kids") . (.genre)) (draft @Joke "make it kid-friendly" >>> act pure `named` "show it")
+          flow = repeatUntil (purely ((== "kids") . (.genre))) (draft @Joke "make it kid-friendly" >>> act pure `named` "show it")
           d = described flow
       filter (T.isInfixOf "again") (T.lines (mermaid d)) `shouldBe` ["  n_flow_repeat_seq_1_note_0 -.->|again| n_flow_1"]
       filter (T.isInfixOf "again") (T.lines (dot d)) `shouldBe` ["  n_flow_repeat_seq_1_note_0 -> n_flow_1 [label=\"again\", style=dashed];"]

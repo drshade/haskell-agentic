@@ -112,8 +112,8 @@ spec = H.describe "flowGraphValue" $ do
     map (field "referenceTarget") es `shouldBe` replicate 8 Null
 
   it "encodes a repeat body without executing effects or providers" $ do
-    let f = repeatUntil (const True) (act (\_ -> error "must not execute") >>> draft @Int @Int "unused") :: Agentic IO Int Int
+    let f = repeatUntil (purely (const True)) (act (\_ -> error "must not execute") >>> draft @Int @Int "unused") :: Agentic IO Int Int
         v = flowGraphValue (graphOf f)
-    length (array (field "bodies" v)) `shouldBe` 1
+    length (array (field "bodies" v)) `shouldBe` 2
     map (field "style") (array (field "edges" v)) `shouldSatisfy` elem (String "again")
     length (show v) `shouldSatisfy` (> 0)

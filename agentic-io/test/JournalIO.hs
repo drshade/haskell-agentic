@@ -71,7 +71,7 @@ childMode = getArgs >>= \case
         flow = case scenario of
           "plain" -> checkpoint >>> act (pure . (+2))
           "each" -> arr (\n -> [n,n]) >>> each checkpoint >>> arr sum
-          "repeat" -> repeatUntil (>=43) (checkpoint >>> arr (+1))
+          "repeat" -> repeatUntil (purely (>=43)) (checkpoint >>> arr (+1))
           "tools" -> draftWith [tool "inc" "" checkpoint] "two"
           "recursive" -> draftWith [self] "recurse"
           _ -> error "unknown child scenario"
@@ -129,7 +129,7 @@ spec = H.describe "durable journal" $ do
 
   it "restores repeat passes independently" $ withFilePath $ \file -> do
     n <- newIORef 0
-    let flow = repeatUntil (>=3) (counted n)
+    let flow = repeatUntil (purely (>=3)) (counted n)
     rt <- recording file runtime
     interpret rt flow 0 `shouldReturn` 3
     again <- recording file runtime

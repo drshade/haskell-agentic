@@ -215,6 +215,35 @@ spec = H.describe "external replies in a pure Program under ExceptT" $ do
     let saved = fill awaitInt w (Integer 2) Map.empty
         (changed,_,_) = runGuest (fulfil guest awaitInt w{request=Integer 99} (Integer 2)) saved
     changed `shouldBe` Right (Left ReplyAlreadyAnswered)
+  it "resumes loop approval tests before the body, with a fresh reply per pass" $ do
+    let flow = repeatUntil (await @Bool @Int)
+          (durably (\_ n -> pure (n+1))) :: Agentic Guest Int Int
+        attempt = resumable guest flow 0
+        first = runGuest attempt Map.empty
+        w0 = onePending first
+    w0.request `shouldBe` Integer 0
+    let (_,empty,_) = first
+    Map.null empty `shouldBe` True
+    let second@(outcome,saved,events) = runGuest attempt (fill flow w0 (Bool False) empty)
+        w1 = onePending second
+    outcome `shouldSatisfy` \case Right (RunWaiting _) -> True; _ -> False
+    w1.request `shouldBe` Integer 1
+    w0.key `shouldNotBe` w1.key
+    pendingWaitFromValue (pendingWaitValue w1) `shouldBe` Right w1
+    length [() | Executing (KeyedOperation DurableEffect) <- events] `shouldBe` 1
+    let (finished,_,restored) = runGuest attempt (fill flow w1 (Bool True) saved)
+    finished `shouldBe` Right (RunFinished 1)
+    length [() | Restored AwaitedReply <- restored] `shouldBe` 2
+    length [() | Restored DurableEffect <- restored] `shouldBe` 1
+    length [() | Executing _ <- restored] `shouldBe` 0
+
+  it "finds an await below Second when a transported reply is supplied" $ do
+    let flow = second awaitInt :: Agentic Guest (Bool,Int) (Bool,Int)
+        w = onePending (runGuest (resumable guest flow (True,1)) Map.empty)
+    pendingWaitFromValue (pendingWaitValue w) `shouldBe` Right w
+    let (result,_,_) = runGuest (resumable guest flow (True,1)) (fill flow w (Integer 2) Map.empty)
+    result `shouldBe` Right (RunFinished (True,2))
+
   it "collects both halves under split" $ do
     let (outcome,_,_) = runGuest (resumable guest (awaitInt *** awaitInt) (1,2)) Map.empty
     case outcome of

@@ -1,7 +1,7 @@
 draft @[Creature]  "Name 10 prehistoric creatures a grade 5 class might have heard of. Include a mix of kinds, not only dinosaurs."
 each
 ├─ judge  choice of 6 "What kind of animal was this creature?"  (keeping its input)
-├─ arr  dinosaur or other creature
+├─ purely  dinosaur or other creature
 └─ choose an exhibit  branch
    ├─ left → exhibit  together  (keeping its input)
    │  ├─ draft @DinoPic  "Draw an ascii picture of this dinosaur, 10 lines high"

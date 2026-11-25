@@ -197,9 +197,12 @@ worker execution rt flow input = within root Nothing RunNode [] Nothing Nothing 
         (Choose f g, SChoose l r) -> case x of
           Left a -> emit key (Just parent) ChoiceNode path (Selected (EdgeId address LeftSide)) Nothing >> descend l f a
           Right a -> emit key (Just parent) ChoiceNode path (Selected (EdgeId address RightSide)) Nothing >> descend r g a
-        (Repeat done f, SRepeat b) ->
-          let loop pass a = if done a then pure a else
-                go b (RepeatFrame address pass : context) key path f a >>= loop (pass + 1)
+        (Repeat done f, SRepeat p b) ->
+          let loop pass a = do
+                let frames = RepeatFrame address pass : context
+                finished <- go p frames key path done a
+                if finished then pure a else
+                  go b frames key path f a >>= loop (pass + 1)
            in loop 0 x
         (Noted n f, SNoted _ b) -> go b context key (path <> [n]) f x
         _ -> raise (InvalidRecursion "runtime structure differs from the static flow")

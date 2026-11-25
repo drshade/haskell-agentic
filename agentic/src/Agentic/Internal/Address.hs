@@ -5,7 +5,7 @@ import Data.Text qualified as T
 
 data Segment
   = SeqLeft | SeqRight | FanLeft | FanRight | SplitLeft | SplitRight
-  | ChooseLeft | ChooseRight | FirstBody | SecondBody | EachBody | RepeatBody | NotedBody
+  | ChooseLeft | ChooseRight | FirstBody | SecondBody | EachBody | RepeatTest | RepeatBody | NotedBody
   | ToolAt Int | MemberAt Int | RunRoot | CallScope
   deriving (Eq, Ord, Show)
 
@@ -37,6 +37,7 @@ addressText (Address path) = T.intercalate "/" ("flow" : map render path)
     ChooseRight -> "choose/1"
     FirstBody -> "first"
     SecondBody -> "second"
+    RepeatTest -> "repeat-test"
     EachBody -> "each"
     RepeatBody -> "repeat"
     NotedBody -> "note"

@@ -78,35 +78,66 @@ data Note = Note
 
 -- | The leaves of a flow: the steps that do the work.
 data Step m i o where
+  -- | Pass the input through unchanged.
   Pass :: Step m i i
-    -- ^ The input, unchanged: 'id' and 'returnA'.
-  InjectLeft :: Step m a (Either a b)
-    -- ^ Put the input into the Left alternative, preserving its payload.
+
+  -- | Put the input into the Left or Right alternative of an Either.
+  InjectLeft  :: Step m a (Either a b)
   InjectRight :: Step m b (Either a b)
-    -- ^ Put the input into the Right alternative, preserving its payload.
-  Purely :: (i -> o) -> Step m i o
-  TakeFirst :: Step m (a, b) a
-    -- ^ 'takeFirst': unlike @arr fst@, 'Agentic.Describe.describe' can see
-    -- which half it keeps.
+
+  -- | Keep the first or second element of a pair.
+  TakeFirst  :: Step m (a, b) a
   TakeSecond :: Step m (a, b) b
+
+  -- | Lift a pure function.
+  Purely :: (i -> o) -> Step m i o
+
+  -- | Lift an effectful function.
   Act :: (i -> m o) -> Step m i o
-  Durable :: Codec i -> Codec o -> (Maybe DurableKey -> i -> m o) -> Step m i o
+
+  -- | Lift an effectful function whose result can be journaled and restored.
+  Durable :: Codec i -> Codec o
+          -> (Maybe DurableKey -> i -> m o) -> Step m i o
+
+  -- | Request an external reply; suspend this branch if unanswered.
   Await :: Codec i -> Codec o -> Step m i o
-  Draft :: Structure i -> Structure o -> Instruction -> [Tool m] -> Step m i o
+
+  -- | Generate a typed value using System Two, optionally calling tools.
+  Draft :: Structure i -> Structure o
+        -> Instruction -> [Tool m] -> Step m i o
+
+  -- | Answer typed questions about the input using System One.
   Judge :: Structure i -> Questions o -> Step m i o
 
--- | A flow from @i@ to @o@ in effect @m@. Build flows from steps with the
--- 'Arrow' combinators; run them with 'Agentic.Interpret.interpret'.
 data Agentic m i o where
+  -- | Make a one-step flow.
   Step :: Step m i o -> Agentic m i o
+
+  -- | Feed the first flow's output into the second.
   Seq :: Agentic m a b -> Agentic m b c -> Agentic m a c
+
+  -- | Give both flows the same input and pair their results.
   Fanout :: Agentic m a b -> Agentic m a c -> Agentic m a (b, c)
-  Split :: Agentic m a b -> Agentic m c d -> Agentic m (a, c) (b, d)
-  First :: Agentic m a b -> Agentic m (a, c) (b, c)
+
+  -- | Run each flow on its half of the input pair and pair their results.
+  Split :: Agentic m a b -> Agentic m c d
+        -> Agentic m (a, c) (b, d)
+
+  -- | Transform one half of a pair; preserve the other.
+  First  :: Agentic m a b -> Agentic m (a, c) (b, c)
   Second :: Agentic m a b -> Agentic m (c, a) (c, b)
+
+  -- | Run the first flow for Left input, or the second for Right input.
   Choose :: Agentic m a c -> Agentic m b c -> Agentic m (Either a b) c
+
+  -- | Apply the flow to every element of a list.
   Each :: Agentic m a b -> Agentic m [a] [b]
-  Repeat :: (a -> Bool) -> Agentic m a a -> Agentic m a a
+
+  -- | Feed each result back into the flow until the predicate holds.
+  -- | Check before each iteration, so the body may run zero times.
+  Repeat :: Agentic m a Bool -> Agentic m a a -> Agentic m a a
+
+  -- | Attach a name and optional description to a flow.
   Noted :: Note -> Agentic m i o -> Agentic m i o
 
 -- | A named flow a model can call.
@@ -302,13 +333,17 @@ titledContract = nominal (contract @a)
 each :: Agentic m a b -> Agentic m [a] [b]
 each = Each
 
--- | Run a flow again and again on its own output until the condition holds.
--- The condition is checked first, so an input that already satisfies it is
--- returned unchanged. The model decides how many rounds it takes; name the
--- loop to say what it waits for:
+-- | Test the current state with a flow. If it returns True, return that state;
+-- otherwise run the body and test its result. The test runs before the first
+-- iteration too. It may use models, effects or external replies just like the
+-- body; a suspended test must finish before the body can start.
 --
--- > repeatUntil ended nextMove `named` "play until the game ends"
-repeatUntil :: (a -> Bool) -> Agentic m a a -> Agentic m a a
+-- Each test and body has a distinct structural address under the same
+-- zero-based RepeatFrame pass. The final successful test has no matching body.
+-- Use 'purely' for a pure condition, and name the loop to say what it waits for:
+--
+-- > repeatUntil (purely ended) nextMove `named` "play until the game ends"
+repeatUntil :: Agentic m a Bool -> Agentic m a a -> Agentic m a a
 repeatUntil = Repeat
 
 -- | Name and describe a sub-flow.

@@ -24,7 +24,7 @@ data StaticNode
   | SSecond StaticFlow
   | SChoose StaticFlow StaticFlow
   | SEach StaticFlow
-  | SRepeat StaticFlow
+  | SRepeat StaticFlow StaticFlow
   | SNoted Note StaticFlow
 
 data StaticStep where
@@ -75,7 +75,7 @@ walk depth env address flow = StaticFlow address <$> case flow of
   First f -> SFirst <$> descend FirstBody f
   Second f -> SSecond <$> descend SecondBody f
   Each f -> SEach <$> descend EachBody f
-  Repeat _ f -> SRepeat <$> descend RepeatBody f
+  Repeat p f -> SRepeat <$> descend RepeatTest p <*> descend RepeatBody f
   Noted n f -> SNoted n <$> descend NotedBody f
  where
   descend :: Segment -> Agentic m a b -> Either FlowError StaticFlow
@@ -127,7 +127,8 @@ bodyAt root (Address path) = go root path
     (SFirst b, FirstBody) -> go b rest
     (SSecond b, SecondBody) -> go b rest
     (SEach b, EachBody) -> go b rest
-    (SRepeat b, RepeatBody) -> go b rest
+    (SRepeat p _, RepeatTest) -> go p rest
+    (SRepeat _ b, RepeatBody) -> go b rest
     (SNoted _ b, NotedBody) -> go b rest
     (SStep (SDraft _ _ _ ts), ToolAt k) -> at ts k >>= (`inside` rest)
     _ -> Nothing
@@ -160,7 +161,7 @@ validate = go []
     SFirst b -> go notes b
     SSecond b -> go notes b
     SEach b -> go notes b
-    SRepeat b -> go notes b
+    SRepeat p b -> both p b
     SNoted n b -> go (notes <> [n]) b
    where both l r = go notes l >> go notes r
   toolCheck notes (StaticTool _ name _ i o body) = case body of

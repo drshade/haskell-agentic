@@ -73,7 +73,7 @@ toolsIn = \case
   Halves l r -> toolsIn l <> toolsIn r
   Branch l r -> toolsIn l <> toolsIn r
   ForEach d -> toolsIn d
-  Repeated d -> toolsIn d
+  Repeated p d -> toolsIn p <> toolsIn d
   Annotated _ d -> toolsIn d
  where
   collect t = t : case t.body of

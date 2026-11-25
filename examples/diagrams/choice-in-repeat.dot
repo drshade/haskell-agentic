@@ -9,7 +9,7 @@ digraph flow {
     n_flow_1 [label="Done?", shape=diamond, style=solid];
     n_flow_repeat_seq_1_0 [label="", shape=diamond, style=solid, width=0.3, height=0.3, fixedsize=true];
     entry_flow_repeat_seq_1_select_1 [label="", shape=point, width=0.06];
-    n_flow_repeat_seq_1_choose_0_0 [label="arr"];
+    n_flow_repeat_seq_1_choose_0_0 [label="purely"];
   }
   output [label="output", shape=oval];
   input -> n_flow_1;

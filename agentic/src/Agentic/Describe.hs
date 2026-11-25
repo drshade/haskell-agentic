@@ -46,7 +46,7 @@ data Description
     -- ^ @a *** b@: one flow on each half of a pair.
   | Branch Description Description
   | ForEach Description
-  | Repeated Description
+  | Repeated Description Description
     -- ^ @repeatUntil@: run again on its own output until a condition holds.
   | Annotated Note Description
 
@@ -109,7 +109,7 @@ fromStatic flow = Located flow.address $ case flow.shape of
   S.SSecond f -> SecondOnly (fromStatic f)
   S.SChoose f g -> Branch (fromStatic f) (fromStatic g)
   S.SEach f -> ForEach (fromStatic f)
-  S.SRepeat f -> Repeated (fromStatic f)
+  S.SRepeat p f -> Repeated (fromStatic p) (fromStatic f)
   S.SNoted n f -> Annotated n (fromStatic f)
 
 stepInfo :: S.StaticStep -> StepInfo
@@ -159,7 +159,7 @@ displayTree = \case
   Halves l r -> Halves (displayTree l) (displayTree r)
   Branch l r -> Branch (displayTree l) (displayTree r)
   ForEach d -> ForEach (displayTree d)
-  Repeated d -> Repeated (displayTree d)
+  Repeated p d -> Repeated (displayTree p) (displayTree d)
   Annotated n d -> Annotated n (displayTree d)
   d -> d
 
@@ -181,7 +181,7 @@ trees = \case
           ts -> [Node ("together" <> keeping) ts]
   Halves l r -> [Node "both halves" [labelled "first" (branch l), labelled "second" (branch r)]]
   Branch l r -> [Node "branch" [labelled "left" (branch l), labelled "right" (branch r)]]
-  Repeated d -> loop "repeatUntil" d
+  Repeated p d -> [Node "repeatUntil" [labelled "test" (branch p), labelled "body" (branch d)]]
   ForEach d -> loop "each" d
   Annotated n (Leaf info) | not (passes (Leaf info)) -> leaf (Just n.name) info
   Annotated n d -> case trees d of
@@ -270,7 +270,8 @@ data FlowGraph = FlowGraph
   , bodies :: [BodyRelation]
   }
 
--- | A loop body, or a possible call target with its binding-site address.
+-- | A loop test/body, or a possible call target with its binding-site address.
+-- Test and body relations share an owner but have distinct addressed roots.
 data BodyRelation = BodyRelation
   { owner :: Address
   , binding :: Maybe Address
@@ -287,9 +288,10 @@ data Item
 data NodeKind = Terminal | StepNode | ToolNode | DecisionNode
   | LoopTestNode
     -- ^ The pre-body predicate of a repeatUntil, mapped to the loop address.
-    -- Its done/continue routes have no choice selection ids. Body entry under
-    -- a RepeatFrame indicates continuation; the loop's Returned marks completion.
-    -- The predicate itself emits no observation.
+    -- Its done/continue routes have no choice selection ids. The test and body
+    -- have separate addresses under the same RepeatFrame pass. A pure test maps
+    -- here too; a compound test has its own items before the diamond.
+    -- Body entry indicates continuation; the loop's Returned marks completion.
   | JunctionNode
     -- ^ Graph-only routing point, with no occurrence/address mapping. A
     -- projected fork can span several syntax positions (including a later
@@ -344,7 +346,7 @@ selectionRoutes original = shareJunctions (foldl route ([], original) ids)
     let selected = [e | e <- edges, selection `elem` e.selections]
         diamond = itemId address 0
         label = case side of LeftSide -> "left"; RightSide -> "right"
-        junction = "entry_" <> T.replace "/" "_" (edgeIdText selection)
+        junction = "entry_" <> T.replace "-" "_" (T.replace "/" "_" (edgeIdText selection))
         isSelected e = selection `elem` e.selections
         redirect e = if isSelected e then
           e {from = junction, label = if e.label == Just label then Nothing else e.label, selections = []}
@@ -398,7 +400,7 @@ structure = go flowAddress
     Halves l r -> both (go a l) (go a r)
     Branch l r -> both (go a l) (go a r)
     ForEach d -> loop a d
-    Repeated d -> loop a d
+    Repeated p d -> both (loop a p) (loop a d)
     Annotated _ d -> go a d
     Leaf (DraftInfo _ _ _ ts) ->
       let call = child a CallScope
@@ -465,7 +467,7 @@ instance Monad Build where
   Build g >>= k = Build (\s -> let (a, s1) = g s in (k a).runBuild s1)
 
 itemId :: Address -> Int -> Text
-itemId a n = "n_" <> T.replace "/" "_" (addressText a) <> "_" <> T.pack (show n)
+itemId a n = "n_" <> T.replace "-" "_" (T.replace "/" "_" (addressText a)) <> "_" <> T.pack (show n)
 
 fresh :: Build Text
 fresh = Build $ \s ->
@@ -488,6 +490,30 @@ edge e = Build (\s -> ((), s {links = e:s.links}))
 connect :: From -> Text -> Build ()
 connect from to = mapM_ (\(f,l,ids) -> edge (Edge f to l Flow Nothing ids)) (sources from)
 
+-- A single pure predicate is the diamond itself, including its authored name.
+simpleTest :: Description -> Maybe (Maybe Note)
+simpleTest (Located _ d) = simpleTest d
+simpleTest (Leaf Glue) = Just Nothing
+simpleTest (Annotated n d) | Just _ <- simpleTest d = Just (Just n)
+simpleTest _ = Nothing
+
+-- A compound predicate has one loop entry even if it begins with a fork.
+-- Remove the routing dot when it just forwards to one visible step.
+predicateEntry :: Text -> Build Text
+predicateEntry start = Build $ \s -> case [e | e <- s.links, e.from == start] of
+  [e] | e.style == Flow, e.label == Nothing, null e.selections ->
+    let keep (ItemNode i _ _) = i /= start
+        keep _ = True
+     in (e.to, s {links = filter (/= e) s.links, open = map (filter keep) s.open})
+  _ -> (start,s)
+
+routingNode :: Build Text
+routingNode = do
+  junction <- Build $ \s ->
+    ("route_" <> itemId s.current s.next, s {next = s.next + 1})
+  item (ItemNode junction JunctionNode [])
+  pure junction
+
 -- Preserve predicate labels before another construct needs to label its own
 -- routes (a split's first/second, or an enclosing loop's again edge).
 loopLabel :: Maybe Text -> Bool
@@ -498,9 +524,7 @@ loopRoutes self from = Sources <$> mapM route (sources from)
   where
     route source@(f,l,ids)
       | Just f /= self, null ids, loopLabel l = do
-          junction <- Build $ \s ->
-            ("route_" <> itemId s.current s.next, s {next = s.next + 1})
-          item (ItemNode junction JunctionNode [])
+          junction <- routingNode
           edge (Edge f junction l Flow Nothing [])
           pure (junction, Nothing, [])
       | otherwise = pure source
@@ -560,13 +584,26 @@ build context from = \case
   ForEach f -> Sources . sources . snd <$> box ["each"] (build InSequence (Sources (sources from)) f)
   -- The predicate is checked before entry and after every body iteration.
   -- Only its done route reaches the continuation, including zero iterations.
-  Repeated f -> snd <$> box ["repeatUntil"] (do
+  Repeated predicate f -> snd <$> box ["repeatUntil"] (do
     gateway <- fresh
-    item (ItemNode gateway LoopTestNode ["Done?"])
-    connect from gateway
+    let label = case simpleTest predicate of
+          Just (Just n) -> n.name : maybe [] pure n.description
+          _ -> ["Done?"]
+    item (ItemNode gateway LoopTestNode label)
+    entry <- case simpleTest predicate of
+      Just _ -> do
+        let (addresses, _) = structure predicate
+        Build (\s -> ((),s {mapped = [(a,gateway) | a <- addresses] <> s.mapped}))
+        pure gateway
+      Nothing -> do
+        start <- routingNode
+        tested <- build InSequence (Sources [(start, Nothing, [])]) predicate
+        connect tested gateway
+        predicateEntry start
+    connect from entry
     exits <- build InSequence (Sources [(gateway, Just "continue", [])]) f
     routed <- loopRoutes (Just gateway) exits
-    mapM_ (\(e, l, ids) -> edge (Edge e gateway
+    mapM_ (\(e, l, ids) -> edge (Edge e entry
       (if e == gateway then l else Just "again") Again Nothing ids)) (sources routed)
     pure (Sources [(gateway, Just "done", [])]))
   Annotated n (Located a (Branch l r)) -> do
@@ -831,7 +868,7 @@ descriptionValue = \case
   Halves l r -> node "halves" [("first", descriptionValue l), ("second", descriptionValue r)]
   Branch l r -> node "branch" [("left", descriptionValue l), ("right", descriptionValue r)]
   ForEach d -> node "each" [("step", descriptionValue d)]
-  Repeated d -> node "repeat" [("step", descriptionValue d)]
+  Repeated p d -> node "repeat" [("test", descriptionValue p), ("step", descriptionValue d)]
   Annotated n d ->
     node "note" $
       [("name", String n.name)]
