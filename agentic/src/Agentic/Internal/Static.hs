@@ -60,7 +60,7 @@ walk depth env address flow = StaticFlow address <$> case flow of
     Pass -> pure SIdentity
     InjectLeft -> pure SIdentity
     InjectRight -> pure SIdentity
-    Arr _ -> pure SGlue
+    Purely _ -> pure SGlue
     TakeFirst -> pure SFirstHalf
     TakeSecond -> pure SSecondHalf
     Act _ -> pure SEffect

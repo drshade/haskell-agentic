@@ -24,6 +24,7 @@ module Agentic.Internal.Core
   , draftWith
   , judge
   , act
+  , purely
   , durably
   , durablyWith
   , await
@@ -83,7 +84,7 @@ data Step m i o where
     -- ^ Put the input into the Left alternative, preserving its payload.
   InjectRight :: Step m b (Either a b)
     -- ^ Put the input into the Right alternative, preserving its payload.
-  Arr :: (i -> o) -> Step m i o
+  Purely :: (i -> o) -> Step m i o
   TakeFirst :: Step m (a, b) a
     -- ^ 'takeFirst': unlike @arr fst@, 'Agentic.Describe.describe' can see
     -- which half it keeps.
@@ -221,7 +222,7 @@ instance Category.Category (Agentic m) where
 -- The overrides keep the structure visible to 'Agentic.Describe.describe'
 -- instead of the defaults' plumbing through @arr swap@.
 instance Arrow (Agentic m) where
-  arr = Step . Arr
+  arr = purely
   first = First
   second = Second
   (***) = Split
@@ -269,6 +270,10 @@ draftWith tools instruction = Step (Draft (titledContract @i) (titledContract @o
 -- | A System One model answers questions about the step's input.
 judge :: forall i o m. (Contract i, Typeable i) => Questions o -> Agentic m i o
 judge = Step . Judge (titledContract @i)
+
+-- | Lift a pure function into a flow. Also available as the Arrow method arr.
+purely :: (i -> o) -> Agentic m i o
+purely = Step . Purely
 
 -- | Plain code with an effect.
 act :: (i -> m o) -> Agentic m i o

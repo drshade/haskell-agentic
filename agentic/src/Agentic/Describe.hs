@@ -54,7 +54,7 @@ data StepInfo
   = Identity
     -- ^ The input, unchanged ('returnA').
   | Glue
-    -- ^ @arr@: a pure function.
+    -- ^ @purely@: a pure function.
   | FirstHalf
     -- ^ 'takeFirst'.
   | SecondHalf
@@ -142,7 +142,7 @@ data Tree = Node Text [Tree]
 -- | The tree view. Recursive groups list their finite definitions; references
 -- point to members without expanding them. Unnamed glue between steps is
 -- hidden, but a branch is never hidden: inside @&&&@, @***@ and @|||@ it shows
--- as @arr@ (or @pass@), and a pass-through beside a step keeps its input.
+-- as @purely@ (or @pass@), and a pass-through beside a step keeps its input.
 renderTree :: Description -> Text
 renderTree = T.intercalate "\n" . concatMap (draw "" "") . trees . displayTree
 
@@ -223,7 +223,7 @@ plumbing = \case
   Leaf FirstHalf -> "takeFirst"
   Leaf SecondHalf -> "takeSecond"
   Annotated _ d -> plumbing d
-  _ -> "arr"
+  _ -> "purely"
 
 -- | Does this part of a flow only pass its input through?
 passes :: Description -> Bool
@@ -532,19 +532,19 @@ build context from = \case
     Pair a b -> Pair a <$> build InBranch b d
     _ -> Pair from <$> build InBranch from d
   Leaf Identity -> pure from
-  -- A known pair's half goes on exactly; otherwise it's like any @arr@.
+  -- A known pair's half goes on exactly; otherwise it's like any @purely@.
   Leaf FirstHalf | Pair a _ <- from -> pure a
   Leaf SecondHalf | Pair _ b <- from -> pure b
   Leaf FirstHalf -> half "takeFirst"
   Leaf SecondHalf -> half "takeSecond"
   Leaf Glue -> case context of
-    -- An @arr@ can take a pair apart any way it likes, so its halves are lost,
+    -- An @purely@ can take a pair apart any way it likes, so its halves are lost,
     -- and so is what the edge labels inside it said.
     InSequence -> pure $ case from of
       Pair _ _ -> Sources
         [(n, if loopLabel l then l else Nothing, ids) | (n, l, ids) <- sources from]
       Sources _ -> from
-    InBranch -> node from ["arr"]
+    InBranch -> node from ["purely"]
   Leaf info -> step Nothing info
   Sequence ds -> chain from ds
   Together ds -> pairUp <$> mapM (build InBranch from) ds
@@ -580,7 +580,7 @@ build context from = \case
   Annotated n (Leaf info) | not (passes (Leaf info)) -> step (Just n) info
   Annotated n f -> snd <$> box (n.name : maybe [] pure n.description) (build InSequence from f)
   where
-    -- A half of a pair the graph can't follow: plumbing, like @arr@.
+    -- A half of a pair the graph can't follow: plumbing, like @purely@.
     half name = case context of
       InSequence -> pure from
       InBranch -> node from [name]
@@ -642,7 +642,7 @@ stepLines name info = kind : maybe [] pure name <> details
   where
     (kind, details) = case info of
       Identity -> ("pass", [])
-      Glue -> ("arr", [])
+      Glue -> ("purely", [])
       FirstHalf -> ("takeFirst", [])
       SecondHalf -> ("takeSecond", [])
       Effect -> ("act", [])
@@ -847,7 +847,7 @@ descriptionValue = \case
     node kind fields = Object (("kind", String kind) : fields)
     leaf = \case
       Identity -> node "pass" []
-      Glue -> node "arr" []
+      Glue -> node "purely" []
       FirstHalf -> node "takeFirst" []
       SecondHalf -> node "takeSecond" []
       Effect -> node "act" []

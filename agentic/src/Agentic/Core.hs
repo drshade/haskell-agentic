@@ -16,6 +16,7 @@ module Agentic.Core
   , draftWith
   , judge
   , act
+  , purely
   , durably
   , durablyWith
   , await

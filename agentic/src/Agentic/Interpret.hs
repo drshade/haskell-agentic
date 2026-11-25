@@ -211,7 +211,7 @@ worker execution rt flow input = within root Nothing RunNode [] Nothing Nothing 
       (InjectRight, SIdentity) -> pure (Right x)
       (TakeFirst, SFirstHalf) -> pure (fst x)
       (TakeSecond, SSecondHalf) -> pure (snd x)
-      (Arr f, SGlue) -> pure (f x)
+      (Purely f, SGlue) -> pure (f x)
       (Act f, SEffect) -> do
         emit key parent EffectNode path (Executing PlainAction) Nothing
         liftRun execution (f x)
